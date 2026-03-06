@@ -1,0 +1,34 @@
+# Core Environment
+python-dotenv
+pyyaml
+click
+
+# Repository Management
+gitpython
+
+# Code Parsing
+tree-sitter-language-pack
+
+# LLM & Embeddings (LangChain)
+langchain
+langchain-openai
+langchain-huggingface
+langchain-anthropic
+langchain-google-genai
+sentence-transformers
+
+# Graph & Risk Analysis
+networkx
+
+# API & Server
+fastapi
+uvicorn
+pydantic
+python-multipart
+
+# Database & HTTP
+supabase
+requests
+
+# Math/Utilities
+numpy
