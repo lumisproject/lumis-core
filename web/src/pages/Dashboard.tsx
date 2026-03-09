@@ -314,6 +314,7 @@ const DashboardContent = () => {
                       key={risk.id}
                       severity={risk.severity}
                       title={risk.title}
+                      riskType={risk.riskType}
                       description={risk.description}
                       file={risk.file}
                     />

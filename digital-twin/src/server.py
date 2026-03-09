@@ -143,7 +143,7 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
             supabase.table("projects")
             .select("jira_project_id, notion_project_id")
             .eq("id", project_id)
-            .maybe_single()
+            .limit(1)
             .execute()
         )
         
@@ -221,7 +221,7 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
 async def chat_endpoint(req: ChatRequest):
     try:
         # 1. Get user_id from the project they are chatting in
-        proj_row = supabase.table("projects").select("user_id").eq("id", req.project_id).maybe_single().execute()
+        proj_row = supabase.table("projects").select("user_id").eq("id", req.project_id).limit(1).execute()
         if not proj_row or not proj_row.data:
             raise HTTPException(status_code=404, detail="Project not found")
             
@@ -405,7 +405,7 @@ async def delete_project(user_id: str, project_id: str):
             supabase.table("projects")
             .select("id, user_id")
             .eq("id", project_id)
-            .maybe_single()
+            .limit(1)
             .execute()
         )
 
@@ -460,7 +460,7 @@ async def update_jira_mapping(
         raise HTTPException(status_code=400, detail="Missing jira_project_id")
         
     # 2. Enforce Ownership
-    res = supabase.table("projects").select("user_id").eq("id", project_id).maybe_single().execute()
+    res = supabase.table("projects").select("user_id").eq("id", project_id).limit(1).execute()
     if not res or not res.data:
         raise HTTPException(status_code=404, detail="Project not found")
     if res.data["user_id"] != str(current_user.id):
@@ -483,7 +483,7 @@ async def update_notion_mapping(
         raise HTTPException(status_code=400, detail="Missing notion_project_id")
         
     # 2. Enforce Ownership
-    res = supabase.table("projects").select("user_id").eq("id", project_id).maybe_single().execute()
+    res = supabase.table("projects").select("user_id").eq("id", project_id).limit(1).execute()
     if not res or not res.data:
         raise HTTPException(status_code=404, detail="Project not found")
     if res.data["user_id"] != str(current_user.id):

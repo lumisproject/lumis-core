@@ -1,22 +1,34 @@
 import ReactMarkdown from 'react-markdown';
-import { AlertTriangle, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ShieldAlert, ShieldCheck, Clock, UserX, GitMerge, FileWarning, Bug } from 'lucide-react';
 
 interface RiskCardProps {
   severity: 'high' | 'medium' | 'low';
   title: string;
+  riskType?: string; // <--- Added to receive the type
   description: string;
   file?: string;
 }
 
 const severityConfig = {
-  high: { icon: ShieldAlert, color: 'text-risk-high', bg: 'bg-risk-high/10', border: 'border-risk-high/30', label: 'High' },
-  medium: { icon: AlertTriangle, color: 'text-risk-medium', bg: 'bg-risk-medium/10', border: 'border-risk-medium/30', label: 'Medium' },
-  low: { icon: ShieldCheck, color: 'text-risk-low', bg: 'bg-risk-low/10', border: 'border-risk-low/30', label: 'Low' },
+  high: { color: 'text-risk-high', bg: 'bg-risk-high/10', border: 'border-risk-high/30', label: 'High' },
+  medium: { color: 'text-risk-medium', bg: 'bg-risk-medium/10', border: 'border-risk-medium/30', label: 'Medium' },
+  low: { color: 'text-risk-low', bg: 'bg-risk-low/10', border: 'border-risk-low/30', label: 'Low' },
 };
 
-export const RiskCard = ({ severity, title, description, file }: RiskCardProps) => {
+// Map the specific risk types to cool SaaS icons
+const getRiskIcon = (riskType: string) => {
+  const type = riskType.toLowerCase();
+  if (type.includes('delay')) return Clock;
+  if (type.includes('silo')) return UserX;
+  if (type.includes('legacy') || type.includes('conflict')) return GitMerge;
+  if (type.includes('bug')) return Bug;
+  if (type.includes('code')) return FileWarning;
+  return AlertTriangle;
+};
+
+export const RiskCard = ({ severity, title, riskType = '', description, file }: RiskCardProps) => {
   const config = severityConfig[severity];
-  const Icon = config.icon;
+  const Icon = getRiskIcon(riskType || title);
 
   return (
     <div className={`group relative overflow-hidden rounded-xl border ${config.border} bg-card/50 p-4 transition-all hover:bg-card hover:shadow-lg hover:shadow-black/20 animate-fade-in-up`}>

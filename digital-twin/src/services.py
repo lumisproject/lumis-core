@@ -2,6 +2,7 @@ import hashlib
 import numpy as np
 import requests
 import logging
+import datetime
 from src.config import Config
 from src.cryptography import decrypt_value
 
@@ -126,3 +127,35 @@ def get_commit_diff(repo_full_name: str, commit_sha: str):
     except Exception as e:
         logger.error(f"Failed to fetch diff from GitHub: {e}")
         return ""
+
+def get_velocity_metrics(repo_full_name: str):
+    """
+    Calculates the change in commit velocity over the last 14 days.
+    """
+    headers = {"Authorization": f"token {Config.GITHUB_TOKEN}"}
+    now = datetime.datetime.now(datetime.timezone.utc)
+    seven_days_ago = (now - datetime.timedelta(days=7)).isoformat()
+    fourteen_days_ago = (now - datetime.timedelta(days=14)).isoformat()
+
+    try:
+        # Recent velocity (last 7 days)
+        recent_res = requests.get(
+            f"https://api.github.com/repos/{repo_full_name}/commits?since={seven_days_ago}",
+            headers=headers
+        )
+        # Baseline velocity (7-14 days ago)
+        baseline_res = requests.get(
+            f"https://api.github.com/repos/{repo_full_name}/commits?since={fourteen_days_ago}&until={seven_days_ago}",
+            headers=headers
+        )
+
+        recent_count = len(recent_res.json()) if recent_res.status_code == 200 else 0
+        baseline_count = len(baseline_res.json()) if baseline_res.status_code == 200 else 0
+
+        if baseline_count == 0:
+            return 0.0
+        
+        return (recent_count - baseline_count) / baseline_count
+    except Exception as e:
+        logger.error(f"Velocity calculation failed: {e}")
+        return 0.0

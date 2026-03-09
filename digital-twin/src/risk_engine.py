@@ -1,10 +1,15 @@
 import asyncio
 from datetime import datetime, timezone
+import functools
 import networkx as nx
-from src.db_client import get_project_data, save_risk_alerts, update_unit_risk_scores, delete_previous_risks
-from src.services import get_llm_completion
+from src.db_client import get_project_data, save_risk_alerts, supabase
+from src.services import get_llm_completion, get_velocity_metrics
+from src.jira_auth import get_valid_token as get_jira_token
+from src.jira_client import get_accessible_resources, get_active_issues
+from src.notion_auth import get_valid_notion_token
+from src.notion_client import get_active_tasks as get_notion_tasks
 
-async def analyze_grouped_conflict_with_llm(target_name, target_unit, sources, user_config):
+async def analyze_grouped_conflict_with_llm(target_name, sources, user_config):
     """
     Analyzes the interaction between multiple recently modified units and a single legacy code unit.
     Determines if the recent changes might break assumptions in the legacy code, or if this legacy code is becoming a risky bottleneck.
@@ -32,40 +37,52 @@ async def analyze_grouped_conflict_with_llm(target_name, target_unit, sources, u
     
     # Wrap synchronous LLM call to run in a separate thread
     loop = asyncio.get_running_loop()
-    analysis = await loop.run_in_executor(
-        None,
-        get_llm_completion,
-        system_prompt,
-        user_prompt,
-        user_config=user_config
-    )
+    func = functools.partial(get_llm_completion, system_prompt, user_prompt, user_config=user_config)
+    analysis= await loop.run_in_executor(None, func)
     return analysis if analysis else "Standard dependency risk detected."
 
 
 async def calculate_predictive_risks(project_id, user_config):
-    print(f"Starting Grouped Risk Analysis for {project_id}...")
-    # Delete previous risks
-    delete_previous_risks(project_id)
-    # 1. Fetch Graph Data
+    print(f"🚀 Starting Advanced Predictive Risk Analysis for {project_id}...")
+    
+    # 1. Fetch Project Metadata for API calls
+    proj_res = supabase.table("projects").select("repo_url").eq("id", project_id).limit(1).execute()
+    
+    # Safely get the first item from the list, then get the repo_url
+    repo_url = ""
+    if proj_res and proj_res.data and len(proj_res.data) > 0:
+        repo_url = proj_res.data[0].get("repo_url", "")
+    
+    # Normalize repo name (owner/repo)
+    repo_name = repo_url.split("github.com/")[-1].replace(".git", "") if "github.com" in repo_url else ""
+
+    # 2. CLEAR PREVIOUS PREDICTIVE RISKS
+    supabase.table("project_risks").delete().eq("project_id", project_id).in_("risk_type", ["Legacy Conflict", "Predictive Delay", "Knowledge Silo"]).execute()
+
+    # 3. ANALYZE VELOCITY (Predicting Delays)
+    risks = []
+    if repo_name:
+        velocity_change = get_velocity_metrics(repo_name)
+        if velocity_change < -0.3:  # 30% drop is a significant warning sign
+            risks.append({
+                "project_id": project_id,
+                "risk_type": "Predictive Delay",
+                "severity": "High" if velocity_change < -0.6 else "Medium",
+                "description": f"Development velocity has dropped by {abs(velocity_change)*100:.0f}% compared to last week. This pattern typically precedes a missed milestone.",
+                "affected_units": ["Project Timeline"]
+            })
+
+    # 4. FETCH GRAPH DATA & MAP UNITS
     units, edges = get_project_data(project_id)
-    if not units:
-        return 0
+    if not units: return 0
 
     now = datetime.now(timezone.utc)
-    unit_map = {}
-    
-    # 2. Map all units and calculate exact age in days
-    for unit in units:
-        if not unit.get('last_modified_at'): continue
-            
-        try:
-            last_mod = datetime.fromisoformat(unit['last_modified_at'].replace('Z', '+00:00'))
-            unit['age_days'] = (now - last_mod).days
-            unit_map[unit['unit_name']] = unit
-        except ValueError:
-            continue 
+    unit_map = {u['unit_name']: u for u in units if u.get('last_modified_at')}
+    for u_name, u in unit_map.items():
+        last_mod = datetime.fromisoformat(u['last_modified_at'].replace('Z', '+00:00'))
+        u['age_days'] = (now - last_mod).days
 
-    # 3. BUILD THE SMART GRAPH
+    # 5. BUILD GRAPH (Existing Logic)
     G = nx.DiGraph()
     
     import_map = {}
@@ -93,109 +110,123 @@ async def calculate_predictive_risks(project_id, user_config):
             if src_file == tgt_file or any(imp in target_mod_path for imp in file_imports):
                 G.add_edge(source_id, target_id)
 
-    # 4. Group Conflicts by the Legacy Target Unit
+    # 6. IDENTIFY LEGACY CONFLICTS & KNOWLEDGE SILOS
     active_units = [k for k, v in unit_map.items() if v['age_days'] < 30]
     legacy_units = [k for k, v in unit_map.items() if v['age_days'] > 90]
 
-    print(f"Analyzing paths from {len(active_units)} active units to {len(legacy_units)} older units...")
+    # 7. VELOCITY DETECTION
+    proj_res = supabase.table("projects").select("repo_url, jira_project_id, notion_project_id, user_id").eq("id", project_id).limit(1).execute()
+    
+    if proj_res and proj_res.data and len(proj_res.data) > 0:
+        proj_data = proj_res.data[0]
+        repo_url = proj_data.get("repo_url", "")
+        jira_project_id = proj_data.get("jira_project_id")
+        notion_project_id = proj_data.get("notion_project_id")
+        project_user_id = proj_data.get("user_id")
+        
+        repo_name = repo_url.split("github.com/")[-1].replace(".git", "") if "github.com" in repo_url else ""
+
+        if repo_name:
+            velocity_change = get_velocity_metrics(repo_name)
+            recent_churn_count = len([u for u in active_units if unit_map[u]['age_days'] < 7])
+            
+            # fetch unresolved tasks from Jira or Notion
+            unresolved_tasks_count = None
+            
+            if project_user_id:
+                if jira_project_id:
+                    j_token = get_jira_token(project_user_id)
+                    if j_token:
+                        resources = get_accessible_resources(j_token)
+                        if resources:
+                            issues = get_active_issues(resources[0]["id"], j_token)
+                            if issues is not None:
+                                unresolved_tasks_count = len(issues)
+                
+                if unresolved_tasks_count is None and notion_project_id:
+                    n_token = get_valid_notion_token(project_user_id)
+                    if n_token:
+                        tasks = get_notion_tasks(notion_project_id, n_token)
+                        if tasks is not None:
+                            unresolved_tasks_count = len(tasks)
+
+            delay_risk = heuristic_delay_detector(
+                velocity_change=velocity_change, 
+                unresolved_tasks_count=unresolved_tasks_count, 
+                high_churn_files=recent_churn_count
+            )
+            
+            if delay_risk:
+                risks.append({
+                    "project_id": project_id,
+                    "risk_type": delay_risk["risk_type"],
+                    "severity": delay_risk["severity"],
+                    "description": delay_risk["description"],
+                    "affected_units": ["Project Timeline"]
+                })
 
     grouped_conflicts = {}
-
     for source in active_units:
         if source not in G: continue
         for target in legacy_units:
             if target not in G or source == target: continue
-            
             if nx.has_path(G, source, target):
                 path = nx.shortest_path(G, source, target)
                 if 1 < len(path) <= 4:
-                    source_unit = unit_map[source]
-                    target_unit = unit_map[target]
-                    age_difference = target_unit['age_days'] - source_unit['age_days']
-                    
-                    if age_difference > 90:
-                        if target not in grouped_conflicts:
-                            grouped_conflicts[target] = []
-                            
-                        grouped_conflicts[target].append({
-                            "source_key": source,
-                            "source_unit": source_unit,
-                            "age_difference": age_difference,
-                            "path": " -> ".join(path)
-                        })
+                    if target not in grouped_conflicts: grouped_conflicts[target] = []
+                    grouped_conflicts[target].append({"source_key": source, "source_unit": unit_map[source], "path": path})
 
-    # 5. Run Grouped LLM analyses concurrently
-    risks = []
-    risk_scores = {}
+    # 7. RUN LLM ANALYSIS
     llm_coroutines = []
     conflict_details = []
 
     for target, sources in grouped_conflicts.items():
-        # Sort sources by how recently they were modified (newest first)
-        sources = sorted(sources, key=lambda x: x["source_unit"]["age_days"])
-        target_unit = unit_map[target]
-        
-        print(f"Detected legacy conflict: {target} is being touched by {len(sources)} active units.")
-        
-        coro = analyze_grouped_conflict_with_llm(target, target_unit, sources, user_config)
+        coro = analyze_grouped_conflict_with_llm(target, unit_map[target], sources, user_config)
         llm_coroutines.append(coro)
-        
-        conflict_details.append({
-            "target_key": target,
-            "target_age": target_unit['age_days'],
-            "sources": sources,
-            "max_age_difference": max(s["age_difference"] for s in sources)
-        })
-        
-        # Risk scoring: Add high risk to the legacy target, small risk to all sources
-        risk_scores[target] = risk_scores.get(target, 0) + (15 * len(sources))
-        for s in sources:
-            risk_scores[s['source_key']] = risk_scores.get(s['source_key'], 0) + 10
+        conflict_details.append({"target_key": target, "target_age": unit_map[target]['age_days'], "sources": sources})
 
     if llm_coroutines:
-        print(f"Running {len(llm_coroutines)} parallel AI risk assessments...")
         analyses = await asyncio.gather(*llm_coroutines)
-        
         for i, analysis_result in enumerate(analyses):
             det = conflict_details[i]
-            target = det['target_key']
-            sources = det['sources']
-            
-            # Severity Logic: "High" if age gap is severe OR if touched by 3+ active units
-            severity = "High" if det['max_age_difference'] > 180 or len(sources) >= 3 else "Medium"
-            
-            # Build unified list of affected units
-            affected_list = [target] + [s['source_key'] for s in sources]
-            
-            description = (
-                f"**Legacy Conflict:** The unit `{target}` (untouched for {det['target_age']} days) "
-                f"is being affected by recent changes in {len(sources)} active unit(s).\n\n"
-                f"**AI Analysis:** {analysis_result}"
-            )
-            
             risks.append({
                 "project_id": project_id,
                 "risk_type": "Legacy Conflict",
-                "severity": severity, 
-                "description": description,
-                "affected_units": affected_list
+                "severity": "High" if len(det['sources']) >= 3 else "Medium", 
+                "description": f"\n\n**Function:** `{det['target_key']}`\n\n**Age:** {det['target_age']} days is hit by {len(det['sources'])} new changes. \n\n**Lumis Analysis:** {analysis_result}",
+                "affected_units": [det['target_key']] + [s['source_key'] for s in det['sources']]
             })
 
-    # 6. Update Database Risk Scores
-    score_updates = []
-    for u_name, unit in unit_map.items():
-        current_score = risk_scores.get(u_name, 0)
-        if unit['age_days'] > 90: current_score += 10
-        final_score = min(current_score, 100)
-        
-        if final_score > 0:
-            score_updates.append({
-                "project_id": project_id, "unit_name": u_name, "risk_score": final_score
-            })
-
-    # 7. Save Results
-    print(f"Saving {len(risks)} grouped legacy conflicts.")
+    # 8. SAVE RESULTS
     save_risk_alerts(project_id, risks)
-    update_unit_risk_scores(score_updates)
-    
     return len(risks)
+
+def heuristic_delay_detector(velocity_change: float, unresolved_tasks_count: int = None, high_churn_files: int = 0):
+    """
+    Pure mathematical calculation of project delays. Zero AI tokens used.
+    """
+    # If they are working fast or normal, there is no delay risk.
+    if velocity_change >= -0.10: 
+        return None 
+        
+    # Scenario A: We have task data (Jira/Notion)
+    if unresolved_tasks_count is not None:
+        if unresolved_tasks_count == 0:
+            return None # Project is done, velocity drop is normal!
+        if velocity_change < -0.40 and unresolved_tasks_count > 10:
+            return {
+                "risk_type": "Predictive Delay",
+                "severity": "High",
+                "description": f"Development speed dropped by {abs(velocity_change)*100:.0f}%, but there are still {unresolved_tasks_count} pending tasks. The team is likely blocked."
+            }
+
+    # Scenario B: We only have GitHub Data
+    else:
+        if velocity_change < -0.30 and high_churn_files >= 2:
+            return {
+                "risk_type": "Predictive Delay",
+                "severity": "Medium",
+                "description": f"Velocity dropped by {abs(velocity_change)*100:.0f}%, and developers are repeatedly editing the same {high_churn_files} files. This indicates they are stuck debugging a complex issue."
+            }
+            
+    return None

@@ -17,7 +17,6 @@ class LumisAgent:
     def __init__(self, project_id: str, max_steps: int = 4, user_config: Dict = None, mode: str = "single-turn"):
         self.project_id = project_id
         self.user_config = user_config or {}
-        print(f"Initializing LumisAgent with config: {self.user_config}")
         if "mode" not in self.user_config:
             self.user_config["mode"] = mode
         if "reasoning" in self.user_config:

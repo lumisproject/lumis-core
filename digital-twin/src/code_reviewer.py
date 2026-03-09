@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 async def process_code_review(project_id: str, commits: list, repo_name: str, agent: LumisAgent):
     """Standalone code review that runs for all commits, even without Jira/Notion connected."""
-    supabase.table("project_risks").delete().eq("project_id", project_id).execute()
+    supabase.table("project_risks").delete().eq("project_id", project_id).eq("risk_type", "CODE_RISK").execute()
     for commit in commits:
         message = commit.get("message", "")
         sha = commit.get("sha")
@@ -35,7 +35,14 @@ async def process_code_review(project_id: str, commits: list, repo_name: str, ag
                         "description": f"[{sha[:7]}] {risk.get('description', 'Code issue detected')}", 
                         "affected_units": risk.get("affected_units", [])
                     }
-                    supabase.table("project_risks").insert(new_risk).execute()
+                    try:
+                        supabase.table("project_risks").insert(new_risk).execute()
+                    except Exception as db_err:
+                        if "project_risks_project_id_fkey" in str(db_err):
+                            logger.warning(f"Project {project_id} was deleted during analysis. Stopping review.")
+                            return # Stop processing any further commits
+                        else:
+                            raise db_err
                 
                 logger.info(f"⚠️ Standalone review found {len(risks)} risks for {sha[:7]}.")
             else:

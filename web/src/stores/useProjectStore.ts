@@ -6,6 +6,7 @@ interface Risk {
   id: string;
   severity: 'high' | 'medium' | 'low';
   title: string;
+  riskType: string;
   description: string;
   file?: string;
 }
@@ -62,16 +63,35 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
     const projects = (data ?? []) as Project[];
+    
+    // 1. Check if the user had a previously selected project saved in their browser
+    const savedProjectId = localStorage.getItem('lumis_active_project');
+    const savedProject = projects.find(p => p.id === savedProjectId);
+
     const current = get().project;
-    const active = current && projects.some((p) => p.id === current.id)
+    
+    // 2. Prioritize: Saved Project -> Currently active -> Newest project (fallback)
+    const active = savedProject || (current && projects.some((p) => p.id === current.id)
       ? current
-      : projects[0] ?? null;
+      : projects[0] ?? null);
+
+    // 3. Save the active project back to storage so it survives the next refresh
+    if (active) {
+      localStorage.setItem('lumis_active_project', active.id);
+    }
+
     set({ projects, project: active, loading: false });
   },
 
   selectProject: (projectId) => {
     const { projects } = get();
     const next = projects.find((p) => p.id === projectId) ?? null;
+    
+    // 4. Save the user's explicit choice to local storage
+    if (next) {
+      localStorage.setItem('lumis_active_project', next.id);
+    }
+    
     set({ project: next, risks: [] });
   },
 
@@ -103,7 +123,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const normalizedRisks = apiRisks.map((risk) => {
         const severityRaw = String(risk.severity ?? 'medium').toLowerCase();
         
-        // Add the 'as "high" | "medium" | "low"' assertion here:
+        // Ensure severity strictly matches the allowed types
         const severity = (
           severityRaw === 'high' || severityRaw === 'low' || severityRaw === 'medium' 
             ? severityRaw 
@@ -114,6 +134,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           id: risk.id ?? `${risk.project_id ?? 'project'}-${risk.risk_type ?? 'risk'}`,
           severity,
           title: risk.title ?? risk.risk_type ?? 'Risk',
+          riskType: risk.risk_type ?? 'Risk', // <--- NEW LINE ADDED HERE
           description: risk.description ?? '',
           file: risk.file ?? risk.file_path ?? undefined,
         };

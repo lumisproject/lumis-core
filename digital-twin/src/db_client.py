@@ -108,27 +108,12 @@ def save_risk_alerts(project_id, risks):
     supabase.table("project_risks").delete().eq("project_id", project_id).eq("risk_type", "Legacy Conflict").execute()
     supabase.table("project_risks").insert(risks).execute()
 
-def update_unit_risk_scores(updates):
-    if not updates: return
-    for update in updates:
-        supabase.table("memory_units")\
-            .update({"risk_score": update["risk_score"]})\
-            .eq("project_id", update["project_id"])\
-            .eq("unit_name", update["unit_name"])\
-            .execute()
-
-def delete_previous_risks(project_id):
-    supabase.table("project_risks")\
-        .delete().eq("project_id", project_id)\
-        .eq("risk_type", "Legacy Conflict")\
-        .execute()
-
 def get_global_user_config(user_id: str) -> dict:
     res = (
         supabase.table("user_settings")
         .select("user_config")
         .eq("user_id", user_id)
-        .maybe_single()
+        .limit(1)
         .execute()
     )
     
