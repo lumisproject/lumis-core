@@ -117,8 +117,8 @@ def get_global_user_config(user_id: str) -> dict:
         .execute()
     )
     
-    if res and res.data and res.data.get("user_config"):
-        return res.data["user_config"]
+    if res and res.data and len(res.data) > 0 and res.data[0].get("user_config"):
+        return res.data[0]["user_config"]
     
     return {"use_default": True}
 

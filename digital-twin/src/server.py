@@ -225,7 +225,7 @@ async def chat_endpoint(req: ChatRequest):
         if not proj_row or not proj_row.data:
             raise HTTPException(status_code=404, detail="Project not found")
             
-        user_id = proj_row.data["user_id"]
+        user_id = proj_row.data[0]["user_id"]
         
         # 2. Get their global secure LLM settings
         global_config = get_global_user_config(user_id)
