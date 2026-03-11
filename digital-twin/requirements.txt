@@ -13,9 +13,10 @@ tree-sitter-language-pack
 langchain
 langchain-openai
 langchain-huggingface
+langchain_openrouter
 langchain-anthropic
-langchain-google-genai
 sentence-transformers
+google-genai
 
 # Graph & Risk Analysis
 networkx
