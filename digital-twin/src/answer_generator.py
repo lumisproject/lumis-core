@@ -131,11 +131,18 @@ Symbol Mappings:
             full_error = traceback.format_exc()
             self.logger.error(f"Full error traceback:\n{full_error}")
             
-            # Graceful failure response
+            error_message = str(e)
+            
+            detailed_answer = f"""### ⚠️ Generation Failed
+
+            An error occurred while communicating with the AI provider.
+
+            {error_message}"""
+
             return {
-                "answer": "An error occurred, answer cannot be generated. Check LLM configuration.",
-                "summary": "Error occurred during generation.",
-                "sources": [e.get('file_path', 'unknown') for e in collected_elements]
+                "answer": detailed_answer,
+                "summary": f"Failed with error: {error_message[:100]}",
+                "sources": [elem.get('file_path', 'unknown') for elem in collected_elements]
             }
 
     def _prepare_context(self, elements: List[Dict[str, Any]]) -> str:
@@ -215,3 +222,95 @@ Symbol Mappings:
         summary_parts.append(f"Answer Preview: {answer_preview}")
 
         return "\n".join(summary_parts)
+    
+    async def generate_stream(self, query: str, collected_elements: List[Dict[str, Any]], repo_structure: str = None, history: List[Dict[str, str]] = None, user_config: Dict = None):
+        """Asynchronous generator to yield final response chunks."""
+        self.logger.info("Generating answer stream")
+        try:
+            context_str = self._prepare_context(collected_elements)
+            max_context_chars = 100000 
+            if len(context_str) > max_context_chars:
+                context_str = context_str[:max_context_chars] + "\n\n...[Context truncated due to length]..."
+            
+            structure_context = ""
+            if repo_structure:
+                structure_context = f"**REPOSITORY STRUCTURE**:\n{repo_structure}\n\n"
+
+            base_system_prompt = (
+                "You are Lumis, an intelligent Code Analysis Agent. Your goal is to satisfy the user's request "
+                "using ONLY the provided code snippets. Do NOT guess or invent logic.\n\n"
+                "Guidelines:\n"
+                "1. Focus primarily on answering the question itself.\n"
+                "2. The provided code/file content may be irrelevant to the original question or may contain noise. In this case, do not rely on the provided fragment.\n"
+                "3. Provide clear, accurate, and concise answers.\n"
+                "4. Reference specific code snippets when relevant.\n"
+                "5. Include file paths and corresponding code snippets when discussing specific code.\n"
+                "6. If the provided context doesn't contain enough information, say so.\n"
+                "7. Use code examples to illustrate your explanations.\n"
+                "8. Be technical but accessible.\n"
+                "9. If asked to find something, list all relevant locations.\n"
+                "10. When comparing code from different files, clearly distinguish between them.\n"
+                "11. **IMPORTANT: Always respond in the same language as the user's question.**"
+            )
+
+            if self.enable_multi_turn and history:
+                system_prompt = base_system_prompt + """
+
+**Multi-turn Dialogue Instructions:**
+At the end of your answer, you MUST provide a structured summary for internal use (not shown to the user).
+The summary should be enclosed in <SUMMARY> tags and include:
+1. Intent: A sentence describing the user's intent in this turn
+2. Files Read: List all the files you have analyzed in this conversation
+3. Missing Information: Describe what additional files, classes, functions, or context would help answer the query more completely
+4. Key Facts: Stable conclusions that can be relied upon in subsequent turns
+5. Symbol Mappings: Map user-mentioned names to actual symbols (e.g., "the function" -> "utils.process_data")
+
+**IMPORTANT**: Keep the summary under 500 words. Focus on information that helps with code location and reasoning.
+
+Format:
+<SUMMARY>
+Files Read:
+- [repo_name/file_path_1] - [brief description of what was found]
+
+Missing Information:
+- [description of what files or context are still needed]
+- [why this information would be helpful]
+
+Key Facts:
+- [fact 1]
+
+Symbol Mappings:
+- [user term] -> [actual symbol in codebase]
+</SUMMARY>
+
+**STRICT FORMAT REQUIREMENT**: You MUST output the summary exactly in the above `<SUMMARY>...</SUMMARY>` structure. Do NOT place content outside the tags. Regardless of the language you use to respond, always use `<SUMMARY>...</SUMMARY>` as the summary tags."""
+                user_summary_instruction = ""
+                
+            else:
+                system_prompt = base_system_prompt + "\n\n**INTERNAL SUMMARY**: End with a hidden <SUMMARY> block analyzing the findings."
+                user_summary_instruction = "- End with <SUMMARY>Files Analyzed; Evidence Found</SUMMARY>"
+
+            history_text = ""
+            if history:
+                recent = history[-6:]
+                history_text = "**PREVIOUS CONVERSATION**:\n" + "\n".join([f"{m['role'].upper()}: {m['content']}" for m in recent]) + "\n\n---\n"
+
+            user_prompt = (
+                f"{history_text}"
+                f"**USER QUERY**: {query}\n\n"
+                f"{structure_context}"
+                f"**RETRIEVED CODE**:\n{context_str}\n\n"
+                "**INSTRUCTIONS**:\n"
+                "- Please answer the question using the code snippets above only if they are relevant.\n"
+                "- Fulfill the query exactly as written.\n"
+                "- Cite sources using brackets, e.g., [src/main.py].\n"
+                f"{user_summary_instruction}"
+            )
+            
+            from src.services import stream_llm_completion
+            async for chunk in stream_llm_completion(system_prompt, user_prompt, user_config=user_config):
+                yield chunk
+            
+        except Exception as e:
+            self.logger.error(f"Failed to generate answer stream: {e}")
+            yield f"\n\n### ⚠️ Generation Failed\n\nAn error occurred while communicating with the AI provider.\n\n{str(e)}"

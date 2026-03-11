@@ -32,11 +32,17 @@ def get_embedding(text: str):
 def groq_chat(system_prompt, user_prompt, api_key, model, temperature, reasoning):
     from langchain_groq import ChatGroq
 
-    llm = ChatGroq(
-        model=model,
-        temperature=temperature,
-        groq_api_key=api_key
-    )
+    config = {
+        "model": model,
+        "temperature": temperature,
+        "groq_api_key": api_key,
+    }
+
+    is_reasoning_enabled = reasoning and reasoning.get("reasoning", {}).get("enabled")
+    if is_reasoning_enabled:
+        config["reasoning_effort"] = "high"
+
+    llm = ChatGroq(**config)
 
     messages = [
         SystemMessage(content=system_prompt),
@@ -159,6 +165,84 @@ def get_llm_completion(system_prompt, user_prompt, user_config=None):
     except Exception as e:
         print(f"LLM Error: {e}")
         return None
+
+async def stream_llm_completion(system_prompt, user_prompt, user_config=None):
+    """Asynchronous generator that streams LLM response tokens."""
+    try:
+        reasoning_enabled = user_config.get("reasoning_enabled", False) if user_config else False
+        provider = user_config.get("provider") or Config.DEFAULT_LLM_PROVIDER
+        api_key = user_config.get("api_key") or Config.DEFAULT_LLM_API_KEY
+        model_name = user_config.get("model") or Config.DEFAULT_LLM_MODEL
+        reasoning = {"reasoning": {"enabled": True}} if reasoning_enabled else None
+        temperature = 0.3
+
+        if user_config and user_config.get("api_key") and user_config.get("api_key") != Config.DEFAULT_LLM_API_KEY:
+            from src.cryptography import decrypt_value
+            api_key = decrypt_value(api_key)
+
+        print(f"[STREAM] Using LLM Provider: {provider}, Model: {model_name}")
+        
+        if provider == "openrouter":
+            from langchain_openai import ChatOpenAI
+            from langchain_core.messages import SystemMessage, HumanMessage
+            llm = ChatOpenAI(base_url="https://openrouter.ai/api/v1", model=model_name, temperature=temperature, openrouter_api_key=api_key, reasoning=reasoning, streaming=True)
+            messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+            async for chunk in llm.astream(messages):
+                if chunk.content:
+                    if isinstance(chunk.content, list):
+                        for b in chunk.content:
+                            if getattr(b, "type", "") == "text": yield b.get("text", "")
+                            elif isinstance(b, dict) and "text" in b: yield b["text"]
+                    else:
+                        yield chunk.content
+
+        elif provider == "openai":
+            from langchain_openai import ChatOpenAI
+            from langchain_core.messages import SystemMessage, HumanMessage
+            llm = ChatOpenAI(model=model_name, temperature=temperature, openai_api_key=api_key, reasoning=reasoning, streaming=True)
+            messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+            async for chunk in llm.astream(messages):
+                if chunk.content: yield chunk.content
+
+        elif provider == "anthropic":
+            from langchain_anthropic import ChatAnthropic
+            from langchain_core.messages import SystemMessage, HumanMessage
+            llm = ChatAnthropic(model=model_name, temperature=temperature, anthropic_api_key=api_key, thinking=reasoning, streaming=True)
+            messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+            async for chunk in llm.astream(messages):
+                if chunk.content:
+                    if isinstance(chunk.content, list):
+                        for b in chunk.content:
+                            if isinstance(b, dict) and "text" in b: yield b["text"]
+                    else:
+                        yield str(chunk.content)
+
+        elif provider == "google":
+            from google import genai
+            from google.genai import types
+            client = genai.Client(api_key=api_key)
+            config_kwargs = {"temperature": temperature, "system_instruction": system_prompt}
+            if reasoning_enabled:
+                config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level="HIGH")
+            config = types.GenerateContentConfig(**config_kwargs)
+            
+            response_stream = await client.aio.models.generate_content_stream(model=model_name, contents=user_prompt, config=config)
+            async for chunk in response_stream:
+                if chunk.text: yield chunk.text
+
+        elif provider == "groq":
+            from langchain_groq import ChatGroq
+            from langchain_core.messages import SystemMessage, HumanMessage
+            llm = ChatGroq(model=model_name, temperature=temperature, groq_api_key=api_key)
+            messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+            async for chunk in llm.astream(messages):
+                if chunk.content: yield chunk.content
+        else:
+            yield f"Error: Provider {provider} is not supported yet."
+
+    except Exception as e:
+        print(f"Stream LLM Error: {e}")
+        yield f"\n[Stream Error: {str(e)}]"
     
 def generate_footprint(text):
     return hashlib.sha256(text.encode('utf-8')).hexdigest()
