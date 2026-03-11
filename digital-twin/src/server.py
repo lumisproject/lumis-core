@@ -134,10 +134,18 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
     try:
         payload = await request.json()
 
+        # 1. Handle GitHub Zen Ping immediately
         if "zen" in payload:
             logger.info("GitHub Zen ping received. Connection verified.")
             return {"status": "ok", "message": "Lumis Unified Gateway is listening"}
-        
+
+        # 2. Only proceed if it is a push to main or master
+        ref = payload.get("ref", "")
+        if ref not in ["refs/heads/main", "refs/heads/master"]:
+            reason = f"Ignored event on branch: {ref}" if ref else "Unsupported webhook event (e.g. Pull Request)"
+            logger.info(f"Webhook Ignored: {reason}")
+            return {"status": "ignored", "reason": reason}
+
         global_config = get_global_user_config(user_id)
         global_config["user_id"] = user_id
 
@@ -161,59 +169,56 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
 
         agent = LumisAgent(project_id=project_id, max_steps=3, user_config=global_config, mode="single-turn")
 
-        ref = payload.get("ref", "")
-        if ref in ["refs/heads/main", "refs/heads/master"]:
-            new_sha = payload.get("after")
-            repo_url = payload.get("repository", {}).get("clone_url")
+        # Extract commit data from main/master push
+        new_sha = payload.get("after")
+        repo_url = payload.get("repository", {}).get("clone_url")
 
-            supabase.table("projects").update({"last_commit": new_sha}).eq("id", project_id).execute()
-            logger.info(f"Webhook Trigger: Push detected on {ref} (Commit: {new_sha[:7]})")
+        supabase.table("projects").update({"last_commit": new_sha}).eq("id", project_id).execute()
+        logger.info(f"Webhook Trigger: Push detected on {ref} (Commit: {new_sha[:7]})")
 
-            update_progress(
-                project_id, 
-                "STARTING", 
-                f"GitHub Push detected ({new_sha[:7]}). Initializing Unified Sync..."
-            )
+        update_progress(
+            project_id, 
+            "STARTING", 
+            f"GitHub Push detected ({new_sha[:7]}). Initializing Unified Sync..."
+        )
 
-            background_tasks.add_task(
-                run_ingestion_pipeline,
-                repo_url=repo_url,
-                project_id=project_id,
-                user_config=db_user_config
-            )
+        background_tasks.add_task(
+            run_ingestion_pipeline,
+            repo_url=repo_url,
+            project_id=project_id,
+            user_config=db_user_config
+        )
 
-            raw_commits = payload.get("commits", [])
-            repo_name = payload.get("repository", {}).get("full_name")
+        raw_commits = payload.get("commits", [])
+        repo_name = payload.get("repository", {}).get("full_name")
 
-            normalized_commits = []
-            for c in raw_commits:
-                normalized_commits.append({
-                    "sha": c.get("id", c.get("sha")),
-                    "message": c.get("message", "")
-                })
+        normalized_commits = []
+        for c in raw_commits:
+            normalized_commits.append({
+                "sha": c.get("id", c.get("sha")),
+                "message": c.get("message", "")
+            })
 
-            background_tasks.add_task(
-                process_code_review,
-                project_id=project_id,
-                commits=normalized_commits,
-                repo_name=repo_name,
-                agent=agent
-            )
+        background_tasks.add_task(
+            process_code_review,
+            project_id=project_id,
+            commits=normalized_commits,
+            repo_name=repo_name,
+            agent=agent
+        )
 
-            check_taskes(
-                user_id=user_id,
-                project_id=project_id,
-                commits=normalized_commits,
-                repo_name=repo_name,
-                background_tasks=background_tasks,
-                jira_project_id=jira_proj,
-                notion_project_id=notion_proj,
-                agent=agent
-            )
-            
-            return {"status": "sync_started", "commit": new_sha}
-
-        return {"status": "ignored", "reason": "not_a_push_event"}
+        check_taskes(
+            user_id=user_id,
+            project_id=project_id,
+            commits=normalized_commits,
+            repo_name=repo_name,
+            background_tasks=background_tasks,
+            jira_project_id=jira_proj,
+            notion_project_id=notion_proj,
+            agent=agent
+        )
+        
+        return {"status": "sync_started", "commit": new_sha}
 
     except Exception as e:
         logger.error(f"CRITICAL: Unified Webhook Error: {str(e)}")
