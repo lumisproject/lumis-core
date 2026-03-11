@@ -299,6 +299,7 @@ const SettingsContent = () => {
                     <SelectItem value="openai">OpenAI</SelectItem>
                     <SelectItem value="anthropic">Anthropic</SelectItem>
                     <SelectItem value="google">Google Gemini</SelectItem>
+                    <SelectItem value="groq">Groq</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

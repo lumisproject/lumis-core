@@ -8,7 +8,6 @@ from src.cryptography import decrypt_value
 
 # --- LangChain Imports ---
 from langchain_core.messages import SystemMessage, HumanMessage
-from langchain_openai import ChatOpenAI
 from langchain_huggingface import HuggingFaceEmbeddings
 
 logger = logging.getLogger(__name__)
@@ -30,84 +29,137 @@ def get_embedding(text: str):
     """Returns a flat list of floats for a single query (used in retriever.py)"""
     return lc_embedder.embed_query(text)
 
+def groq_chat(system_prompt, user_prompt, api_key, model, temperature, reasoning):
+    from langchain_groq import ChatGroq
 
-# 2. LLM INFRASTRUCTURE.
-def get_llm(temperature=0.3, user_config=None):
-    reasoning_enabled = user_config.get("reasoning_enabled", False) if user_config else False
+    llm = ChatGroq(
+        model=model,
+        temperature=temperature,
+        groq_api_key=api_key
+    )
 
-    provider = user_config.get("provider") or Config.DEFAULT_LLM_PROVIDER
-    api_key = user_config.get("api_key") or Config.DEFAULT_LLM_API_KEY
-    model_name = user_config.get("model") or Config.DEFAULT_LLM_MODEL
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_prompt)
+    ]
 
-    if user_config and user_config.get("api_key") and user_config.get("api_key") != Config.DEFAULT_LLM_API_KEY:
-        api_key = decrypt_value(api_key)
+    response = llm.invoke(messages)
 
-    print(f"Using LLM Provider: {provider}, Model: {model_name}, Reasoning: {reasoning_enabled}")
+    return response.content
 
-    if provider == "openrouter":
-        extra_body = {"reasoning": {"enabled": True}} if reasoning_enabled else None
-        return ChatOpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=api_key,
-            model=model_name,
-            temperature=temperature,
-            extra_body=extra_body
-        )
+def google_genai(system_prompt, user_prompt, api_key, model, temperature, reasoning):
+    from google import genai
+    from google.genai import types
 
-    elif provider == "openai":
-        return ChatOpenAI(
-            api_key=api_key,
-            model=model_name,
-            temperature=temperature
-        )
+    client = genai.Client(api_key=api_key)
 
-    elif provider == "anthropic":
-        from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(
-            api_key=api_key,
-            model=model_name,
-            temperature=temperature
-        )
+    config_kwargs = {
+        "temperature": temperature,
+        "system_instruction": system_prompt,
+    }
+    
+    if reasoning and reasoning.get("reasoning", {}).get("enabled"):
+                config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level="HIGH")
 
-    elif provider == "google":
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        return ChatGoogleGenerativeAI(
-            google_api_key=api_key,
-            model=model_name,
-            temperature=temperature
-        )
+    config = types.GenerateContentConfig(**config_kwargs)
 
-    raise ValueError(f"Provider {provider} is not supported yet.")
+    response = client.models.generate_content(model=model, contents=user_prompt, config=config)
 
+    return response.text
+
+def openrouter_chat(system_prompt, user_prompt, api_key, model, temperature, reasoning):
+    from langchain_openai import ChatOpenAI
+
+    llm = ChatOpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        model=model,
+        temperature=temperature,
+        openrouter_api_key=api_key,
+        reasoning=reasoning
+    )
+
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_prompt)
+    ]
+
+    response = llm.invoke(messages)
+
+    return response.content
+
+def openai_chat(system_prompt, user_prompt, api_key, model, temperature, reasoning):
+    from langchain_openai import ChatOpenAI
+
+    llm = ChatOpenAI(
+        model=model,
+        temperature=temperature,
+        openai_api_key=api_key,
+        reasoning=reasoning
+    )
+
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_prompt)
+    ]
+
+    response = llm.invoke(messages)
+
+    return response.content
+
+def anthropic_chat(system_prompt, user_prompt, api_key, model, temperature, reasoning):
+    from langchain_anthropic import ChatAnthropic
+
+    llm = ChatAnthropic(
+        model=model,
+        temperature=temperature,
+        anthropic_api_key=api_key,
+        thinking=reasoning
+    )
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_prompt)
+    ]
+    response = llm.invoke(messages)
+
+    return response.content
 
 def get_llm_completion(system_prompt, user_prompt, user_config=None):
     try:
-        # 1. Dynamically get the LLM based on user overrides or defaults
-        llm = get_llm(
-            temperature=0.3,
-            user_config=user_config,
-        )
+        reasoning_enabled = user_config.get("reasoning_enabled", False) if user_config else False
+
+        provider = user_config.get("provider") or Config.DEFAULT_LLM_PROVIDER
+        api_key = user_config.get("api_key") or Config.DEFAULT_LLM_API_KEY
+        model_name = user_config.get("model") or Config.DEFAULT_LLM_MODEL
+        reasoning = {"reasoning": {"enabled": True}} if reasoning_enabled else None
+        temperature = 0.3
+
+        if user_config and user_config.get("api_key") and user_config.get("api_key") != Config.DEFAULT_LLM_API_KEY:
+            api_key = decrypt_value(api_key)
+
+        print(f"Using LLM Provider: {provider}, Model: {model_name}, Reasoning: {reasoning_enabled}")
         
-        # 2. Format messages using LangChain primitives
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=user_prompt)
-        ]
+        if provider == "openrouter":
+            content = openrouter_chat(system_prompt, user_prompt, api_key, model_name, temperature, reasoning)
+        elif provider == "openai":
+            content = openai_chat(system_prompt, user_prompt, api_key, model_name, temperature, reasoning)
+        elif provider == "anthropic":
+            content = anthropic_chat(system_prompt, user_prompt, api_key, model_name, temperature, reasoning)
+        elif provider == "google":
+            content = google_genai(system_prompt, user_prompt, api_key, model_name, temperature, reasoning)
+        elif provider == "groq":
+            content = groq_chat(system_prompt, user_prompt, api_key, model_name, temperature, reasoning)
+        else:
+            raise ValueError(f"Provider {provider} is not supported yet.")
         
-        # 3. Invoke model
-        response = llm.invoke(messages)
-        content = response.content
-        
-        # FIX: Handle cases where LangChain returns a list of blocks instead of a string
         if isinstance(content, list):
             content = " ".join([str(c.get("text", "")) if isinstance(c, dict) else str(c) for c in content])
-            
-        return str(content).strip()
         
+        return str(content).strip()
+
     except Exception as e:
         print(f"LLM Error: {e}")
         return None
-
+    
 def generate_footprint(text):
     return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
