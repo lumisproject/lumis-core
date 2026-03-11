@@ -1,6 +1,7 @@
 import json
 import re
 import logging
+import asyncio
 import ast
 from typing import List, Dict, Any, Optional
 from langchain_core.messages import BaseMessage
@@ -9,12 +10,8 @@ from src.retriever import GraphRetriever
 from src.answer_generator import AnswerGenerator
 from src.query_processor import QueryProcessor
 
-# --- INTEGRATED JIRA IMPORTS ---
-from src.jira_auth import get_valid_token
-from src.jira_client import get_accessible_resources, jira_headers
-
 class LumisAgent:
-    def __init__(self, project_id: str, max_steps: int = 4, user_config: Dict = None, mode: str = "single-turn"):
+    def __init__(self, project_id: str, max_steps: int = 5, user_config: Dict = None, mode: str = "single-turn"):
         self.project_id = project_id
         self.user_config = user_config or {}
         if "mode" not in self.user_config:
@@ -29,33 +26,42 @@ class LumisAgent:
         self.conversation_history: List[BaseMessage] = []
         self.logger = logging.getLogger(__name__)
 
-    def ask(self, user_query: str) -> str:
-        """
-        Main entry point for user queries. Intercepts Jira keywords to trigger 
-        task cross-referencing, otherwise proceeds with code analysis.
-        """
+    async def ask_stream(self, user_query: str):
+        """ Main entry point for user queries. Intercepts Jira keywords to trigger
+            task cross-referencing, otherwise proceeds with code analysis. """
+        
         mode = self.user_config.get("mode", "single-turn")
         
         if mode == "single-turn":
             self.conversation_history = []
 
         scratchpad = []
-        collected_elements: List[Dict[str, Any]] = [] 
+        collected_elements = [] 
         repo_structure = None 
         
-        print(f"\n🤖 LUMIS: {user_query}")
-        print(f"Reasoning Enabled: {self.user_config.get('reasoning_enabled', False)}")
-        print(f"LLM Provider: {self.user_config.get('provider', 'default')} | Model: {self.user_config.get('model', 'default')}\n")
-        print(f"--- Starting {'Multi-Turn' if mode == 'multi-turn' else 'Single-Turn'} Interaction ---\n")
+        self.logger.info(f"🤖 LUMIS: {user_query}")
+        self.logger.info(f"Reasoning Enabled: {self.user_config.get('reasoning_enabled', False)}")
+        self.logger.info(f"LLM Provider: {self.user_config.get('provider', 'default')} | Model: {self.user_config.get('model', 'default')}")
+        self.logger.info(f"--- Starting {'Multi-Turn' if mode == 'multi-turn' else 'Single-Turn'} Interaction ---")
 
-        # Process query once before the autonomous scouting loop
-        processed_query = self.query_processor.process(user_query, self.conversation_history, user_config=self.user_config)
-        print(f"🎯 Intent: {processed_query.intent}")
+        yield json.dumps({"type": "thought", "content": f"Received query. Brain engaging..."})
+
+        # Process query asynchronously to avoid blocking
+        processed_query = await asyncio.to_thread(self.query_processor.process, user_query, self.conversation_history, user_config=self.user_config)
+        
+        # --- TERMINAL LOG ---
+        self.logger.info(f"🎯 Intent: {processed_query.intent}")
+        
+        yield json.dumps({"type": "thought", "content": f"Intent Decoded: {processed_query.intent}"})
+        
         if processed_query.pseudocode_hints:
-            print(f"💡 Pseudocode Hint Generated")
+            self.logger.info(f"💡 Pseudocode Hint Generated")
+            yield json.dumps({"type": "thought", "content": f"Formulated Search Hint: {processed_query.pseudocode_hints[:100]}..."})
 
         for step in range(self.max_steps):
-            response_text = get_llm_completion(
+            # Still use the synchronous completion here since we need the FULL JSON object to parse it before moving forward
+            response_text = await asyncio.to_thread(
+                get_llm_completion,
                 self._get_system_prompt(), 
                 self._build_step_prompt(processed_query, scratchpad),
                 user_config=self.user_config
@@ -66,25 +72,40 @@ class LumisAgent:
             action = data.get("action")
             confidence = data.get("confidence", 0)
             
-            print(f"🤔 Step {step+1} ({confidence}%, ({action})): {thought}")
+            self.logger.info(f"🤔 Step {step+1} ({confidence}%, ({action})): {thought}")
 
-            if confidence >= 90 or action == "final_answer":
+            yield json.dumps({"type": "thought", "content": f"[{confidence}%] {thought}"})
+
+            if confidence >= 95 or action == "final_answer":
+                yield json.dumps({"type": "thought", "content": "Confidence threshold reached. Formulating final answer."})
                 break
             
-            obs = self._execute_tool(action, data.get("action_input"), collected_elements, scratchpad, processed_query)
-            print(f"\n\n🔧 Executed {action} with input '{data.get('action_input')}'. Observation: {obs}\n\n")
+            obs = await asyncio.to_thread(self._execute_tool, action, data.get("action_input"), collected_elements, scratchpad, processed_query)
+            
+            self.logger.info(f"\n\n🔧 Executed {action} with input '{data.get('action_input')}'. Observation: {obs}\n\n")
+            
+            yield json.dumps({"type": "tool", "content": f"Action Executed: {action}({data.get('action_input')})"})
+            
             if action == "list_files": 
                 repo_structure = obs 
 
-        result = self.generator.generate(
+        # Signal that the reasoning loop has ended and streaming text will begin
+        yield json.dumps({"type": "answer_start"})
+        
+        full_answer = ""
+        async for chunk in self.generator.generate_stream(
             query=user_query, 
             collected_elements=collected_elements, 
             repo_structure=repo_structure,
             history=self.conversation_history,
             user_config=self.user_config
-        )
-        self._update_history(user_query, result['answer'], mode)
-        return result['answer']
+        ):
+            full_answer += chunk
+            yield json.dumps({"type": "answer_chunk", "content": chunk})
+            
+        # Try to extract the true answer and internal memory summary from the accumulated text
+        answer_only, _ = self.generator._parse_response_with_summary(full_answer)
+        self._update_history(user_query, answer_only, mode)
 
     def _build_step_prompt(self, processed_query, scratchpad):
         history_text = ""
@@ -104,8 +125,8 @@ class LumisAgent:
              insights.append(f"Implementation Hint:\n{processed_query.pseudocode_hints}")
              
         insight_text = "\n\n".join(insights)
-        return f"{history_text}{query_context}\n\n{insight_text}\n\nPROGRESS:\n{progress}\n\nNEXT JSON:"
-
+        return f"{history_text}{query_context}\n\n{insight_text}\n\nPROGRESS:\n{progress}\n\nNEXT JSON (Respond strictly with the requested JSON schema and NO native tool calls):"
+    
     # To check later ⚠️️: This parsing logic is now duplicated in query_processor.py. Consider centralizing it in a utility module if it becomes more complex or is needed elsewhere.
     def _parse_response(self, text: str, fallback_query: str = "") -> Dict[str, Any]:
         if not text: 
@@ -182,13 +203,15 @@ class LumisAgent:
             "1. SCOUT: Use `list_files` or `search_code` to find RELEVANT FILE PATHS.\n"
             "2. READ: Only call `read_file` when you are 80%+ sure a file contains the answer.\n"
             "3. ANSWER: Call `final_answer` once you have the code snippets in your context.\n\n"
-            "IMPORTANT: You MUST respond ONLY with a valid JSON object matching this exact schema. Do not include markdown formatting or outside text:\n"
+            "CRITICAL INSTRUCTION: DO NOT use native tool calling or function calling APIs. "
+            "You must respond with raw text containing ONLY a valid JSON object matching this EXACT schema:\n"
             "{\n"
             '  "thought": "Your reasoning for the next step",\n'
             '  "action": "list_files | read_file | search_code | final_answer",\n'
             '  "action_input": "The input string for the chosen tool",\n'
             '  "confidence": 85\n'
-            "}"
+            "}\n"
+            "Do not include markdown formatting or outside text."
         )
 
     def _update_history(self, q, a, mode):

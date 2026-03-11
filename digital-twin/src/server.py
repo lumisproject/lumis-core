@@ -1,9 +1,11 @@
 import logging
 import asyncio
 import requests
+import json
 from typing import Dict, Optional
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Depends, Header
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 # Core Modules
@@ -220,28 +222,35 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
 @app.post("/api/chat")
 async def chat_endpoint(req: ChatRequest):
     try:
-        # 1. Get user_id from the project they are chatting in
         proj_row = supabase.table("projects").select("user_id").eq("id", req.project_id).limit(1).execute()
         if not proj_row or not proj_row.data:
             raise HTTPException(status_code=404, detail="Project not found")
             
         user_id = proj_row.data[0]["user_id"]
         
-        # 2. Get their global secure LLM settings
         global_config = get_global_user_config(user_id)
         global_config["user_id"] = user_id
+        global_config["reasoning_enabled"] = req.reasoning
+        global_config["mode"] = req.mode
 
-        # 3. Initialize or update agent
         if req.project_id not in active_agents:
             logger.info(f"✨ Spawning agent for {req.project_id}")
             agent = LumisAgent(project_id=req.project_id, user_config=global_config)
             active_agents[req.project_id] = agent
         else:
             agent = active_agents[req.project_id]
-            agent.user_config = global_config # Refresh config in case they just changed it in settings
+            agent.user_config = global_config 
 
-        response_text = await asyncio.to_thread(agent.ask, req.query)
-        return {"response": response_text}
+        async def event_generator():
+            try:
+                async for event_str in agent.ask_stream(req.query):
+                    yield f"data: {event_str}\n\n"
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            except Exception as e:
+                logger.error(f"Stream error: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
         
     except Exception as e:
         logger.error(f"Chat error: {e}")
