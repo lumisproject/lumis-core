@@ -13,6 +13,7 @@ import Syncing from "./pages/Syncing";
 import Settings from "./pages/Settings";
 import JiraCallback from "./pages/JiraCallback";
 import NotFound from "./pages/NotFound";
+import Pricing from "./pages/Pricing";
 
 const queryClient = new QueryClient();
 
@@ -39,6 +40,7 @@ const App = () => (
             <Route path="/syncing" element={<Syncing />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/auth/jira/callback" element={<JiraCallback />} />
+            <Route path="/pricing" element={<Pricing />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthInitializer>

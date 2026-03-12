@@ -159,16 +159,30 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           };
 
     try {
+      // 1. Get the current active session safely
+      const { data: { session } } = await supabase.auth.getSession();
+
       const res = await fetch(`${API_BASE}/api/ingest`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // Append user_config to the POST body
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}` // <-- 2. Attach Token
+        },
         body: JSON.stringify({ user_id: userId, repo_url: repoUrl, user_config: userConfig }),
       });
+
+      // 3. Handle limit reached (403 Forbidden) or other errors
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to ingest project");
+      }
+
       const data = await res.json();
       return data.project_id || null;
-    } catch {
-      return null;
+    } catch (error: any) {
+      console.error("Ingestion failed:", error.message);
+      // We throw the error so your React component can catch it and show a red Toast notification!
+      throw error; 
     }
   },
 

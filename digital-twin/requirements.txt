@@ -33,3 +33,6 @@ requests
 
 # Math/Utilities
 numpy
+
+# Payments
+stripe

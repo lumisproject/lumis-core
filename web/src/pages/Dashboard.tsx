@@ -12,6 +12,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { useBillingStore } from '@/stores/useBillingStore';
+import { useToast } from '@/hooks/use-toast';
 import {
   ResizableHandle,
   ResizablePanel,
@@ -30,6 +32,7 @@ import {
   RefreshCw,
   Github,
   ExternalLink,
+  Lock,
 } from 'lucide-react';
 
 const NGROK_PLACEHOLDER = 'unsparing-kaley-unmodest.ngrok-free.dev';
@@ -85,6 +88,8 @@ const OnboardingCard = ({ userId }: { userId: string }) => {
 
 const DashboardContent = () => {
   const { user, signOut } = useUserStore();
+  const { tier, fetchBilling } = useBillingStore();
+  const { toast } = useToast();
   const { project, risks, fetchProjects, fetchRisks, startIngestion, loading } = useProjectStore();
   const {
     messages,
@@ -100,6 +105,17 @@ const DashboardContent = () => {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const userId = user?.id || '';
+
+  useEffect(() => {
+    fetchBilling();
+  }, [fetchBilling]);
+
+  useEffect(() => {
+    if (tier === 'free') {
+      if (chatMode === 'multi-turn') setChatMode('single-turn');
+      if (reasoningEnabled) setReasoningEnabled(false);
+    }
+  }, [tier, chatMode, reasoningEnabled, setChatMode, setReasoningEnabled]);
 
   useEffect(() => {
     if (userId) {
@@ -346,24 +362,41 @@ const DashboardContent = () => {
                       OFF
                     </button>
                     <button
-                      onClick={() => setChatMode('multi-turn')}
-                      className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${chatMode === 'multi-turn'
+                      onClick={() => {
+                        if (tier === 'free') {
+                          return toast({ title: "Upgrade Required", description: "Multi-turn conversations are only available on Pro and Team plans." });
+                        }
+                        setChatMode('multi-turn');
+                      }}
+                      className={`px-3 py-1 flex items-center gap-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${chatMode === 'multi-turn'
                         ? 'bg-background text-foreground shadow-sm'
                         : 'text-muted-foreground hover:text-foreground'
-                        }`}
+                        } ${tier === 'free' ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      ON
+                      ON {tier === 'free' && <Lock className="h-3 w-3" />}
                     </button>
                   </div>
                 </div>
                 <div className="h-4 w-[1px] bg-border" />
                 <div className="flex items-center gap-3">
                   <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Reasoning</span>
+                  <div className="flex items-center gap-3" onClick={() => {
+                  if (tier === 'free') {
+                    toast({ title: "Upgrade Required", description: "Advanced reasoning is only available on Pro and Team plans." });
+                  }
+                }}>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Reasoning</span>
                   <Switch
                     checked={reasoningEnabled}
-                    onCheckedChange={setReasoningEnabled}
+                    onCheckedChange={(val) => {
+                      if (tier === 'free') return;
+                      setReasoningEnabled(val);
+                    }}
+                    disabled={tier === 'free'}
                     className="scale-90 data-[state=checked]:bg-primary"
                   />
+                  {tier === 'free' && <Lock className="h-3 w-3 text-muted-foreground -ml-1" />}
+                </div>
                 </div>
               </div>
             </div>
