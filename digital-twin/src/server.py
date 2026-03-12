@@ -1,5 +1,4 @@
 import logging
-import asyncio
 import requests
 import json
 from typing import Dict, Optional
@@ -19,6 +18,8 @@ from src.notion_auth import notion_auth_router, get_valid_notion_token
 from src.tasks_checking import check_taskes
 from src.code_reviewer import process_code_review
 from src.cryptography import encrypt_value
+from src.stripe_router import stripe_router
+from src.billing_middleware import verify_chat_limit, verify_project_limit, increment_query_usage
 
 # --- CONFIGURATION ---
 logging.basicConfig(level=logging.INFO)
@@ -38,6 +39,7 @@ app.add_middleware(
 # Include Auth Routes
 app.include_router(jira_auth_router)
 app.include_router(notion_auth_router)
+app.include_router(stripe_router)
 
 # --- STATE MANAGEMENT ---
 active_agents: Dict[str, LumisAgent] = {}
@@ -225,13 +227,17 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
         return {"status": "error", "message": str(e)}
 
 @app.post("/api/chat")
-async def chat_endpoint(req: ChatRequest):
+async def chat_endpoint(req: ChatRequest, tier_data: dict = Depends(verify_chat_limit)):
     try:
         proj_row = supabase.table("projects").select("user_id").eq("id", req.project_id).limit(1).execute()
         if not proj_row or not proj_row.data:
             raise HTTPException(status_code=404, detail="Project not found")
             
         user_id = proj_row.data[0]["user_id"]
+        
+        # Security check: Ensure the authenticated user actually owns this project
+        if str(user_id) != str(tier_data["user_id"]):
+            raise HTTPException(status_code=403, detail="Forbidden: You do not own this project")
         
         global_config = get_global_user_config(user_id)
         global_config["user_id"] = user_id
@@ -251,19 +257,27 @@ async def chat_endpoint(req: ChatRequest):
                 async for event_str in agent.ask_stream(req.query):
                     yield f"data: {event_str}\n\n"
                 yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                
+                increment_query_usage(tier_data["user_id"])
             except Exception as e:
                 logger.error(f"Stream error: {e}")
                 yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     
 @app.post("/api/ingest")
-async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks):
+async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, tier_data: dict = Depends(verify_project_limit)):
     try:
+        # Security check: Ensure requested user_id matches the authenticated token
+        if str(req.user_id) != str(tier_data["user_id"]):
+            raise HTTPException(status_code=403, detail="Forbidden: User ID mismatch")
+
         logger.info(f"✨ Spawning agent for {req.repo_url}")
 
         # 1. Fetch Global Secure Config directly using their ID
@@ -272,7 +286,7 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks):
 
         existing = (
             supabase.table("projects")
-            .select("id, last_commit, jira_project_id, notion_project_id") # Note: user_config removed!
+            .select("id, last_commit, jira_project_id, notion_project_id") 
             .eq("repo_url", req.repo_url)
             .eq("user_id", req.user_id)
             .limit(1)
@@ -281,15 +295,13 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks):
         
         repo_name = get_repo_name_from_url(req.repo_url)
         all_commits = fetch_commits(repo_name)
-        commits = [all_commits[0]] if all_commits else [] # TO CHECK
+        commits = [all_commits[0]] if all_commits else [] 
 
         if existing and existing.data and len(existing.data) > 0:
             project_data = existing.data[0]
             project_id = project_data.get('id')
             jira_proj = project_data.get('jira_project_id')
-            notion_proj = project_data.get('notion_project_id')
-            last_commit = project_data.get('last_commit')
-            
+            notion_proj = project_data.get('notion_project_id')            
             logger.info(f"Existing project found for {req.repo_url} (ID: {project_id})")
         else:
             latest_commit_sha = commits[0]["sha"] if commits else None
@@ -342,6 +354,8 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks):
         )
 
         return {"project_id": project_id, "status": "started"}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Ingest start failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))

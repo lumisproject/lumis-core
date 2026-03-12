@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { API_BASE } from '@/lib/supabase';
+import { API_BASE, supabase } from '@/lib/supabase'; // <-- Added supabase import
 import { useSettingsStore } from './useSettingsStore';
 
 interface ChatMessage {
@@ -47,6 +47,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
 
     try {
+      // 1. Get the current active session token safely
+      const { data: { session } } = await supabase.auth.getSession();
+
       const userConfig = settings.useDefault
         ? { user_id: userId }
         : {
@@ -61,7 +64,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const res = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}` // <-- 2. Attach Token
+        },
         body: JSON.stringify({
           project_id: projectId,
           query,
@@ -70,6 +76,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
           user_config: userConfig,
         }),
       });
+
+      // 3. Handle specific HTTP errors (like 403 limit reached or 401 unauthorized)
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Server error: ${res.status}`);
+      }
 
       if (!res.body) throw new Error("No response body");
 
@@ -115,11 +127,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       }
       set({ sending: false });
-    } catch {
+    } catch (error: any) {
+      // 4. Safely display the specific error message (e.g. "Limit Reached") in the chat
       set((s) => ({
         messages: s.messages.map((m, i) =>
           i === s.messages.length - 1 && m.role === 'lumis'
-            ? { ...m, isThinking: false, content: m.content || 'Failed to get a response. Check your connection.' }
+            ? { ...m, isThinking: false, content: m.content || `**Error:** ${error.message || 'Failed to get a response.'}` }
             : m
         ),
         sending: false,

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Progress } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
@@ -15,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, Plug, Loader2, BookOpen, Save, Sparkles } from 'lucide-react';
+import { ArrowLeft, Plug, Loader2, BookOpen, Save, Sparkles, CreditCard, ExternalLink } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -35,83 +36,66 @@ const SettingsContent = () => {
   const [loadingNotionDatabases, setLoadingNotionDatabases] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingConfig, setIsFetchingConfig] = useState(true);
+  
+  // Billing State
+  const [billingInfo, setBillingInfo] = useState<any>(null);
+  const [isManagingBilling, setIsManagingBilling] = useState(false);
 
   const {
-    useDefault,
-    provider,
-    apiKey,
-    selectedModel,
-    jiraProjectKey,
-    notionDatabaseId,
-    setUseDefault,
-    setProvider,
-    setApiKey,
-    setSelectedModel,
-    setJiraProjectKey,
-    setNotionDatabaseId
+    useDefault, provider, apiKey, selectedModel, jiraProjectKey, notionDatabaseId,
+    setUseDefault, setProvider, setApiKey, setSelectedModel, setJiraProjectKey, setNotionDatabaseId
   } = useSettingsStore();
 
   const userId = user?.id || '';
-
   const [localApiKey, setLocalApiKey] = useState(apiKey);
   const [localModel, setLocalModel] = useState(selectedModel);
 
-  // Sync local state if store updates elsewhere
   useEffect(() => setLocalApiKey(apiKey), [apiKey]);
   useEffect(() => setLocalModel(selectedModel), [selectedModel]);
 
-  const handleApiKeyBlur = () => {
-    if (localApiKey !== apiKey) setApiKey(localApiKey);
-  };
+  const handleApiKeyBlur = () => { if (localApiKey !== apiKey) setApiKey(localApiKey); };
+  const handleModelBlur = () => { if (localModel !== selectedModel) setSelectedModel(localModel); };
 
-  const handleModelBlur = () => {
-    if (localModel !== selectedModel) setSelectedModel(localModel);
-  };
-
-  // --- NEW FIX: FETCH SAVED CONFIG ON LOAD ---
+  // Fetch Config
   useEffect(() => {
     const fetchUserConfig = async () => {
       if (!userId) return;
       setIsFetchingConfig(true);
       try {
-        const { data, error } = await supabase
-          .from('user_settings')
-          .select('user_config')
-          .eq('user_id', userId)
-          .maybeSingle();
-
+        const { data, error } = await supabase.from('user_settings').select('user_config').eq('user_id', userId).maybeSingle();
         if (data && data.user_config) {
           const config = data.user_config;
-          // Apply saved settings
-          setUseDefault(config.use_default !== false); // Default to true if missing
+          setUseDefault(config.use_default !== false); 
           if (config.provider) setProvider(config.provider);
-          if (config.model) {
-            setSelectedModel(config.model);
-            setLocalModel(config.model);
-          }
-          if (config.api_key) {
-            // Never put the encrypted string in the UI, just show the mask
-            setApiKey("••••••••••••••••");
-            setLocalApiKey("••••••••••••••••");
-          }
+          if (config.model) { setSelectedModel(config.model); setLocalModel(config.model); }
+          if (config.api_key) { setApiKey("••••••••••••••••"); setLocalApiKey("••••••••••••••••"); }
         } else {
-          // If no config exists in the database for this user, force default mode
           setUseDefault(true);
         }
-      } catch (err) {
-        console.error("Failed to load user config:", err);
-      } finally {
-        setIsFetchingConfig(false);
-      }
+      } catch (err) { console.error("Failed to load user config:", err); } 
+      finally { setIsFetchingConfig(false); }
     };
     fetchUserConfig();
   }, [userId, setUseDefault, setProvider, setSelectedModel, setApiKey]);
 
+  // Fetch Billing/Usage Info
   useEffect(() => {
-    if (userId) {
-      fetchJiraStatus(userId);
-      fetchNotionStatus(userId);
-    }
+    const fetchBillingInfo = async () => {
+      if (!userId) return;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`${API_BASE}/api/billing/usage`, {
+          headers: { 'Authorization': `Bearer ${session?.access_token}` }
+        });
+        if (res.ok) setBillingInfo(await res.json());
+      } catch (err) { console.error("Failed to load billing info:", err); }
+    };
+    fetchBillingInfo();
+  }, [userId]);
+
+  // Fetch Integrations
+  useEffect(() => {
+    if (userId) { fetchJiraStatus(userId); fetchNotionStatus(userId); }
   }, [userId, fetchJiraStatus, fetchNotionStatus]);
 
   useEffect(() => {
@@ -144,76 +128,51 @@ const SettingsContent = () => {
 
   const handleSaveConfig = async () => {
     if (!userId) return;
-
-    // --- NEW VALIDATION: Prevent saving empty inputs ---
-    if (!useDefault) {
-      if (!localApiKey?.trim() || !localModel?.trim()) {
-        toast({
-          title: "Missing Information",
-          description: "Please provide both an API Key and a Model ID, or switch to 'System Default'.",
-          variant: "destructive"
-        });
-        return; // Stop the function here so it doesn't save
-      }
+    if (!useDefault && (!localApiKey?.trim() || !localModel?.trim())) {
+      toast({ title: "Missing Information", description: "Please provide an API Key and a Model ID.", variant: "destructive" });
+      return; 
     }
-
     setIsSaving(true);
     try {
-      // 1. GET THE TOKEN DIRECTLY FROM SUPABASE
       const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) {
-        throw new Error("No active authentication session found. Please log in again.");
-      }
-
-      // 2. Prepare Payload
-      const payload = {
-        provider,
-        apiKey: localApiKey, 
-        selectedModel: localModel,
-        useDefault,
-      };
-
-      // 3. Make the Request
+      const payload = { provider, apiKey: localApiKey, selectedModel: localModel, useDefault };
       const res = await fetch(`${API_BASE}/api/settings/${userId}`, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` 
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
         body: JSON.stringify(payload)
       });
+      if (res.ok) toast({ title: "Settings Saved", description: "Your configuration has been safely stored." });
+      else throw new Error((await res.json()).detail || "Failed to save");
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally { setIsSaving(false); }
+  };
 
-      if (res.ok) {
-        toast({ 
-          title: "Settings Saved", 
-          description: "Your configuration has been encrypted and stored." 
-        });
-      } else {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || "Failed to save");
-      }
-    } catch (error) {
-      toast({ 
-        title: "Error", 
-        description: error instanceof Error ? error.message : "Could not save settings.", 
-        variant: "destructive" 
+  const handleManageBilling = async () => {
+    setIsManagingBilling(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${API_BASE}/api/billing/create-portal-session`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session?.access_token}` }
       });
-    } finally {
-      setIsSaving(false);
-    }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail);
+      window.location.href = data.url;
+    } catch (error: any) {
+      toast({ title: "Cannot access portal", description: "You might be on the Free plan, or an error occurred.", variant: "destructive" });
+    } finally { setIsManagingBilling(false); }
   };
 
   const handleJiraConnect = () => window.location.href = `${API_BASE}/auth/jira/connect?state=${userId}`;
   const handleNotionConnect = () => window.location.href = `${API_BASE}/auth/notion/connect?state=${userId}`;
 
+  // INTEGRATION HANDLERS
   const handleJiraProjectSelect = async (key: string) => {
     setJiraProjectKey(key);
     if (currentProject?.id) {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        
         await fetch(`${API_BASE}/api/projects/${currentProject.id}/jira-mapping`, {
           method: 'POST', 
           headers: { 
@@ -222,31 +181,26 @@ const SettingsContent = () => {
           },
           body: JSON.stringify({ jira_project_id: key })
         });
-      } catch (error) { 
-        console.error("Failed to save Jira mapping", error); 
-      }
+      } catch (error) { console.error("Failed to save Jira mapping", error); }
     }
-    };
+  };
 
   const handleNotionDatabaseSelect = async (id: string) => {
     setNotionDatabaseId(id);
     if (currentProject?.id) {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-
         await fetch(`${API_BASE}/api/projects/${currentProject.id}/notion-mapping`, {
           method: 'POST', 
           headers: { 
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}` // Inject token
+            'Authorization': `Bearer ${session?.access_token}` 
           },
           body: JSON.stringify({ notion_project_id: id })
         });
-      } catch (error) { 
-        console.error("Failed to save Notion mapping", error); 
-      }
+      } catch (error) { console.error("Failed to save Notion mapping", error); }
     }
-    };
+  };
 
   if (isFetchingConfig) {
     return (
@@ -255,6 +209,11 @@ const SettingsContent = () => {
       </div>
     );
   }
+
+  // Calculate usage percentage
+  const usagePercentage = billingInfo 
+    ? Math.min((billingInfo.usage.query_count / billingInfo.limits.queries) * 100, 100) 
+    : 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -271,6 +230,55 @@ const SettingsContent = () => {
             {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save LLM Settings
           </Button>
+        </div>
+
+        {/* BILLING & SUBSCRIPTION */}
+        <div className="rounded-xl border border-border bg-card p-6 space-y-5 shadow-sm relative overflow-hidden">
+          {/* Push the background icon further up and right so it doesn't overlap the button */}
+          <div className="absolute -top-6 -right-4 p-6 opacity-10 pointer-events-none">
+            <CreditCard className="w-28 h-28" />
+          </div>
+          
+          <div className="flex items-center gap-2 mb-1 relative z-10">
+            <CreditCard className="h-5 w-5 text-primary" />
+            <h2 className="font-semibold text-lg">Billing & Usage</h2>
+          </div>
+
+          {billingInfo ? (
+            <div className="space-y-6 relative z-10">
+              {/* Changed items-center to items-end to push the button down slightly */}
+              <div className="flex justify-between items-end">
+                <div>
+                  <p className="text-sm text-muted-foreground">Current Plan</p>
+                  <p className="text-2xl font-bold capitalize tracking-tight">{billingInfo.tier} Plan</p>
+                </div>
+                {billingInfo.tier === 'free' ? (
+                  <Button variant="default" onClick={() => navigate('/pricing')} className="shadow-sm">
+                    Upgrade Plan
+                  </Button>
+                ) : (
+                  <Button variant="outline" onClick={handleManageBilling} disabled={isManagingBilling} className="shadow-sm">
+                    {isManagingBilling ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ExternalLink className="h-4 w-4 mr-2" />}
+                    Manage Subscription
+                  </Button>
+                )}
+              </div>
+
+              <div className="space-y-2 bg-secondary/30 p-4 rounded-lg border border-border/50">
+                <div className="flex justify-between text-sm font-medium">
+                  <span>Monthly LLM Queries</span>
+                  <span>{billingInfo.usage.query_count} / {billingInfo.limits.queries === Infinity ? 'Unlimited' : billingInfo.limits.queries}</span>
+                </div>
+                <Progress value={billingInfo.limits.queries === Infinity ? 0 : usagePercentage} className="h-2" />
+                <p className="text-xs text-muted-foreground">Usage resets at the beginning of each calendar month.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Loading billing info...</span>
+            </div>
+          )}
         </div>
 
         {/* LLM Config */}
