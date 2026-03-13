@@ -13,7 +13,6 @@ stripe.api_key = Config.STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET = Config.STRIPE_WEBHOOK_SECRET
 FRONTEND_URL = Config.FRONTEND_URL
 
-# You will get these from your Stripe Dashboard -> Product Catalog
 PRICES = {
     "pro_monthly": "price_1TABF5HBW6CmGvUgnfBskih3",
     "pro_yearly": "price_1TABGSHBW6CmGvUgoXcokNbQ",
@@ -25,6 +24,33 @@ stripe_router = APIRouter(prefix="/api/billing", tags=["Billing"])
 
 @stripe_router.get("/usage")
 async def get_billing_usage(tier_data: dict = Depends(get_user_tier_and_usage)):
+    user_id_str = str(tier_data["user_id"])
+    
+    # 1. Fetch current active projects count
+    try:
+        projects_res = supabase.table("projects").select("id", count="exact").eq("user_id", user_id_str).execute()
+        tier_data["usage"]["project_count"] = projects_res.count if projects_res.count is not None else 0
+    except Exception as e:
+        logger.error(f"Failed to fetch project count: {e}")
+        tier_data["usage"]["project_count"] = 0
+
+    # 2. Fetch total storage used via the RPC we created
+    try:
+        storage_res = supabase.rpc("get_user_storage_bytes", {"target_user_id": user_id_str}).execute()
+        total_bytes = storage_res.data if storage_res.data else 0
+        used_gb = total_bytes / (1024 * 1024 * 1024)
+        
+        # Keep 3 decimal places for precision (e.g., 0.015 GB)
+        tier_data["usage"]["storage_gb"] = round(used_gb, 3)
+    except Exception as e:
+        logger.error(f"Failed to fetch storage usage: {e}")
+        tier_data["usage"]["storage_gb"] = 0
+
+    # 3. Sanitize Infinity values for JSON serialization (FastAPI converts float('inf') to null)
+    for key, val in tier_data["limits"].items():
+        if val == float('inf'):
+            tier_data["limits"][key] = None
+
     return tier_data
 
 @stripe_router.post("/create-checkout-session")
@@ -98,17 +124,15 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         price_id = subscription['items']['data'][0]['price']['id']
         
         # Determine tier from price_id
-        # Determine tier from price_id
         tier = "free"
         for key, pid in PRICES.items():
             if pid == price_id:
-                tier = key.split("_")[0] # 'pro' or 'team'
+                tier = key.split("_")[0]
                 break
                 
         if status in ['canceled', 'unpaid']:
-            tier = 'free' # Graceful downgrade
+            tier = 'free'
 
-        # Convert Stripe's UNIX integer timestamp to a Python datetime string
         period_end_ts = subscription.get('current_period_end')
         period_end_date = datetime.utcfromtimestamp(period_end_ts).isoformat() if period_end_ts else None
 

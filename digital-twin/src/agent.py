@@ -371,7 +371,10 @@ class LumisAgent:
         
         try:
             from src.services import get_llm_completion
-            response_text = get_llm_completion(system_prompt, user_prompt, user_config=self.user_config)
+             # disable reasoning
+            user_config = self.user_config 
+            user_config["reasoning_enabled"] = False
+            response_text = get_llm_completion(system_prompt, user_prompt, user_config=user_config)
             
             clean_json = response_text.strip().replace('```json', '').replace('```', '')
             start_idx = clean_json.find('{')

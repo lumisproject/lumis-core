@@ -49,9 +49,11 @@ async def verify_chat_limit(tier_data: dict = Depends(get_user_tier_and_usage)):
     return tier_data
 
 async def verify_project_limit(tier_data: dict = Depends(get_user_tier_and_usage)):
-    """Middleware to block new project ingestion if limit is exceeded."""
-    # Count actual projects in the DB for this user
-    projects_res = supabase.table("projects").select("id", count="exact").eq("user_id", tier_data["user_id"]).execute()
+    """Middleware to block new project ingestion if project count OR storage limit is exceeded."""
+    user_id_str = str(tier_data["user_id"])
+    
+    # 1. Check Project Count Limit
+    projects_res = supabase.table("projects").select("id", count="exact").eq("user_id", user_id_str).execute()
     project_count = projects_res.count if projects_res.count is not None else 0
 
     if project_count >= tier_data["limits"]["projects"]:
@@ -59,6 +61,25 @@ async def verify_project_limit(tier_data: dict = Depends(get_user_tier_and_usage
             status_code=403, 
             detail=f"Project limit of {tier_data['limits']['projects']} reached. Please upgrade your plan."
         )
+
+    # 2. Check Storage Limit (team tier are excluded)
+    if tier_data["limits"]["storage_gb"] != float('inf'):
+        try:
+            # Call the Supabase RPC we created
+            storage_res = supabase.rpc("get_user_storage_bytes", {"target_user_id": user_id_str}).execute()
+            total_bytes = storage_res.data if storage_res.data else 0
+            
+            # Convert bytes to Gigabytes (1 GB = 1024^3 bytes)
+            used_gb = total_bytes / (1024 * 1024 * 1024)
+            
+            if used_gb >= tier_data["limits"]["storage_gb"]:
+                raise HTTPException(
+                    status_code=403, 
+                    detail=f"Storage limit of {tier_data['limits']['storage_gb']} GB reached. Please upgrade your plan or delete an existing project."
+                )
+        except Exception as e:
+            logger.error(f"Failed to check storage limit for user {user_id_str}: {e}")
+
     return tier_data
 
 def increment_query_usage(user_id: str):
