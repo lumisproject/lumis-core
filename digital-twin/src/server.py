@@ -7,7 +7,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-# Core Modules
 from src.agent import LumisAgent
 from src.ingestor import ingest_repo
 from src.db_client import supabase, get_project_risks, get_current_user, get_global_user_config
@@ -19,7 +18,7 @@ from src.tasks_checking import check_taskes
 from src.code_reviewer import process_code_review
 from src.cryptography import encrypt_value
 from src.stripe_router import stripe_router
-from src.billing_middleware import verify_chat_limit, verify_project_limit, increment_query_usage
+from src.billing_middleware import verify_chat_limit, get_user_tier_and_usage, increment_query_usage
 
 # --- CONFIGURATION ---
 logging.basicConfig(level=logging.INFO)
@@ -117,13 +116,20 @@ def update_progress(project_id, task, message):
         state["status"] = "PROCESSING"
 
 
-async def run_ingestion_pipeline(repo_url: str, project_id: str, user_config: Dict = None):
+async def run_ingestion_pipeline(repo_url: str, project_id: str, user_config: Dict = None, agent: LumisAgent = None):
     def progress_cb(t, m):
         update_progress(project_id, t, m)
         
     try:
+        from src.ingestor import ingest_repo
         await ingest_repo(repo_url=repo_url, project_id=project_id, progress_callback=progress_cb, user_config=user_config)
-        progress_cb("DONE", "Sync complete.")
+        
+        if agent:
+            progress_cb("SCANNING", "Running full codebase security & bug scan...")
+            from src.code_reviewer import process_full_codebase_review
+            await process_full_codebase_review(project_id, agent)
+            
+        progress_cb("DONE", "Sync and analysis complete.")
 
     except Exception as e:
         logger.error(f"Ingestion Pipeline Error: {e}")
@@ -272,18 +278,13 @@ async def chat_endpoint(req: ChatRequest, tier_data: dict = Depends(verify_chat_
         raise HTTPException(status_code=500, detail=str(e))
     
 @app.post("/api/ingest")
-async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, tier_data: dict = Depends(verify_project_limit)):
+async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, tier_data: dict = Depends(get_user_tier_and_usage)):
     try:
         # Security check: Ensure requested user_id matches the authenticated token
         if str(req.user_id) != str(tier_data["user_id"]):
             raise HTTPException(status_code=403, detail="Forbidden: User ID mismatch")
 
-        logger.info(f"✨ Spawning agent for {req.repo_url}")
-
-        # 1. Fetch Global Secure Config directly using their ID
-        global_config = get_global_user_config(req.user_id)
-        global_config["user_id"] = req.user_id
-
+        # 1. Check if this is an existing project BEFORE applying limits
         existing = (
             supabase.table("projects")
             .select("id, last_commit, jira_project_id, notion_project_id") 
@@ -292,20 +293,53 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, ti
             .limit(1)
             .execute()
         )
+        is_existing_project = existing and existing.data and len(existing.data) > 0
+
+        # 2. Check Project Count Limit (only if it's a new project)
+        if not is_existing_project:
+            projects_res = supabase.table("projects").select("id", count="exact").eq("user_id", str(req.user_id)).execute()
+            project_count = projects_res.count if projects_res.count is not None else 0
+            
+            limit = tier_data["limits"]["projects"]
+            if limit is not None and project_count >= limit:
+                raise HTTPException(
+                    status_code=403, 
+                    detail=f"Project limit of {limit} reached. Please upgrade your plan."
+                )
+
+        # 3. Check Storage Limit (ALWAYS check storage, even for updates)
+        storage_limit = tier_data["limits"]["storage_gb"]
+        if storage_limit is not None and storage_limit != float('inf'):
+            try:
+                storage_res = supabase.rpc("get_user_storage_bytes", {"target_user_id": str(req.user_id)}).execute()
+                total_bytes = storage_res.data if storage_res.data else 0
+                used_gb = total_bytes / (1024 * 1024 * 1024)
+                if used_gb >= storage_limit:
+                    raise HTTPException(
+                        status_code=403, 
+                        detail=f"Storage limit of {storage_limit} GB reached. Please upgrade or delete a project."
+                    )
+            except Exception as e:
+                logger.error(f"Failed to check storage limit: {e}")
+
+        logger.info(f"✨ Spawning agent for {req.repo_url}")
+
+        # 4. Fetch Global Secure Config
+        global_config = get_global_user_config(req.user_id)
+        global_config["user_id"] = req.user_id
         
         repo_name = get_repo_name_from_url(req.repo_url)
         all_commits = fetch_commits(repo_name)
         commits = [all_commits[0]] if all_commits else [] 
 
-        if existing and existing.data and len(existing.data) > 0:
+        if is_existing_project:
             project_data = existing.data[0]
             project_id = project_data.get('id')
             jira_proj = project_data.get('jira_project_id')
-            notion_proj = project_data.get('notion_project_id')            
+            notion_proj = project_data.get('notion_project_id')
             logger.info(f"Existing project found for {req.repo_url} (ID: {project_id})")
         else:
             latest_commit_sha = commits[0]["sha"] if commits else None
-
             insert_payload = {
                 "user_id": req.user_id,
                 "repo_url": req.repo_url,
@@ -314,7 +348,6 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, ti
                 "last_commit": latest_commit_sha
             }
             res = supabase.table("projects").insert(insert_payload).execute()
-            
             if not res or not res.data:
                 raise Exception("Failed to create project in database")
                  
@@ -322,24 +355,16 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, ti
             jira_proj = None
             notion_proj = None
 
-        # 3. Initialize Agent with the secure config
+        # 5. Initialize Agent
         agent = LumisAgent(project_id=project_id, max_steps=3, user_config=global_config)
-
         ingestion_state[project_id] = {"status": "starting", "logs": ["Request received..."], "step": "Init"}
 
         background_tasks.add_task(
             run_ingestion_pipeline,
             repo_url=req.repo_url,
             project_id=project_id,
-            user_config=global_config
-        )
-
-        background_tasks.add_task(
-            process_code_review,
-            project_id=project_id,
-            commits=commits,
-            repo_name=repo_name,
-            agent=agent
+            user_config=global_config,
+            agent=agent 
         )
 
         check_taskes(

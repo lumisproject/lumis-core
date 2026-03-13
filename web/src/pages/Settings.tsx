@@ -246,7 +246,6 @@ const SettingsContent = () => {
 
           {billingInfo ? (
             <div className="space-y-6 relative z-10">
-              {/* Changed items-center to items-end to push the button down slightly */}
               <div className="flex justify-between items-end">
                 <div>
                   <p className="text-sm text-muted-foreground">Current Plan</p>
@@ -264,14 +263,44 @@ const SettingsContent = () => {
                 )}
               </div>
 
-              <div className="space-y-2 bg-secondary/30 p-4 rounded-lg border border-border/50">
-                <div className="flex justify-between text-sm font-medium">
-                  <span>Monthly LLM Queries</span>
-                  <span>{billingInfo.usage.query_count} / {billingInfo.limits.queries === Infinity ? 'Unlimited' : billingInfo.limits.queries}</span>
+              {/* USAGE METRICS GRID */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                
+                {/* 1. LLM Queries */}
+                <div className="space-y-2 bg-secondary/30 p-4 rounded-lg border border-border/50">
+                  <div className="flex justify-between text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    <span>LLM Queries</span>
+                    <span className="text-foreground">
+                      {billingInfo.usage.query_count} / {billingInfo.limits.queries === null ? '∞' : billingInfo.limits.queries}
+                    </span>
+                  </div>
+                  <Progress value={billingInfo.limits.queries === null ? 0 : Math.min((billingInfo.usage.query_count / billingInfo.limits.queries) * 100, 100)} className="h-1.5" />
                 </div>
-                <Progress value={billingInfo.limits.queries === Infinity ? 0 : usagePercentage} className="h-2" />
-                <p className="text-xs text-muted-foreground">Usage resets at the beginning of each calendar month.</p>
+
+                {/* 2. Projects */}
+                <div className="space-y-2 bg-secondary/30 p-4 rounded-lg border border-border/50">
+                  <div className="flex justify-between text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    <span>Active Projects</span>
+                    <span className="text-foreground">
+                      {billingInfo.usage.project_count} / {billingInfo.limits.projects === null ? '∞' : billingInfo.limits.projects}
+                    </span>
+                  </div>
+                  <Progress value={billingInfo.limits.projects === null ? 0 : Math.min((billingInfo.usage.project_count / billingInfo.limits.projects) * 100, 100)} className="h-1.5" />
+                </div>
+
+                {/* 3. Vector Storage */}
+                <div className="space-y-2 bg-secondary/30 p-4 rounded-lg border border-border/50">
+                  <div className="flex justify-between text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    <span>Vector Storage</span>
+                    <span className="text-foreground">
+                      {billingInfo.usage.storage_gb < 0.01 && billingInfo.usage.storage_gb > 0 ? '< 0.01' : billingInfo.usage.storage_gb?.toFixed(2)} / {billingInfo.limits.storage_gb === null ? '∞' : `${billingInfo.limits.storage_gb} GB`}
+                    </span>
+                  </div>
+                  <Progress value={billingInfo.limits.storage_gb === null ? 0 : Math.min((billingInfo.usage.storage_gb / billingInfo.limits.storage_gb) * 100, 100)} className="h-1.5" />
+                </div>
+
               </div>
+              <p className="text-xs text-muted-foreground mt-2">LLM Query usage resets at the beginning of each calendar month. Storage is calculated dynamically.</p>
             </div>
           ) : (
             <div className="flex items-center space-x-2 text-sm text-muted-foreground">

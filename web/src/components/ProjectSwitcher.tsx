@@ -27,8 +27,8 @@ import { cn } from '@/lib/utils';
 
 export const ProjectSwitcher: React.FC = () => {
   const { projects, project, selectProject, startIngestion, fetchProjects } = useProjectStore();
-  const { limits } = useBillingStore();
-  const isAtProjectLimit = projects.length >= limits.projects;
+  const { limits, fetchBilling } = useBillingStore();
+  const isAtProjectLimit = limits.projects !== null && projects.length >= limits.projects;
   const { user } = useUserStore();
   const clearMessages = useChatStore((s) => s.clearMessages);
   const navigate = useNavigate();
@@ -55,6 +55,7 @@ export const ProjectSwitcher: React.FC = () => {
     setAdding(true);
     try {
       const projectId = await startIngestion(ownerId, repoUrl);
+      await fetchBilling(); // <-- Force billing state to refresh
       setAddOpen(false);
       setRepoUrl('');
       if (projectId) navigate(`/syncing?project_id=${projectId}`);
@@ -82,6 +83,7 @@ export const ProjectSwitcher: React.FC = () => {
       });
 
       await fetchProjects(userId);
+      await fetchBilling();
       clearMessages();
 
       setDeleteOpen(false);
