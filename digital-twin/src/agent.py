@@ -376,6 +376,10 @@ class LumisAgent:
             user_config["reasoning_enabled"] = False
             response_text = get_llm_completion(system_prompt, user_prompt, user_config=user_config)
             
+            if not response_text:
+                self.logger.error("LLM returned None. Skipping risk analysis.")
+                return {"identified_risks": []}
+            
             clean_json = response_text.strip().replace('```json', '').replace('```', '')
             start_idx = clean_json.find('{')
             end_idx = clean_json.rfind('}')

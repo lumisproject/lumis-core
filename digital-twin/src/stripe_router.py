@@ -47,11 +47,12 @@ async def get_billing_usage(tier_data: dict = Depends(get_user_tier_and_usage)):
         tier_data["usage"]["storage_gb"] = 0
 
     # 3. Sanitize Infinity values for JSON serialization (FastAPI converts float('inf') to null)
-    for key, val in tier_data["limits"].items():
+    sanitized_limits = tier_data["limits"].copy()
+    for key, val in sanitized_limits.items():
         if val == float('inf'):
-            tier_data["limits"][key] = None
+            sanitized_limits[key] = None
 
-    return tier_data
+    return {**tier_data, "limits": sanitized_limits}
 
 @stripe_router.post("/create-checkout-session")
 async def create_checkout_session(payload: dict, current_user=Depends(get_current_user)):

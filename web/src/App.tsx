@@ -1,52 +1,70 @@
-import { useEffect } from "react";
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { useUserStore } from "@/stores/useUserStore";
-import Index from "./pages/Index";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
-import Dashboard from "./pages/Dashboard";
-import Syncing from "./pages/Syncing";
-import Settings from "./pages/Settings";
-import JiraCallback from "./pages/JiraCallback";
-import NotFound from "./pages/NotFound";
-import Pricing from "./pages/Pricing";
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { useUserStore } from '@/stores/useUserStore';
+import Layout from '@/components/layout/Layout';
+import Dashboard from '@/pages/Dashboard';
+import Chat from '@/pages/Chat';
+import Settings from '@/pages/Settings';
+import Billing from '@/pages/Billing';
+import Login from '@/pages/Login';
+import Signup from '@/pages/Signup';
+import Landing from '@/pages/Landing';
+import RiskPage from '@/pages/RiskPage';
+import JiraCallback from '@/pages/JiraCallback';
+import NewProject from '@/pages/NewProject';
 
-const queryClient = new QueryClient();
 
-const AuthInitializer = ({ children }: { children: React.ReactNode }) => {
-  const checkSession = useUserStore((s) => s.checkSession);
-  useEffect(() => {
-    checkSession();
-  }, [checkSession]);
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useUserStore();
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!user) return <Navigate to="/login" replace />;
+
   return <>{children}</>;
 };
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthInitializer>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/syncing" element={<Syncing />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/auth/jira/callback" element={<JiraCallback />} />
-            <Route path="/pricing" element={<Pricing />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AuthInitializer>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+function App() {
+  const { checkSession, setupAuthListener } = useUserStore();
+
+  useEffect(() => {
+    checkSession();
+    const { unsubscribe } = setupAuthListener();
+    return () => unsubscribe();
+  }, []);
+
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route path="/auth/jira/callback" element={<JiraCallback />} />
+
+        <Route
+          path="/app"
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<Dashboard />} />
+          <Route path="chat" element={<Chat />} />
+          <Route path="risks" element={<RiskPage />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="billing" element={<Billing />} />
+          <Route path="new-project" element={<NewProject />} />
+        </Route>
+      </Routes>
+    </Router>
+  );
+}
 
 export default App;

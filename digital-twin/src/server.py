@@ -194,7 +194,8 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
             run_ingestion_pipeline,
             repo_url=repo_url,
             project_id=project_id,
-            user_config=db_user_config
+            user_config=db_user_config,
+            agent=agent
         )
 
         raw_commits = payload.get("commits", [])
@@ -206,14 +207,6 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
                 "sha": c.get("id", c.get("sha")),
                 "message": c.get("message", "")
             })
-
-        background_tasks.add_task(
-            process_code_review,
-            project_id=project_id,
-            commits=normalized_commits,
-            repo_name=repo_name,
-            agent=agent
-        )
 
         check_taskes(
             user_id=user_id,
@@ -326,6 +319,22 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, ti
 
         # 4. Fetch Global Secure Config
         global_config = get_global_user_config(req.user_id)
+        
+        # Validate LLM Config: Must have either use_default=True 
+        # OR all three: provider, api_key, and model.
+        is_default = global_config.get("use_default") is True
+        has_custom = all([
+            global_config.get("provider"),
+            global_config.get("api_key"),
+            global_config.get("model")
+        ])
+
+        if not (is_default or has_custom):
+            raise HTTPException(
+                status_code=400, 
+                detail="Inference Engine Offline: No valid LLM configuration found. Please setup your Provider, API Key, and Model in Settings."
+            )
+
         global_config["user_id"] = req.user_id
         
         repo_name = get_repo_name_from_url(req.repo_url)
@@ -393,6 +402,27 @@ async def get_ingest_status(project_id: str):
 async def get_risks_endpoint(project_id: str):
     risks = get_project_risks(project_id)
     return {"status": "success", "risks": risks if risks else []}
+
+@app.get("/api/stats/{project_id}")
+async def get_project_stats(project_id: str):
+    try:
+        nodes_res = supabase.table("memory_units").select("id", count="exact").eq("project_id", project_id).execute()
+        edges_res = supabase.table("graph_edges").select("id", count="exact").eq("project_id", project_id).execute()
+        
+        nodes_count = nodes_res.count if nodes_res.count is not None else 0
+        edges_count = edges_res.count if edges_res.count is not None else 0
+        
+        health_percentage = min(100, max(0, int((nodes_count / (nodes_count + 100)) * 100))) if nodes_count > 0 else 0
+            
+        return {
+            "status": "success",
+            "nodes_count": nodes_count,
+            "edges_count": edges_count,
+            "health_percentage": health_percentage
+        }
+    except Exception as e:
+        logger.error(f"Failed to fetch stats for {project_id}: {e}")
+        return {"status": "error", "message": str(e)}
 
 @app.get("/api/jira/projects/{user_id}")
 async def get_user_jira_projects(user_id: str):
@@ -506,20 +536,22 @@ async def get_user_notion_databases(user_id: str):
 async def update_jira_mapping(
     project_id: str, 
     payload: dict,
-    current_user = Depends(get_current_user) # 1. Enforce Auth
+    current_user = Depends(get_current_user)
 ):
     jira_key = payload.get("jira_project_id")
+    logger.info(f"Updating Jira mapping for project {project_id} to {jira_key} for user {current_user.id}")
+    
     if not jira_key: 
         raise HTTPException(status_code=400, detail="Missing jira_project_id")
         
-    # 2. Enforce Ownership
     res = supabase.table("projects").select("user_id").eq("id", project_id).limit(1).execute()
     if not res or not res.data:
         raise HTTPException(status_code=404, detail="Project not found")
-    if res.data["user_id"] != str(current_user.id):
+        
+    if str(res.data[0]["user_id"]) != str(current_user.id):
+        logger.warning(f"Ownership mismatch for project {project_id}: DB={res.data[0]['user_id']} vs Token={current_user.id}")
         raise HTTPException(status_code=403, detail="Forbidden: You do not own this project")
 
-    # 3. Update safely
     supabase.table("projects").update({"jira_project_id": jira_key}).eq("id", project_id).execute()
     return {"status": "success", "jira_project_id": jira_key}
 
@@ -528,21 +560,23 @@ async def update_jira_mapping(
 async def update_notion_mapping(
     project_id: str, 
     payload: dict,
-    current_user = Depends(get_current_user) # 1. Enforce Auth
+    current_user = Depends(get_current_user)
 ):
     """Saves the user's selected Notion database ID."""
     notion_db_id = payload.get("notion_project_id")
+    logger.info(f"Updating Notion mapping for project {project_id} to {notion_db_id} for user {current_user.id}")
+
     if not notion_db_id:
         raise HTTPException(status_code=400, detail="Missing notion_project_id")
         
-    # 2. Enforce Ownership
     res = supabase.table("projects").select("user_id").eq("id", project_id).limit(1).execute()
     if not res or not res.data:
         raise HTTPException(status_code=404, detail="Project not found")
-    if res.data["user_id"] != str(current_user.id):
+        
+    if str(res.data[0]["user_id"]) != str(current_user.id):
+        logger.warning(f"Ownership mismatch for project {project_id}: DB={res.data[0]['user_id']} vs Token={current_user.id}")
         raise HTTPException(status_code=403, detail="Forbidden: You do not own this project")
         
-    # 3. Update safely
     supabase.table("projects").update({"notion_project_id": notion_db_id}).eq("id", project_id).execute()
     return {"status": "success", "notion_project_id": notion_db_id}
 

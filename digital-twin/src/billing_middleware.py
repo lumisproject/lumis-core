@@ -1,94 +1,118 @@
 import logging
+import json
 from datetime import datetime
 from fastapi import HTTPException, Depends
 from src.db_client import supabase, get_current_user
 
 logger = logging.getLogger("LumisAPI")
 
-# Define the limits for each tier
-TIER_LIMITS = {
-    "free": {"queries": 50, "projects": 1, "storage_gb": 1},
-    "pro": {"queries": 500, "projects": 5, "storage_gb": 10},
-    "team": {"queries": float('inf'), "projects": float('inf'), "storage_gb": float('inf')}
-}
+# VERSION: 1.5.1
+logger.info("Initializing Billing Middleware v1.5.1")
+
+def get_tier_limits(tier: str):
+    """Returns a fresh copy of limits for a given tier. Avoids global mutation."""
+    limits = {
+        "free": {"queries": 50, "projects": 1, "storage_gb": 1},
+        "pro": {"queries": 500, "projects": 5, "storage_gb": 10},
+        "team": {"queries": float('inf'), "projects": float('inf'), "storage_gb": float('inf')}
+    }
+    return limits.get(tier, limits["free"]).copy()
 
 async def get_user_tier_and_usage(current_user=Depends(get_current_user)):
     """Fetches the user's active tier and their usage stats for the current month."""
-    user_id = str(current_user.id)
-    current_month = datetime.utcnow().strftime('%Y-%m')
+    try:
+        user_id = str(current_user.id)
+        current_month = datetime.utcnow().strftime('%Y-%m')
 
-    # 1. Get current tier
-    sub_res = supabase.table("user_subscriptions").select("tier").eq("user_id", user_id).execute()
-    tier = sub_res.data[0].get("tier", "free") if sub_res.data else "free"
+        # 1. Get current tier
+        sub_res = supabase.table("user_subscriptions").select("tier").eq("user_id", user_id).execute()
+        tier = sub_res.data[0].get("tier", "free") if sub_res.data else "free"
 
-    # 2. Get or initialize current month's usage
-    usage_res = supabase.table("usage_stats").select("*").eq("user_id", user_id).eq("billing_month", current_month).execute()
-    
-    if not usage_res.data:
-        # First time this user is making a request this month, initialize row
-        new_usage = {"user_id": user_id, "billing_month": current_month, "query_count": 0}
-        supabase.table("usage_stats").insert(new_usage).execute()
-        usage = new_usage
-    else:
-        usage = usage_res.data[0]
+        # 2. Get or initialize current month's usage
+        usage_res = supabase.table("usage_stats").select("*").eq("user_id", user_id).eq("billing_month", current_month).execute()
+        
+        if not usage_res.data:
+            new_usage = {"user_id": user_id, "billing_month": current_month, "query_count": 0}
+            supabase.table("usage_stats").insert(new_usage).execute()
+            usage = new_usage
+        else:
+            usage = usage_res.data[0]
 
-    return {
-        "user_id": user_id,
-        "tier": tier,
-        "usage": usage,
-        "limits": TIER_LIMITS[tier]
-    }
+        return {
+            "user_id": user_id,
+            "tier": tier,
+            "usage": usage,
+            "limits": get_tier_limits(tier)
+        }
+    except Exception as e:
+        logger.error(f"Error in get_user_tier_and_usage: {e}")
+        raise HTTPException(status_code=500, detail="Billing check failed")
 
 async def verify_chat_limit(tier_data: dict = Depends(get_user_tier_and_usage)):
     """Middleware to block chat requests if monthly limit is exceeded."""
-    if tier_data["usage"]["query_count"] >= tier_data["limits"]["queries"]:
-        raise HTTPException(
-            status_code=403, 
-            detail=f"Monthly query limit of {tier_data['limits']['queries']} reached. Please upgrade your plan."
-        )
+    limits = tier_data.get("limits", {})
+    usage = tier_data.get("usage", {})
+    
+    # Use .get() with defaults to avoid NoneType issues
+    query_count = usage.get("query_count")
+    if query_count is None: query_count = 0
+    
+    query_limit = limits.get("queries")
+    if query_limit is None: query_limit = 0
+    
+    # Log for debugging
+    logger.info(f"VerifyChatLimit: User={tier_data['user_id']} Usage={query_count} Limit={query_limit}")
+
+    # Python handles float('inf') >= query_count correctly.
+    # The only risk is if query_limit is None, which we handled above.
+    if query_limit != float('inf'):
+        if int(query_count) >= int(query_limit):
+            raise HTTPException(
+                status_code=403, 
+                detail=f"Monthly query limit of {query_limit} reached. Please upgrade your plan."
+            )
     return tier_data
 
 async def verify_project_limit(tier_data: dict = Depends(get_user_tier_and_usage)):
     """Middleware to block new project ingestion if project count OR storage limit is exceeded."""
     user_id_str = str(tier_data["user_id"])
+    limits = tier_data.get("limits", {})
     
     # 1. Check Project Count Limit
     projects_res = supabase.table("projects").select("id", count="exact").eq("user_id", user_id_str).execute()
     project_count = projects_res.count if projects_res.count is not None else 0
 
-    if project_count >= tier_data["limits"]["projects"]:
-        raise HTTPException(
-            status_code=403, 
-            detail=f"Project limit of {tier_data['limits']['projects']} reached. Please upgrade your plan."
-        )
+    project_limit = limits.get("projects")
+    if project_limit is not None and project_limit != float('inf'):
+        if int(project_count) >= int(project_limit):
+            raise HTTPException(
+                status_code=403, 
+                detail=f"Project limit of {project_limit} reached. Please upgrade your plan."
+            )
 
-    # 2. Check Storage Limit (team tier are excluded)
-    if tier_data["limits"]["storage_gb"] != float('inf'):
+    # 2. Check Storage Limit
+    storage_limit = limits.get("storage_gb")
+    if storage_limit is not None and storage_limit != float('inf'):
         try:
-            # Call the Supabase RPC we created
             storage_res = supabase.rpc("get_user_storage_bytes", {"target_user_id": user_id_str}).execute()
             total_bytes = storage_res.data if storage_res.data else 0
-            
-            # Convert bytes to Gigabytes (1 GB = 1024^3 bytes)
             used_gb = total_bytes / (1024 * 1024 * 1024)
             
-            if used_gb >= tier_data["limits"]["storage_gb"]:
+            if used_gb >= storage_limit:
                 raise HTTPException(
                     status_code=403, 
-                    detail=f"Storage limit of {tier_data['limits']['storage_gb']} GB reached. Please upgrade your plan or delete an existing project."
+                    detail=f"Storage limit of {storage_limit} GB reached. Please upgrade your plan."
                 )
         except Exception as e:
-            logger.error(f"Failed to check storage limit for user {user_id_str}: {e}")
+            logger.error(f"Failed to check storage limit: {e}")
 
     return tier_data
 
 def increment_query_usage(user_id: str):
     """Utility function to call AFTER a successful LLM generation."""
     current_month = datetime.utcnow().strftime('%Y-%m')
-    
-    # Fetch current count
     usage_res = supabase.table("usage_stats").select("query_count").eq("user_id", user_id).eq("billing_month", current_month).execute()
     if usage_res.data:
         current_count = usage_res.data[0].get("query_count", 0)
-        # Increment by 1
+        if current_count is None: current_count = 0
         supabase.table("usage_stats").update({"query_count": current_count + 1}).eq("user_id", user_id).eq("billing_month", current_month).execute()

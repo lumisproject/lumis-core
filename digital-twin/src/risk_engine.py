@@ -59,20 +59,8 @@ async def calculate_predictive_risks(project_id, user_config):
     # 2. CLEAR PREVIOUS PREDICTIVE RISKS
     supabase.table("project_risks").delete().eq("project_id", project_id).in_("risk_type", ["Legacy Conflict", "Predictive Delay", "Knowledge Silo"]).execute()
 
-    # 3. ANALYZE VELOCITY (Predicting Delays)
     risks = []
-    if repo_name:
-        velocity_change = get_velocity_metrics(repo_name)
-        if velocity_change < -0.3:  # 30% drop is a significant warning sign
-            risks.append({
-                "project_id": project_id,
-                "risk_type": "Predictive Delay",
-                "severity": "High" if velocity_change < -0.6 else "Medium",
-                "description": f"Development velocity has dropped by {abs(velocity_change)*100:.0f}% compared to last week. This pattern typically precedes a missed milestone.",
-                "affected_units": ["Project Timeline"]
-            })
-
-    # 4. FETCH GRAPH DATA & MAP UNITS
+    # 3. FETCH GRAPH DATA & MAP UNITS
     units, edges = get_project_data(project_id)
     if not units: return 0
 
@@ -82,7 +70,7 @@ async def calculate_predictive_risks(project_id, user_config):
         last_mod = datetime.fromisoformat(u['last_modified_at'].replace('Z', '+00:00'))
         u['age_days'] = (now - last_mod).days
 
-    # 5. BUILD GRAPH (Existing Logic)
+    # 4. BUILD GRAPH (Existing Logic)
     G = nx.DiGraph()
     
     import_map = {}
@@ -110,11 +98,11 @@ async def calculate_predictive_risks(project_id, user_config):
             if src_file == tgt_file or any(imp in target_mod_path for imp in file_imports):
                 G.add_edge(source_id, target_id)
 
-    # 6. IDENTIFY LEGACY CONFLICTS & KNOWLEDGE SILOS
+    # 5. IDENTIFY LEGACY CONFLICTS & KNOWLEDGE SILOS
     active_units = [k for k, v in unit_map.items() if v['age_days'] < 30]
     legacy_units = [k for k, v in unit_map.items() if v['age_days'] > 90]
 
-    # 7. VELOCITY DETECTION
+    # 6. VELOCITY DETECTION
     proj_res = supabase.table("projects").select("repo_url, jira_project_id, notion_project_id, user_id").eq("id", project_id).limit(1).execute()
     
     if proj_res and proj_res.data and len(proj_res.data) > 0:

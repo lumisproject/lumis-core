@@ -35,7 +35,7 @@ def groq_chat(system_prompt, user_prompt, api_key, model, temperature, reasoning
     config = {
         "model": model,
         "temperature": temperature,
-        "groq_api_key": api_key,
+        "api_key": api_key,
     }
 
     is_reasoning_enabled = reasoning and reasoning.get("reasoning", {}).get("enabled")
@@ -80,7 +80,7 @@ def openrouter_chat(system_prompt, user_prompt, api_key, model, temperature, rea
         base_url="https://openrouter.ai/api/v1",
         model=model,
         temperature=temperature,
-        openrouter_api_key=api_key,
+        api_key=api_key,
         reasoning=reasoning
     )
 
@@ -99,7 +99,7 @@ def openai_chat(system_prompt, user_prompt, api_key, model, temperature, reasoni
     llm = ChatOpenAI(
         model=model,
         temperature=temperature,
-        openai_api_key=api_key,
+        api_key=api_key,
         reasoning=reasoning
     )
 
@@ -118,7 +118,7 @@ def anthropic_chat(system_prompt, user_prompt, api_key, model, temperature, reas
     llm = ChatAnthropic(
         model=model,
         temperature=temperature,
-        anthropic_api_key=api_key,
+        api_key=api_key,
         thinking=reasoning
     )
     messages = [
@@ -185,7 +185,7 @@ async def stream_llm_completion(system_prompt, user_prompt, user_config=None):
         if provider == "openrouter":
             from langchain_openai import ChatOpenAI
             from langchain_core.messages import SystemMessage, HumanMessage
-            llm = ChatOpenAI(base_url="https://openrouter.ai/api/v1", model=model_name, temperature=temperature, openrouter_api_key=api_key, reasoning=reasoning, streaming=True)
+            llm = ChatOpenAI(base_url="https://openrouter.ai/api/v1", model=model_name, temperature=temperature, api_key=api_key, reasoning=reasoning, streaming=True)
             messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
             async for chunk in llm.astream(messages):
                 if chunk.content:
@@ -199,7 +199,7 @@ async def stream_llm_completion(system_prompt, user_prompt, user_config=None):
         elif provider == "openai":
             from langchain_openai import ChatOpenAI
             from langchain_core.messages import SystemMessage, HumanMessage
-            llm = ChatOpenAI(model=model_name, temperature=temperature, openai_api_key=api_key, reasoning=reasoning, streaming=True)
+            llm = ChatOpenAI(model=model_name, temperature=temperature, api_key=api_key, reasoning=reasoning, streaming=True)
             messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
             async for chunk in llm.astream(messages):
                 if chunk.content: yield chunk.content
@@ -207,7 +207,7 @@ async def stream_llm_completion(system_prompt, user_prompt, user_config=None):
         elif provider == "anthropic":
             from langchain_anthropic import ChatAnthropic
             from langchain_core.messages import SystemMessage, HumanMessage
-            llm = ChatAnthropic(model=model_name, temperature=temperature, anthropic_api_key=api_key, thinking=reasoning, streaming=True)
+            llm = ChatAnthropic(model=model_name, temperature=temperature, api_key=api_key, thinking=reasoning, streaming=True)
             messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
             async for chunk in llm.astream(messages):
                 if chunk.content:
@@ -233,7 +233,7 @@ async def stream_llm_completion(system_prompt, user_prompt, user_config=None):
         elif provider == "groq":
             from langchain_groq import ChatGroq
             from langchain_core.messages import SystemMessage, HumanMessage
-            llm = ChatGroq(model=model_name, temperature=temperature, groq_api_key=api_key)
+            llm = ChatGroq(model=model_name, temperature=temperature, api_key=api_key)
             messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
             async for chunk in llm.astream(messages):
                 if chunk.content: yield chunk.content
