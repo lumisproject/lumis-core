@@ -1,443 +1,384 @@
-import { useNavigate } from 'react-router-dom';
-import { supabase, API_BASE } from '@/lib/supabase';
-import { AuthGuard } from '@/components/AuthGuard';
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+    Database,
+    User,
+    Save,
+    CheckCircle2,
+    RefreshCw,
+    Cpu,
+    ShieldCheck,
+    Lock,
+    Plug,
+    BookOpen,
+    Search,
+    ChevronDown,
+    AlertTriangle
+} from 'lucide-react';
+import { useSettingsStore } from '@/stores/useSettingsStore';
 import { useUserStore } from '@/stores/useUserStore';
 import { useProjectStore } from '@/stores/useProjectStore';
-import { useSettingsStore } from '@/stores/useSettingsStore';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Progress } from '@/components/ui/progress';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { ArrowLeft, Plug, Loader2, BookOpen, Save, Sparkles, CreditCard, ExternalLink } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import { API_BASE, supabase } from '@/lib/supabase';
 
-const SettingsContent = () => {
-  const navigate = useNavigate();
-  const { toast } = useToast();
-  const { user } = useUserStore();
-  const { 
-    jiraConnected, fetchJiraStatus, disconnectJira, 
-    notionConnected, fetchNotionStatus, disconnectNotion,
-    project: currentProject 
-  } = useProjectStore();
-  
-  const [availableJiraProjects, setAvailableJiraProjects] = useState<{key: string, name: string}[]>([]);
-  const [loadingJiraProjects, setLoadingJiraProjects] = useState(false);
-  const [availableNotionDatabases, setAvailableNotionDatabases] = useState<{id: string, name: string}[]>([]);
-  const [loadingNotionDatabases, setLoadingNotionDatabases] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isFetchingConfig, setIsFetchingConfig] = useState(true);
-  
-  // Billing State
-  const [billingInfo, setBillingInfo] = useState<any>(null);
-  const [isManagingBilling, setIsManagingBilling] = useState(false);
-
-  const {
-    useDefault, provider, apiKey, selectedModel, jiraProjectKey, notionDatabaseId,
-    setUseDefault, setProvider, setApiKey, setSelectedModel, setJiraProjectKey, setNotionDatabaseId
-  } = useSettingsStore();
-
-  const userId = user?.id || '';
-  const [localApiKey, setLocalApiKey] = useState(apiKey);
-  const [localModel, setLocalModel] = useState(selectedModel);
-
-  useEffect(() => setLocalApiKey(apiKey), [apiKey]);
-  useEffect(() => setLocalModel(selectedModel), [selectedModel]);
-
-  const handleApiKeyBlur = () => { if (localApiKey !== apiKey) setApiKey(localApiKey); };
-  const handleModelBlur = () => { if (localModel !== selectedModel) setSelectedModel(localModel); };
-
-  // Fetch Config
-  useEffect(() => {
-    const fetchUserConfig = async () => {
-      if (!userId) return;
-      setIsFetchingConfig(true);
-      try {
-        const { data, error } = await supabase.from('user_settings').select('user_config').eq('user_id', userId).maybeSingle();
-        if (data && data.user_config) {
-          const config = data.user_config;
-          setUseDefault(config.use_default !== false); 
-          if (config.provider) setProvider(config.provider);
-          if (config.model) { setSelectedModel(config.model); setLocalModel(config.model); }
-          if (config.api_key) { setApiKey("••••••••••••••••"); setLocalApiKey("••••••••••••••••"); }
-        } else {
-          setUseDefault(true);
-        }
-      } catch (err) { console.error("Failed to load user config:", err); } 
-      finally { setIsFetchingConfig(false); }
-    };
-    fetchUserConfig();
-  }, [userId, setUseDefault, setProvider, setSelectedModel, setApiKey]);
-
-  // Fetch Billing/Usage Info
-  useEffect(() => {
-    const fetchBillingInfo = async () => {
-      if (!userId) return;
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch(`${API_BASE}/api/billing/usage`, {
-          headers: { 'Authorization': `Bearer ${session?.access_token}` }
-        });
-        if (res.ok) setBillingInfo(await res.json());
-      } catch (err) { console.error("Failed to load billing info:", err); }
-    };
-    fetchBillingInfo();
-  }, [userId]);
-
-  // Fetch Integrations
-  useEffect(() => {
-    if (userId) { fetchJiraStatus(userId); fetchNotionStatus(userId); }
-  }, [userId, fetchJiraStatus, fetchNotionStatus]);
-
-  useEffect(() => {
-    const fetchJiraProjects = async () => {
-      if (jiraConnected && userId) {
-        setLoadingJiraProjects(true);
-        try {
-          const res = await fetch(`${API_BASE}/api/jira/projects/${userId}`);
-          if (res.ok) setAvailableJiraProjects(await res.json());
-        } catch (error) { console.error("Failed to fetch Jira projects:", error); } 
-        finally { setLoadingJiraProjects(false); }
-      }
-    };
-    fetchJiraProjects();
-  }, [jiraConnected, userId]);
-
-  useEffect(() => {
-    const fetchNotionDatabases = async () => {
-      if (notionConnected && userId) {
-        setLoadingNotionDatabases(true);
-        try {
-          const res = await fetch(`${API_BASE}/api/notion/databases/${userId}`);
-          if (res.ok) setAvailableNotionDatabases(await res.json());
-        } catch (error) { console.error("Failed to fetch Notion databases:", error); } 
-        finally { setLoadingNotionDatabases(false); }
-      }
-    };
-    fetchNotionDatabases();
-  }, [notionConnected, userId]);
-
-  const handleSaveConfig = async () => {
-    if (!userId) return;
-    if (!useDefault && (!localApiKey?.trim() || !localModel?.trim())) {
-      toast({ title: "Missing Information", description: "Please provide an API Key and a Model ID.", variant: "destructive" });
-      return; 
-    }
-    setIsSaving(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const payload = { provider, apiKey: localApiKey, selectedModel: localModel, useDefault };
-      const res = await fetch(`${API_BASE}/api/settings/${userId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-        body: JSON.stringify(payload)
-      });
-      if (res.ok) toast({ title: "Settings Saved", description: "Your configuration has been safely stored." });
-      else throw new Error((await res.json()).detail || "Failed to save");
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } finally { setIsSaving(false); }
-  };
-
-  const handleManageBilling = async () => {
-    setIsManagingBilling(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${API_BASE}/api/billing/create-portal-session`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${session?.access_token}` }
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail);
-      window.location.href = data.url;
-    } catch (error: any) {
-      toast({ title: "Cannot access portal", description: "You might be on the Free plan, or an error occurred.", variant: "destructive" });
-    } finally { setIsManagingBilling(false); }
-  };
-
-  const handleJiraConnect = () => window.location.href = `${API_BASE}/auth/jira/connect?state=${userId}`;
-  const handleNotionConnect = () => window.location.href = `${API_BASE}/auth/notion/connect?state=${userId}`;
-
-  // INTEGRATION HANDLERS
-  const handleJiraProjectSelect = async (key: string) => {
-    setJiraProjectKey(key);
-    if (currentProject?.id) {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        await fetch(`${API_BASE}/api/projects/${currentProject.id}/jira-mapping`, {
-          method: 'POST', 
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}` 
-          },
-          body: JSON.stringify({ jira_project_id: key })
-        });
-      } catch (error) { console.error("Failed to save Jira mapping", error); }
-    }
-  };
-
-  const handleNotionDatabaseSelect = async (id: string) => {
-    setNotionDatabaseId(id);
-    if (currentProject?.id) {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        await fetch(`${API_BASE}/api/projects/${currentProject.id}/notion-mapping`, {
-          method: 'POST', 
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}` 
-          },
-          body: JSON.stringify({ notion_project_id: id })
-        });
-      } catch (error) { console.error("Failed to save Notion mapping", error); }
-    }
-  };
-
-  if (isFetchingConfig) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  // Calculate usage percentage
-  const usagePercentage = billingInfo 
-    ? Math.min((billingInfo.usage.query_count / billingInfo.limits.queries) * 100, 100) 
-    : 0;
-
-  return (
-    <div className="min-h-screen bg-background">
-      <div className="container max-w-2xl py-12 space-y-8">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')}>
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <h1 className="text-2xl font-bold">Settings</h1>
-          </div>
-          
-          <Button onClick={handleSaveConfig} disabled={isSaving} className="gap-2 shadow-sm">
-            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Save LLM Settings
-          </Button>
-        </div>
-
-        {/* BILLING & SUBSCRIPTION */}
-        <div className="rounded-xl border border-border bg-card p-6 space-y-5 shadow-sm relative overflow-hidden">
-          {/* Push the background icon further up and right so it doesn't overlap the button */}
-          <div className="absolute -top-6 -right-4 p-6 opacity-10 pointer-events-none">
-            <CreditCard className="w-28 h-28" />
-          </div>
-          
-          <div className="flex items-center gap-2 mb-1 relative z-10">
-            <CreditCard className="h-5 w-5 text-primary" />
-            <h2 className="font-semibold text-lg">Billing & Usage</h2>
-          </div>
-
-          {billingInfo ? (
-            <div className="space-y-6 relative z-10">
-              <div className="flex justify-between items-end">
-                <div>
-                  <p className="text-sm text-muted-foreground">Current Plan</p>
-                  <p className="text-2xl font-bold capitalize tracking-tight">{billingInfo.tier} Plan</p>
-                </div>
-                {billingInfo.tier === 'free' ? (
-                  <Button variant="default" onClick={() => navigate('/pricing')} className="shadow-sm">
-                    Upgrade Plan
-                  </Button>
-                ) : (
-                  <Button variant="outline" onClick={handleManageBilling} disabled={isManagingBilling} className="shadow-sm">
-                    {isManagingBilling ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ExternalLink className="h-4 w-4 mr-2" />}
-                    Manage Subscription
-                  </Button>
-                )}
-              </div>
-
-              {/* USAGE METRICS GRID */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                
-                {/* 1. LLM Queries */}
-                <div className="space-y-2 bg-secondary/30 p-4 rounded-lg border border-border/50">
-                  <div className="flex justify-between text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    <span>LLM Queries</span>
-                    <span className="text-foreground">
-                      {billingInfo.usage.query_count} / {billingInfo.limits.queries === null ? '∞' : billingInfo.limits.queries}
-                    </span>
-                  </div>
-                  <Progress value={billingInfo.limits.queries === null ? 0 : Math.min((billingInfo.usage.query_count / billingInfo.limits.queries) * 100, 100)} className="h-1.5" />
-                </div>
-
-                {/* 2. Projects */}
-                <div className="space-y-2 bg-secondary/30 p-4 rounded-lg border border-border/50">
-                  <div className="flex justify-between text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    <span>Active Projects</span>
-                    <span className="text-foreground">
-                      {billingInfo.usage.project_count} / {billingInfo.limits.projects === null ? '∞' : billingInfo.limits.projects}
-                    </span>
-                  </div>
-                  <Progress value={billingInfo.limits.projects === null ? 0 : Math.min((billingInfo.usage.project_count / billingInfo.limits.projects) * 100, 100)} className="h-1.5" />
-                </div>
-
-                {/* 3. Vector Storage */}
-                <div className="space-y-2 bg-secondary/30 p-4 rounded-lg border border-border/50">
-                  <div className="flex justify-between text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    <span>Vector Storage</span>
-                    <span className="text-foreground">
-                      {billingInfo.usage.storage_gb < 0.01 && billingInfo.usage.storage_gb > 0 ? '< 0.01' : billingInfo.usage.storage_gb?.toFixed(2)} / {billingInfo.limits.storage_gb === null ? '∞' : `${billingInfo.limits.storage_gb} GB`}
-                    </span>
-                  </div>
-                  <Progress value={billingInfo.limits.storage_gb === null ? 0 : Math.min((billingInfo.usage.storage_gb / billingInfo.limits.storage_gb) * 100, 100)} className="h-1.5" />
-                </div>
-
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">LLM Query usage resets at the beginning of each calendar month. Storage is calculated dynamically.</p>
+const SettingSection = ({ title, description, children, icon: Icon }: any) => (
+    <div className="grid grid-cols-1 gap-12 py-8 lg:grid-cols-3 border-b border-black/5 dark:border-white/5 last:border-0">
+        <div className="lg:col-span-1">
+            <div className="flex items-center gap-3 mb-2">
+                {Icon && <Icon className="h-5 w-5 text-primary" />}
+                <h3 className="text-lg font-black tracking-tight uppercase">{title}</h3>
             </div>
-          ) : (
-            <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Loading billing info...</span>
-            </div>
-          )}
+            <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
         </div>
-
-        {/* LLM Config */}
-        <div className="rounded-xl border border-border bg-card p-6 space-y-5 shadow-sm">
-          <div className="flex items-center gap-2 mb-1">
-            <Sparkles className="h-5 w-5 text-purple-500" />
-            <h2 className="font-semibold text-lg">Lumis Intelligence</h2>
-          </div>
-
-          <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/50">
-            <div>
-              <Label className="font-medium">Use System Default</Label>
-              <p className="text-xs text-muted-foreground mt-0.5">Use the Lumis optimized environment (recommended).</p>
-            </div>
-            <Switch checked={useDefault} onCheckedChange={setUseDefault} />
-          </div>
-
-          {!useDefault && (
-            <div className="grid gap-4 pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
-              <div className="space-y-2">
-                <Label>Provider</Label>
-                <Select value={provider} onValueChange={setProvider}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="openrouter">OpenRouter</SelectItem>
-                    <SelectItem value="openai">OpenAI</SelectItem>
-                    <SelectItem value="anthropic">Anthropic</SelectItem>
-                    <SelectItem value="google">Google Gemini</SelectItem>
-                    <SelectItem value="groq">Groq</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>API Key</Label>
-                <Input 
-                  type="password" 
-                  placeholder={apiKey ? "••••••••••••••••" : "Paste your API key here"} 
-                  value={localApiKey} 
-                  onChange={(e) => setLocalApiKey(e.target.value)} 
-                  onBlur={handleApiKeyBlur} 
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Model ID</Label>
-                <Input 
-                  placeholder="e.g. gpt-4o or claude-3-5-sonnet-latest" 
-                  value={localModel} 
-                  onChange={(e) => setLocalModel(e.target.value)} 
-                  onBlur={handleModelBlur} 
-                />
-              </div>
-            </div>
-          )}
+        <div className="lg:col-span-2 space-y-6">
+            {children}
         </div>
-
-        {/* Integrations */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Jira */}
-          <div className="rounded-xl border border-border bg-card p-6 space-y-4 shadow-sm">
-            <h2 className="font-semibold text-lg flex items-center gap-2">Jira <Plug className="h-4 w-4 text-blue-500" /></h2>
-            <p className="text-sm text-muted-foreground">
-              {jiraConnected ? 'Connected to Atlassian.' : 'Sync your tickets with AI.'}
-            </p>
-            
-            {jiraConnected ? (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase text-muted-foreground">Active Project</Label>
-                  <Select value={jiraProjectKey} onValueChange={handleJiraProjectSelect} disabled={loadingJiraProjects || !currentProject}>
-                    <SelectTrigger>
-                      {loadingJiraProjects ? <Loader2 className="w-4 h-4 animate-spin" /> : <SelectValue placeholder={currentProject ? "Select Project" : "Open a project first"} />}
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableJiraProjects.map((p) => (
-                        <SelectItem key={p.key} value={p.key}>{p.name} ({p.key})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button variant="secondary" size="sm" className="w-full text-xs" onClick={() => disconnectJira(userId)}>
-                  Disconnect
-                </Button>
-              </div>
-            ) : (
-              <Button variant="outline" className="w-full" onClick={handleJiraConnect}>Connect Jira</Button>
-            )}
-          </div>
-
-          {/* Notion */}
-          <div className="rounded-xl border border-border bg-card p-6 space-y-4 shadow-sm">
-            <h2 className="font-semibold text-lg flex items-center gap-2">Notion <BookOpen className="h-4 w-4" /></h2>
-            <p className="text-sm text-muted-foreground">
-              {notionConnected ? 'Connected to Notion.' : 'Automate your Notion docs.'}
-            </p>
-            
-            {notionConnected ? (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase text-muted-foreground">Active Database</Label>
-                  <Select value={notionDatabaseId} onValueChange={handleNotionDatabaseSelect} disabled={loadingNotionDatabases || !currentProject}>
-                    <SelectTrigger>
-                      {loadingNotionDatabases ? <Loader2 className="w-4 h-4 animate-spin" /> : <SelectValue placeholder={currentProject ? "Select Database" : "Open a project first"} />}
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableNotionDatabases.map((db) => (
-                        <SelectItem key={db.id} value={db.id}>{db.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button variant="secondary" size="sm" className="w-full text-xs" onClick={() => disconnectNotion(userId)}>
-                  Disconnect
-                </Button>
-              </div>
-            ) : (
-              <Button variant="outline" className="w-full" onClick={handleNotionConnect}>Connect Notion</Button>
-            )}
-          </div>
-        </div>
-      </div>
     </div>
-  );
-};
-
-const SettingsPage = () => (
-  <AuthGuard>
-    <SettingsContent />
-  </AuthGuard>
 );
 
-export default SettingsPage;
+const ModernSelect = ({ label, icon: Icon, value, onChange, options, placeholder, loading }: any) => {
+    const [open, setOpen] = useState(false);
+
+    return (
+        <div className="space-y-2 relative">
+            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">{label}</label>
+            <div 
+                onClick={() => !loading && setOpen(!open)}
+                className={cn(
+                    "flex h-12 w-full cursor-pointer items-center justify-between rounded-2xl border border-black/5 bg-accent/30 px-4 text-sm transition-all hover:bg-accent/50 dark:border-white/5",
+                    open && "border-primary/50 ring-4 ring-primary/10"
+                )}
+            >
+                <div className="flex items-center gap-3">
+                    <Icon className="h-4 w-4 text-muted-foreground" />
+                    <span className={cn(!value && "text-muted-foreground")}>
+                        {loading ? 'Fetching records...' : options.find((o: any) => o.id === value || o.key === value)?.name || value || placeholder}
+                    </span>
+                </div>
+                {loading ? <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" /> : <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", open && "rotate-180")} />}
+            </div>
+
+            <AnimatePresence>
+                {open && (
+                    <>
+                        <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
+                        <motion.div
+                            initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                            className="absolute left-0 right-0 top-[calc(100%+8px)] z-[70] max-h-[240px] overflow-y-auto rounded-2xl border border-black/10 bg-white p-2 shadow-2xl dark:border-white/10 dark:bg-[#0F0F0F]"
+                        >
+                            {options.length === 0 ? (
+                                <div className="p-4 text-center text-xs text-muted-foreground">No records found. Link account first.</div>
+                            ) : (
+                                options.map((opt: any) => (
+                                    <button
+                                        key={opt.id || opt.key}
+                                        onClick={() => {
+                                            onChange(opt.id || opt.key);
+                                            setOpen(false);
+                                        }}
+                                        className="w-full flex items-center rounded-xl px-3 py-2.5 text-left text-sm hover:bg-accent transition-colors"
+                                    >
+                                        {opt.name}
+                                    </button>
+                                ))
+                            )}
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
+
+const InputField = ({ label, icon: Icon, value, onChange, placeholder, type = "text", hide = false }: any) => (
+    <div className="space-y-2">
+        <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">{label}</label>
+        <div className="relative group">
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary">
+                <Icon className="h-4 w-4" />
+            </div>
+            <input
+                type={type}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder={placeholder}
+                className="flex h-12 w-full rounded-2xl border border-black/5 bg-accent/30 pl-11 pr-4 text-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/10 dark:border-white/5"
+            />
+        </div>
+        {hide && value && (
+            <div className="flex items-center gap-2 px-1 text-[9px] font-black uppercase tracking-[0.2em] text-green-500 animate-in fade-in slide-in-from-top-1">
+                <ShieldCheck className="h-3 w-3" />
+                Inference Token Securely Stored
+            </div>
+        )}
+    </div>
+);
+
+const Settings = () => {
+    const { user } = useUserStore();
+    const { 
+        project, jiraConnected, notionConnected, fetchJiraStatus, fetchNotionStatus, disconnectJira, disconnectNotion,
+        updateJiraMapping, updateNotionMapping
+    } = useProjectStore();
+    const {
+        setUseDefault,
+        provider, setProvider,
+        apiKey, setApiKey,
+        selectedModel, setSelectedModel
+    } = useSettingsStore();
+
+    const [saving, setSaving] = useState(false);
+    const [success, setSuccess] = useState(false);
+    
+    const [availableJiraProjects, setAvailableJiraProjects] = useState<{key: string, name: string}[]>([]);
+    const [loadingJira, setLoadingJira] = useState(false);
+    const [availableNotionDBs, setAvailableNotionDBs] = useState<{id: string, name: string}[]>([]);
+    const [loadingNotion, setLoadingNotion] = useState(false);
+
+    useEffect(() => {
+        if (user?.id) {
+            console.log("Settings: Fetching stats/status for user", user.id);
+            fetchJiraStatus(user.id);
+            fetchNotionStatus(user.id);
+        }
+    }, [user, project?.id]);
+
+    useEffect(() => {
+        const fetchJira = async () => {
+            if (jiraConnected && user?.id) {
+                setLoadingJira(true);
+                try {
+                    const res = await fetch(`${API_BASE}/api/jira/projects/${user.id}`);
+                    if (res.ok) setAvailableJiraProjects(await res.json());
+                } catch (e) { console.error(e); } finally { setLoadingJira(false); }
+            }
+        };
+        fetchJira();
+    }, [jiraConnected, user]);
+
+    useEffect(() => {
+        const fetchNotion = async () => {
+            if (notionConnected && user?.id) {
+                setLoadingNotion(true);
+                try {
+                    const res = await fetch(`${API_BASE}/api/notion/databases/${user.id}`);
+                    if (res.ok) setAvailableNotionDBs(await res.json());
+                } catch (e) { console.error(e); } finally { setLoadingNotion(false); }
+            }
+        };
+        fetchNotion();
+    }, [notionConnected, user]);
+
+    const handleSave = async () => {
+        if (!user) return;
+        setSaving(true);
+        try {
+            // Get the JWT session to authenticate with the backend
+            const { data: { session } } = await supabase.auth.getSession();
+            
+            const payload = {
+                provider: provider,
+                selectedModel: selectedModel,
+                useDefault: false,
+                apiKey: apiKey // If it's masked (••••), the backend handles preserving the old one
+            };
+
+            const res = await fetch(`${API_BASE}/api/settings/${user.id}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token}`
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Failed to save settings');
+            }
+
+            setSuccess(true);
+            setTimeout(() => setSuccess(false), 3000);
+        } catch (e) {
+            console.error("Failed to save settings", e);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const providers = ["groq", "openrouter", "openai", "anthropic"];
+
+    return (
+        <div className="pb-20 max-w-5xl mx-auto">
+            <div className="mb-8 space-y-6">
+                <div>
+                    <h1 className="text-4xl font-black tracking-tighter uppercase">Configuration</h1>
+                    <p className="mt-2 text-muted-foreground font-medium uppercase text-[10px] tracking-widest">Global Protocol & Instance Mapping</p>
+                </div>
+                <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className={cn(
+                        "flex h-12 items-center gap-2 rounded-2xl px-10 text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 disabled:opacity-50 w-fit shadow-2xl",
+                        success 
+                            ? "bg-green-500 text-white shadow-green-500/20" 
+                            : "bg-primary text-primary-foreground shadow-primary/20"
+                    )}
+                >
+                    {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : success ? <CheckCircle2 className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+                    {success ? "SAVED" : "Commit Changes"}
+                </button>
+            </div>
+
+            <SettingSection
+                title="AI Logic Layer"
+                icon={Cpu}
+                description="Power the inference engine with your preferred provider. Credentials are encrypted at rest."
+            >
+                <div className="space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">Inference Provider</label>
+                            <div className="flex flex-wrap gap-2">
+                                {providers.map((p) => (
+                                    <button
+                                        key={p}
+                                        onClick={() => { setProvider(p); setUseDefault(false); }}
+                                        className={cn(
+                                            "rounded-xl border px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all",
+                                            provider === p 
+                                                ? "border-primary bg-primary/10 text-primary shadow-[0_0_15px_-5px_primary]" 
+                                                : "border-black/5 bg-accent/30 text-muted-foreground hover:bg-accent/50 dark:border-white/5"
+                                        )}
+                                    >
+                                        {p}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <InputField label="Target Model ID" icon={Cpu} value={selectedModel} onChange={setSelectedModel} placeholder="e.g. gpt-4o" />
+                    </div>
+                    <InputField label="Credential Protocol (API Key)" icon={Lock} value={apiKey} onChange={setApiKey} placeholder="sk-..." type="password" hide={true} />
+                </div>
+            </SettingSection>
+
+            <SettingSection
+                title="Workspace Mapping"
+                icon={Database}
+                description="Synchronize project specific backlogs and documentation. Changes apply to the currently selected project."
+            >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* JIRA */}
+                    <div className="space-y-4 p-6 rounded-3xl border border-black/5 bg-accent/10 dark:border-white/5 relative overflow-hidden">
+                        {!project && (
+                            <div className="absolute inset-0 z-20 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
+                                <AlertTriangle className="h-6 w-6 text-orange-500 mb-2" />
+                                <div className="text-[10px] font-black uppercase tracking-widest">No Active Instance</div>
+                                <p className="text-[9px] text-muted-foreground mt-1">Select a project in the Command Center to map integrations.</p>
+                            </div>
+                        )}
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Plug className="h-4 w-4 text-blue-500" />
+                                <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">Jira Backlog</span>
+                            </div>
+                            <div className={cn("h-2 w-2 rounded-full", jiraConnected ? "bg-primary animate-pulse shadow-[0_0_10px_rgba(var(--primary),0.5)]" : "bg-muted")} />
+                        </div>
+                        
+                        {jiraConnected ? (
+                            <div className="space-y-4">
+                                <ModernSelect 
+                                    label="Target Project" 
+                                    icon={Search} 
+                                    value={project?.jira_project_id || ''} 
+                                    onChange={(val: string) => project?.id && updateJiraMapping(project.id, val)} 
+                                    options={availableJiraProjects} 
+                                    loading={loadingJira}
+                                />
+                                <button 
+                                    onClick={() => user?.id && disconnectJira(user.id)}
+                                    className="text-[10px] font-bold uppercase tracking-widest text-destructive hover:underline"
+                                >
+                                    Disconnect Node
+                                </button>
+                            </div>
+                        ) : (
+                            <button 
+                                onClick={() => window.location.href = `${API_BASE}/auth/jira/connect?state=${user?.id}`}
+                                className="w-full flex h-12 items-center justify-center gap-2 rounded-2xl bg-blue-500/10 text-blue-500 text-[10px] font-black uppercase tracking-widest hover:bg-blue-500/20 transition-all border border-blue-500/20"
+                            >
+                                <Plug className="h-4 w-4" />
+                                Link Atlassian Node
+                            </button>
+                        )}
+                    </div>
+
+                    {/* NOTION */}
+                    <div className="space-y-4 p-6 rounded-3xl border border-black/5 bg-accent/10 dark:border-white/5">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <BookOpen className="h-4 w-4 text-foreground" />
+                                <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">Notion Knowledge</span>
+                            </div>
+                            <div className={cn("h-2 w-2 rounded-full", notionConnected ? "bg-primary animate-pulse shadow-[0_0_10px_rgba(var(--primary),0.5)]" : "bg-muted")} />
+                        </div>
+                        
+                        {notionConnected ? (
+                            <div className="space-y-4">
+                                <ModernSelect 
+                                    label="Docs Database" 
+                                    icon={Database} 
+                                    value={project?.notion_project_id || ''} 
+                                    onChange={(val: string) => project?.id && updateNotionMapping(project.id, val)} 
+                                    options={availableNotionDBs} 
+                                    loading={loadingNotion}
+                                />
+                                <button 
+                                    onClick={() => user?.id && disconnectNotion(user.id)}
+                                    className="text-[10px] font-bold uppercase tracking-widest text-destructive hover:underline"
+                                >
+                                    Disconnect Vault
+                                </button>
+                            </div>
+                        ) : (
+                            <button 
+                                onClick={() => window.location.href = `${API_BASE}/auth/notion/connect?state=${user?.id}`}
+                                className="w-full flex h-12 items-center justify-center gap-2 rounded-2xl bg-black/10 text-foreground text-[10px] font-black uppercase tracking-widest hover:bg-black/20 dark:bg-white/5 dark:hover:bg-white/10 transition-all border border-black/5 dark:border-white/5"
+                            >
+                                <BookOpen className="h-4 w-4" />
+                                Link Knowledge Base
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </SettingSection>
+
+            <SettingSection
+                title="Identity & Access"
+                icon={User}
+                description="Manage your verified developer profile and subscription status."
+            >
+                <div className="flex items-center bg-accent/10 rounded-3xl border border-black/5 p-8 dark:border-white/5">
+                    <div className="h-20 w-20 rounded-2xl bg-gradient-to-tr from-primary to-accent shadow-2xl flex items-center justify-center text-white ring-8 ring-primary/5">
+                        <User className="h-10 w-10" />
+                    </div>
+                    <div className="ml-8">
+                        <div className="text-lg font-black tracking-tight">{user?.email}</div>
+                        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground mt-1">
+                            <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                            Authenticated Developer Entity
+                        </div>
+                    </div>
+                    <Link to="/app/billing" className="ml-auto flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-[10px] font-black uppercase tracking-widest text-primary-foreground shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all">
+                        Upgrade Tier
+                    </Link>
+                </div>
+            </SettingSection>
+        </div>
+    );
+};
+
+export default Settings;

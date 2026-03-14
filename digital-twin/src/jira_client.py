@@ -8,13 +8,11 @@ import logging
 logger = logging.getLogger("LumisAPI")
 
 # --- RATE LIMITING & RETRY STRATEGY ---
-# Create a global session that automatically handles 429 Too Many Requests
-# and server errors with exponential backoff and respects 'Retry-After' headers.
 jira_session = requests.Session()
 retry_strategy = Retry(
-    total=5,  # Maximum number of retries before giving up
-    backoff_factor=2,  # Exponential backoff multiplier (2s, 4s, 8s...)
-    status_forcelist=[429, 500, 502, 503, 504],  # HTTP status codes to trigger a retry
+    total=5,  
+    backoff_factor=2,
+    status_forcelist=[429, 500, 502, 503, 504],
     allowed_methods=["HEAD", "GET", "POST", "PUT", "DELETE", "OPTIONS", "TRACE"]
 )
 adapter = HTTPAdapter(max_retries=retry_strategy)
@@ -110,8 +108,7 @@ def get_projects(cloud_id: str, access_token: str):
         return response.json()
     return []
 
-def get_active_issues(cloud_id: str, access_token: str):
-    """Fetches active tasks using the new Jira JQL Search API."""
+def get_active_issues(cloud_id: str, access_token: str, project_key: str = None):
     url = f"https://api.atlassian.com/ex/jira/{cloud_id}/rest/api/3/search/jql"
     
     headers = {
@@ -120,9 +117,14 @@ def get_active_issues(cloud_id: str, access_token: str):
         "Content-Type": "application/json"
     }
     
+    jql = "statusCategory != Done"
+    if project_key:
+        jql = f"project = {project_key} AND " + jql
+    jql += " ORDER BY updated DESC"
+    
     payload = {
-        "jql": "statusCategory != Done ORDER BY updated DESC",
-        "maxResults": 5,
+        "jql": jql,
+        "maxResults": 15,
         "fields": ["summary", "description", "status"]
     }
 

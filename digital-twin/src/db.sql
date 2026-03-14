@@ -66,10 +66,32 @@ CREATE TABLE public.projects (
   notion_project_id text,
   CONSTRAINT projects_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.usage_stats (
+  user_id uuid NOT NULL,
+  billing_month text NOT NULL,
+  query_count integer DEFAULT 0,
+  project_count integer DEFAULT 0,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT usage_stats_pkey PRIMARY KEY (user_id, billing_month),
+  CONSTRAINT usage_stats_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
 CREATE TABLE public.user_settings (
   user_id uuid NOT NULL,
   user_config jsonb DEFAULT '{"use_default": true}'::jsonb,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
   CONSTRAINT user_settings_pkey PRIMARY KEY (user_id),
   CONSTRAINT user_settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.user_subscriptions (
+  user_id uuid NOT NULL,
+  stripe_customer_id text UNIQUE,
+  stripe_subscription_id text UNIQUE,
+  tier text NOT NULL DEFAULT 'free'::text,
+  status text NOT NULL DEFAULT 'active'::text,
+  current_period_end timestamp with time zone,
+  cancel_at_period_end boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_subscriptions_pkey PRIMARY KEY (user_id),
+  CONSTRAINT user_subscriptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );

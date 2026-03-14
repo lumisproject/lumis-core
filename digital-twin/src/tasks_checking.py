@@ -92,22 +92,18 @@ async def process_jira(commits: list, repo_name: str, access_token: str, project
         return
     
     current_cloud_id = resources[0]["id"]
-    active_issues = get_active_issues(current_cloud_id, access_token)
-    
     project_key = jira_project_id
-    
     if not project_key:
-        if active_issues:
-            project_key = active_issues[0]["key"].split("-")[0]
-        else:
-            projects = get_projects(current_cloud_id, access_token)
-            if projects:
-                project_key = projects[0]["key"]
+        projects = get_projects(current_cloud_id, access_token)
+        if projects:
+            project_key = projects[0]["key"]
 
     if not project_key:
         logger.error("Could not determine a Jira Project Key. Aborting Jira sync.")
         return
 
+    active_issues = get_active_issues(current_cloud_id, access_token, project_key)
+    
     for commit in commits:
         message = commit.get("message", "")
         sha = commit.get("sha")
