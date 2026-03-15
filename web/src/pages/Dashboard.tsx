@@ -143,6 +143,38 @@ const Dashboard = () => {
                 </div>
             </header>
 
+            {!useProjectStore.getState().isUpToDate && project && (
+                <motion.div 
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex flex-col md:flex-row items-center justify-between gap-4 p-6 rounded-[2.5rem] bg-orange-500/10 border border-orange-500/20 shadow-2xl shadow-orange-500/5 mt-4"
+                >
+                    <div className="flex items-center gap-4 text-left">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-500/20">
+                            <RefreshCw className="h-6 w-6" />
+                        </div>
+                        <div className="text-left">
+                            <h3 className="text-sm font-black uppercase tracking-widest text-orange-500 text-left">Hardware Evolution Detected</h3>
+                            <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight text-left">Remote repository has new commits. Current intelligence map is stale.</p>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={async () => {
+                            setSyncing(true);
+                            try {
+                                await syncProject(project.id);
+                            } finally {
+                                setSyncing(false);
+                            }
+                        }}
+                        disabled={syncing}
+                        className="h-12 px-8 rounded-xl bg-orange-500 text-white text-[10px] font-black uppercase tracking-widest hover:bg-orange-600 transition-all shadow-lg shadow-orange-500/10 active:scale-95 whitespace-nowrap"
+                    >
+                        Update Database
+                    </button>
+                </motion.div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 {/* Main Stats Area */}
                 <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -167,17 +199,42 @@ const Dashboard = () => {
                     >
                         <div className="space-y-3">
                             {[
-                                { label: 'Jira', icon: Search, connected: jiraConnected },
-                                { label: 'Notion', icon: Cpu, connected: notionConnected }
+                                { 
+                                    label: 'Jira', 
+                                    icon: Search, 
+                                    connected: jiraConnected, 
+                                    mapped: !!project?.jira_project_id 
+                                },
+                                { 
+                                    label: 'Notion', 
+                                    icon: Cpu, 
+                                    connected: notionConnected, 
+                                    mapped: !!project?.notion_project_id 
+                                }
                             ].map((integ, i) => (
-                                <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-accent/30 border border-black/5 dark:border-white/5">
-                                    <div className="flex items-center gap-3">
-                                        <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center", integ.connected ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
-                                            <integ.icon className="h-4 w-4" />
+                                <div key={i} className="group relative">
+                                    <div className="flex items-center justify-between p-4 rounded-2xl bg-accent/30 border border-black/5 dark:border-white/5 transition-all hover:bg-accent/40">
+                                        <div className="flex items-center gap-3">
+                                            <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center", integ.connected ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                                                <integ.icon className="h-4 w-4" />
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] font-black uppercase tracking-widest">{integ.label} Hub</span>
+                                                {integ.connected && !integ.mapped && (
+                                                    <span className="text-[8px] font-bold text-orange-500 uppercase tracking-tight">Unmapped Node</span>
+                                                )}
+                                            </div>
                                         </div>
-                                        <span className="text-[10px] font-black uppercase tracking-widest">{integ.label} Hub</span>
+                                        <div className="flex items-center gap-2">
+                                            {integ.connected && !integ.mapped && (
+                                                <Link to="/app/settings" className="text-[8px] font-black uppercase text-primary hover:underline">Map Now</Link>
+                                            )}
+                                            <div className={cn(
+                                                "h-1.5 w-1.5 rounded-full", 
+                                                integ.mapped ? "bg-primary shadow-[0_0_8px_primary]" : (integ.connected ? "bg-orange-500 animate-pulse" : "bg-muted")
+                                            )} />
+                                        </div>
                                     </div>
-                                    <div className={cn("h-1.5 w-1.5 rounded-full", integ.connected ? "bg-primary shadow-[0_0_8px_primary]" : "bg-muted")} />
                                 </div>
                             ))}
                         </div>

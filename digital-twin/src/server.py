@@ -8,14 +8,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from src.agent import LumisAgent
-from src.ingestor import ingest_repo
-from src.db_client import supabase, get_project_risks, get_current_user, get_global_user_config
+from src.db_client import supabase, get_current_user, get_global_user_config
 from src.config import Config
 from src.jira_auth import jira_auth_router, get_valid_token
 from src.jira_client import get_accessible_resources, get_projects
 from src.notion_auth import notion_auth_router, get_valid_notion_token
 from src.tasks_checking import check_taskes
-from src.code_reviewer import process_code_review
 from src.cryptography import encrypt_value
 from src.stripe_router import stripe_router
 from src.billing_middleware import verify_chat_limit, get_user_tier_and_usage, increment_query_usage
@@ -98,22 +96,36 @@ def update_progress(project_id, task, message):
     state = ingestion_state[project_id]
 
     if task == "STARTING":
-        state["status"]="PROGRESSING"
-        state["logs"]=[]
-        state["error"]=None
+        state["status"] = "PROGRESSING"
+        state["logs"] = []
+        state["error"] = None
+    elif task == "ANALYZING":
+        state["status"] = "ANALYZING"
+    elif task == "DONE" or task == "READY":
+        state["status"] = "ready"
+    elif task == "Error":
+        state["status"] = "error"
     
     state["step"]=task
 
     if message:
         state["logs"].append(f"[{task}] {message}")
 
-    if task == "DONE":
-        state["status"] = "completed"
-    elif task == "Error":
-        state["status"] = "failed"
-        state["error"] = message
-    elif task != "STARTING": 
-        state["status"] = "PROCESSING"
+    # Persist critical status changes to the database inside the sync_state JSONB column
+    # This ensures the frontend can see the current sync progress in real-time
+    try:
+        supabase.table("projects").update({
+            "sync_state": {
+                "status": state["status"],
+                "step": state["step"],
+                "logs": state["logs"][-20:] # Show last 20 logs for better live tracking
+            }
+        }).eq("id", project_id).execute()
+    except Exception as db_err:
+        logger.error(f"Failed to persist sync status to DB: {db_err}")
+
+    if project_id in ingestion_state:
+        ingestion_state[project_id] = state
 
 
 async def run_ingestion_pipeline(repo_url: str, project_id: str, user_config: Dict = None, agent: LumisAgent = None):
@@ -124,16 +136,33 @@ async def run_ingestion_pipeline(repo_url: str, project_id: str, user_config: Di
         from src.ingestor import ingest_repo
         await ingest_repo(repo_url=repo_url, project_id=project_id, progress_callback=progress_cb, user_config=user_config)
         
-        if agent:
-            progress_cb("SCANNING", "Running full codebase security & bug scan...")
-            from src.code_reviewer import process_full_codebase_review
-            await process_full_codebase_review(project_id, agent)
-            
         progress_cb("DONE", "Sync and analysis complete.")
 
     except Exception as e:
         logger.error(f"Ingestion Pipeline Error: {e}")
         progress_cb("Error", f"Pipeline failed: {str(e)}")
+
+
+async def run_risk_analysis_task(project_id: str, user_config: Dict = None):
+    def progress_cb(t, m):
+        update_progress(project_id, t, m)
+
+    try:
+        from src.risk_engine import calculate_predictive_risks
+        from src.code_reviewer import process_full_codebase_review
+        
+        progress_cb("ANALYZING", "Neural Risk Engine: Initializing codebase scan...")
+        await calculate_predictive_risks(project_id, user_config=user_config, log_callback=lambda msg: progress_cb("ANALYZING", msg))
+        await process_full_codebase_review(
+                    project_id, 
+                    LumisAgent(project_id=project_id, user_config=user_config),
+                    log_callback=lambda msg: progress_cb("ANALYZING", msg)
+                )
+        progress_cb("READY", "Neural Risk Analysis Complete.")
+    except Exception as e:
+        logger.error(f"Risk Analysis Error: {e}")
+        progress_cb("Error", f"Risk analysis failed: {str(e)}")
+            
 
 # --- ENDPOINTS ---
 
@@ -173,7 +202,6 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
             proj_data = proj_row.data[0] if isinstance(proj_row.data, list) else proj_row.data
             jira_proj = proj_data.get("jira_project_id")
             notion_proj = proj_data.get("notion_project_id")
-            db_user_config = proj_data.get("user_config") or {}
 
         agent = LumisAgent(project_id=project_id, max_steps=3, user_config=global_config, mode="single-turn")
 
@@ -181,7 +209,16 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
         new_sha = payload.get("after")
         repo_url = payload.get("repository", {}).get("clone_url")
 
-        supabase.table("projects").update({"last_commit": new_sha}).eq("id", project_id).execute()
+        # Set status to syncing immediately
+        supabase.table("projects").update({
+            "last_commit": new_sha,
+            "sync_state": {
+                "status": "syncing",
+                "step": "Webhook received",
+                "logs": ["GitHub Push detected. Initializing Sync..."]
+            }
+        }).eq("id", project_id).execute()
+        
         logger.info(f"Webhook Trigger: Push detected on {ref} (Commit: {new_sha[:7]})")
 
         update_progress(
@@ -400,8 +437,15 @@ async def get_ingest_status(project_id: str):
 
 @app.get("/api/get_risks/{project_id}")
 async def get_risks_endpoint(project_id: str):
-    risks = get_project_risks(project_id)
-    return {"status": "success", "risks": risks if risks else []}
+    response = supabase.table("project_risks")\
+        .select("*")\
+        .eq("project_id", project_id)\
+        .order("created_at", desc=True)\
+        .execute()
+    
+    risks_data = response.data if response and response.data else []
+    
+    return {"status": "success", "risks": risks_data}
 
 @app.get("/api/stats/{project_id}")
 async def get_project_stats(project_id: str):
@@ -579,6 +623,64 @@ async def update_notion_mapping(
         
     supabase.table("projects").update({"notion_project_id": notion_db_id}).eq("id", project_id).execute()
     return {"status": "success", "notion_project_id": notion_db_id}
+
+@app.get("/api/projects/{project_id}/check-remote")
+async def check_remote_sync(project_id: str):
+    """Checks if the local project commit matches the latest remote commit."""
+    try:
+        res = supabase.table("projects").select("repo_url, last_commit").eq("id", project_id).limit(1).execute()
+        if not res or not res.data:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        project = res.data[0]
+        repo_url = project.get("repo_url")
+        local_commit = project.get("last_commit")
+        
+        if not repo_url:
+            return {"up_to_date": True, "message": "No repository URL linked"}
+
+        repo_name = get_repo_name_from_url(repo_url)
+        remote_commits = fetch_commits(repo_name)
+        
+        if not remote_commits:
+            # If we can't get remote info, we shouldn't assume it's up to date
+            return {"up_to_date": True, "status": "unknown", "message": "Could not verify remote status"}
+            
+        latest_remote_sha = remote_commits[0]["sha"]
+        
+        # If local_commit is missing (unlikely but possible), it's definitely not up to date
+        if not local_commit:
+            return {
+                "up_to_date": False,
+                "remote_sha": latest_remote_sha,
+                "message": "Local tracking metadata missing"
+            }
+
+        up_to_date = (local_commit == latest_remote_sha)
+        
+        return {
+            "up_to_date": up_to_date,
+            "local_sha": local_commit,
+            "remote_sha": latest_remote_sha,
+            "repo_name": repo_name
+        }
+    except Exception as e:
+        logger.error(f"Sync check failed for {project_id}: {e}")
+        return {"up_to_date": True, "error": str(e), "status": "error"}
+
+@app.post("/api/projects/{project_id}/analyze-risks")
+async def trigger_risk_analysis(project_id: str, background_tasks: BackgroundTasks):
+    proj_row = supabase.table("projects").select("user_id").eq("id", project_id).limit(1).execute()
+    if not proj_row or not proj_row.data:
+        raise HTTPException(status_code=404, detail="Project not found")
+        
+    user_id = proj_row.data[0].get("user_id")
+    user_config = get_global_user_config(user_id) if user_id else {}
+    
+    update_progress(project_id, "ANALYZING", "Queuing risk analysis task...")
+    background_tasks.add_task(run_risk_analysis_task, project_id, user_config)
+    
+    return {"status": "analysis_started"}
 
 @app.get("/api/status")
 async def health_check():

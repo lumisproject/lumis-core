@@ -5,12 +5,12 @@ import { useProjectStore } from '@/stores/useProjectStore';
 import { useUserStore } from '@/stores/useUserStore';
 import { useChatStore } from '@/stores/useChatStore';
 import { useBillingStore } from '@/stores/useBillingStore';
-import { ChevronDown, Github, Plus, Check, RefreshCw, Lock, Trash2, X, AlertTriangle } from 'lucide-react';
+import { ChevronDown, Github, Plus, Check, RefreshCw, Lock, Trash2, X, AlertTriangle, Search, Database } from 'lucide-react';
 import { API_BASE } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
 export const ProjectSwitcher: React.FC = () => {
-  const { projects, project, selectProject, fetchProjects } = useProjectStore();
+  const { projects, project, selectProject, fetchProjects, isUpToDate, syncProject, checkProjectSync } = useProjectStore();
   const { limits } = useBillingStore();
   const isAtProjectLimit = limits.projects !== null && projects.length >= limits.projects;
   const { user } = useUserStore();
@@ -35,9 +35,13 @@ export const ProjectSwitcher: React.FC = () => {
     };
     if (open) {
       document.addEventListener('mousedown', handleClickOutside);
+      // Check for remote sync updates whenever the menu is opened
+      if (project?.id) {
+        checkProjectSync(project.id);
+      }
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [open]);
+  }, [open, project?.id, checkProjectSync]);
 
   const handleSelectProject = (projectId: string) => {
     if (projectId === project?.id) return;
@@ -98,9 +102,13 @@ export const ProjectSwitcher: React.FC = () => {
         className="flex items-center justify-between gap-2 rounded-full border border-black/5 bg-accent/50 px-4 py-2 text-xs font-black dark:border-white/5 hover:bg-accent transition-colors min-w-[200px] uppercase tracking-widest"
       >
         <div className="flex items-center gap-2 truncate">
-          <Github className="h-4 w-4 shrink-0 text-primary" />
+          {project?.status === 'syncing' || project?.sync_state?.status === 'syncing' ? (
+            <RefreshCw className="h-4 w-4 shrink-0 text-primary animate-spin" />
+          ) : (
+            <Github className="h-4 w-4 shrink-0 text-primary" />
+          )}
           <span className="truncate text-foreground max-w-[120px]">
-            {project ? displayName(project) : 'Select project'}
+            {project?.status === 'syncing' || project?.sync_state?.status === 'syncing' ? 'Syncing...' : project ? displayName(project) : 'Select project'}
           </span>
         </div>
         <ChevronDown className={cn("h-4 w-4 shrink-0 opacity-50 transition-transform", open && "rotate-180")} />
@@ -118,6 +126,24 @@ export const ProjectSwitcher: React.FC = () => {
             <div className="px-3 py-2 text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground mb-2">
               Neural Instances
             </div>
+
+            {!isUpToDate && project && project.status !== 'syncing' && project.sync_state?.status !== 'syncing' && (
+              <div className="mx-2 mb-4 p-3 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex flex-col gap-2">
+                <div className="flex items-center gap-2 text-orange-500 text-[9px] font-black uppercase tracking-wider">
+                  <AlertTriangle className="h-3 w-3" />
+                  Out of Sync Detected
+                </div>
+                <p className="text-[9px] text-muted-foreground font-medium leading-tight">
+                  New commits found on remote. Codebase mapping might be stale.
+                </p>
+                <button
+                  onClick={() => syncProject(project.id)}
+                  className="w-full py-1.5 rounded-lg bg-orange-500 text-white text-[9px] font-black uppercase tracking-widest hover:bg-orange-600 transition-all"
+                >
+                  Force Re-Sync
+                </button>
+              </div>
+            )}
             
             <div className="space-y-1 mb-3 max-h-[300px] overflow-y-auto scrollbar-hide">
               {projects.map((p) => (
@@ -133,10 +159,19 @@ export const ProjectSwitcher: React.FC = () => {
                 >
                   <div className={cn(
                     "h-2 w-2 rounded-full shrink-0",
-                    project?.id === p.id ? "bg-primary animate-pulse" : "bg-muted"
+                    p.id === project?.id 
+                      ? (p.status === 'syncing' || p.sync_state?.status === 'syncing' ? "bg-primary animate-spin border-t-2 border-transparent" : "bg-primary animate-pulse") 
+                      : (p.status === 'syncing' || p.sync_state?.status === 'syncing' ? "bg-primary/40 animate-pulse" : "bg-muted")
                   )} />
-                  <span className="truncate flex-1">
+                  <span className="truncate flex-1 flex items-center gap-2">
                     {displayName(p)}
+                    {(p.status === 'syncing' || p.sync_state?.status === 'syncing') && <span className="text-[8px] opacity-70 italic text-primary shrink-0"> (Syncing)</span>}
+                    {(p.jira_project_id || p.notion_project_id) && (
+                      <div className="flex gap-1 ml-auto">
+                        {p.jira_project_id && <Search className="h-2.5 w-2.5 text-blue-500 opacity-60" />}
+                        {p.notion_project_id && <Database className="h-2.5 w-2.5 text-primary opacity-60" />}
+                      </div>
+                    )}
                   </span>
                   {project?.id === p.id && <Check className="h-3.5 w-3.5" />}
                 </button>

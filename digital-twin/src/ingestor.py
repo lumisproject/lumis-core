@@ -211,14 +211,8 @@ async def ingest_repo(repo_url, project_id, progress_callback=None, user_config=
             supabase.table("memory_units").delete().eq("project_id", project_id).in_("unit_name", orphans).execute()
 
 
-        # 5. FASTCODE OPTIMIZATION: DECOUPLED RISK ENGINE
-        if progress_callback: progress_callback("DONE", "Fast Sync Complete. Running Intelligence in Background...")
+        if progress_callback: progress_callback("DONE", "Fast Sync Complete. Ready for Analysis.")
         
-        # Run risk analysis
-        progress_callback("RISK_ANALYSIS", "Running Legacy Code Conflict Analysis...")
-        risks_found = await calculate_predictive_risks(project_id, user_config=user_config)
-        logger.info(f"Risk analysis complete for {project_id}. Found {risks_found} legacy conflicts.")
-
     except Exception as e:
         print(f"CRITICAL ERROR: {e}")
         if progress_callback: progress_callback("Error", str(e))

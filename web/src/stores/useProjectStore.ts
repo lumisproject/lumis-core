@@ -48,7 +48,10 @@ interface ProjectState {
     notionConnected: boolean;
     ingestionStatus: IngestionStatus | null;
     projectStats: ProjectStats | null;
+    isUpToDate: boolean;
+    remoteSha: string | null;
     loading: boolean;
+    error: string | null;
     fetchProjects: (userId: string) => Promise<void>;
     selectProject: (projectId: string) => void;
     fetchJiraStatus: (userId: string) => Promise<void>;
@@ -62,6 +65,9 @@ interface ProjectState {
     updateJiraMapping: (projectId: string, jiraKey: string) => Promise<void>;
     updateNotionMapping: (projectId: string, notionDbId: string) => Promise<void>;
     syncProject: (projectId: string) => Promise<void>;
+    checkProjectSync: (projectId: string) => Promise<void>;
+    analyzeRisks: (projectId: string) => Promise<void>;
+    setupProjectSubscriptions: (userId: string) => () => void;
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -72,7 +78,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     notionConnected: false,
     ingestionStatus: null,
     projectStats: null as ProjectStats | null,
+    isUpToDate: true,
+    remoteSha: null,
     loading: false,
+    error: null,
 
     fetchProjects: async (userId: string) => {
         set({ loading: true });
@@ -96,7 +105,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             localStorage.setItem('lumis_active_project', active.id);
             await Promise.all([
                 get().fetchRisks(active.id),
-                get().fetchProjectStats(active.id)
+                get().fetchProjectStats(active.id),
+                get().checkProjectSync(active.id)
             ]);
         }
 
@@ -111,6 +121,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             localStorage.setItem('lumis_active_project', next.id);
             fetchRisks(next.id);
             fetchProjectStats(next.id);
+            get().checkProjectSync(next.id);
         }
 
         set({ project: next });
@@ -154,7 +165,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
                     title: risk.title ?? risk.risk_type ?? 'Risk',
                     riskType: risk.risk_type ?? 'Risk',
                     description: risk.description ?? '',
-                    file: risk.file ?? risk.file_path ?? undefined,
+                    file: risk.affected_units && risk.affected_units.length > 0
+                        ? risk.affected_units[0]
+                        : (risk.file ?? risk.file_path ?? undefined),
                 };
             });
 
@@ -245,7 +258,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         try {
             const res = await fetch(`${API_BASE}/api/projects/${projectId}/jira-mapping`, {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${session?.access_token}`
                 },
@@ -274,7 +287,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         try {
             const res = await fetch(`${API_BASE}/api/projects/${projectId}/notion-mapping`, {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${session?.access_token}`
                 },
@@ -308,4 +321,73 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             set({ loading: false });
         }
     },
+
+    checkProjectSync: async (projectId: string) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/projects/${projectId}/check-remote`);
+            if (!res.ok) throw new Error("Sync check failed");
+            const data = await res.json();
+            set({
+                isUpToDate: data.up_to_date ?? true,
+                remoteSha: data.remote_sha ?? null
+            });
+        } catch (e) {
+            console.error("Failed to check project sync:", e);
+        }
+    },
+
+    analyzeRisks: async (projectId: string) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/projects/${projectId}/analyze-risks`, {
+                method: 'POST',
+            });
+            if (!res.ok) throw new Error("Failed to start analysis");
+        } catch (e) {
+            console.error("Failed to analyze risks", e);
+        }
+    },
+
+    setupProjectSubscriptions: (userId: string) => {
+        const channel = supabase
+            .channel('project-updates')
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'projects',
+                    filter: `user_id=eq.${userId}`
+                },
+                (payload) => {
+                    const updatedProject = payload.new as Project;
+                    const current = get();
+
+                    // Update projects list
+                    set((state) => ({
+                        projects: state.projects.map(p => p.id === updatedProject.id ? { ...p, ...updatedProject } : p)
+                    }));
+
+                    // Update active project if it's the one that changed
+                    // Update active project if it's the one that changed
+                    if (current.project?.id === updatedProject.id) {
+                        set({ project: { ...current.project, ...updatedProject } });
+
+                        // FIX: Check the nested sync_state.status instead of the root status
+                        const newStatus = updatedProject.sync_state?.status;
+                        const oldStatus = current.project?.sync_state?.status;
+
+                        // If status just became 'ready', fetch new risks and stats automatically
+                        if (newStatus === 'ready' && oldStatus !== 'ready') {
+                            current.fetchRisks(updatedProject.id);
+                            current.fetchProjectStats(updatedProject.id);
+                        }
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }
 }));

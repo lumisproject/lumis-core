@@ -41,14 +41,6 @@ def get_project_data(project_id):
         
     return units_resp.data or [], edges_resp.data or []
 
-def get_project_risks(project_id):
-    response = supabase.table("project_risks")\
-        .select("*")\
-        .eq("project_id", project_id)\
-        .order("created_at", desc=True)\
-        .execute()
-    return response.data if response.data else []
-
 # --- WRITE OPERATIONS ---
 
 def save_edges(project_id, source_unit_name, targets_list, edge_type="calls"):

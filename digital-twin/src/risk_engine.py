@@ -9,11 +9,13 @@ from src.jira_client import get_accessible_resources, get_active_issues
 from src.notion_auth import get_valid_notion_token
 from src.notion_client import get_active_tasks as get_notion_tasks
 
-async def analyze_grouped_conflict_with_llm(target_name, sources, user_config):
+async def analyze_grouped_conflict_with_llm(target_name, sources, user_config, log_callback=None):
     """
     Analyzes the interaction between multiple recently modified units and a single legacy code unit.
     Determines if the recent changes might break assumptions in the legacy code, or if this legacy code is becoming a risky bottleneck.
     """
+    if log_callback: log_callback(f"🧠 AI Analyzing interactions for: {target_name}")
+    
     system_prompt = (
         "You are a Senior Software Architect specializing in legacy modernization. "
         "Analyze the interaction where MULTIPLE RECENTLY MODIFIED functions depend on a SINGLE LEGACY function (unchanged for months). "
@@ -42,7 +44,8 @@ async def analyze_grouped_conflict_with_llm(target_name, sources, user_config):
     return analysis if analysis else "Standard dependency risk detected."
 
 
-async def calculate_predictive_risks(project_id, user_config):
+async def calculate_predictive_risks(project_id, user_config, log_callback=None):
+    if log_callback: log_callback("🚀 Initializing Neural Risk Engine...")
     print(f"🚀 Starting Advanced Predictive Risk Analysis for {project_id}...")
     
     # 1. Fetch Project Metadata for API calls
@@ -61,9 +64,13 @@ async def calculate_predictive_risks(project_id, user_config):
 
     risks = []
     # 3. FETCH GRAPH DATA & MAP UNITS
+    if log_callback: log_callback("📊 Retrieving codebase graph and mapping neural units...")
     units, edges = get_project_data(project_id)
-    if not units: return 0
+    if not units: 
+        if log_callback: log_callback("⚠️ No code units found. Mapping might be empty.")
+        return 0
 
+    if log_callback: log_callback(f"🧬 Analying project structure ({len(units)} units, {len(edges)} relations)...")
     now = datetime.now(timezone.utc)
     unit_map = {u['unit_name']: u for u in units if u.get('last_modified_at')}
     for u_name, u in unit_map.items():
@@ -99,6 +106,7 @@ async def calculate_predictive_risks(project_id, user_config):
                 G.add_edge(source_id, target_id)
 
     # 5. IDENTIFY LEGACY CONFLICTS & KNOWLEDGE SILOS
+    if log_callback: log_callback("🔍 Scanning for legacy bottlenecks and active churn...")
     active_units = [k for k, v in unit_map.items() if v['age_days'] < 30]
     legacy_units = [k for k, v in unit_map.items() if v['age_days'] > 90]
 
@@ -138,6 +146,7 @@ async def calculate_predictive_risks(project_id, user_config):
                         if tasks is not None:
                             unresolved_tasks_count = len(tasks)
 
+            if log_callback: log_callback("📉 Running velocity metrics and delay diagnostics...")
             delay_risk = heuristic_delay_detector(
                 velocity_change=velocity_change, 
                 unresolved_tasks_count=unresolved_tasks_count, 
@@ -169,7 +178,7 @@ async def calculate_predictive_risks(project_id, user_config):
     conflict_details = []
 
     for target, sources in grouped_conflicts.items():
-        coro = analyze_grouped_conflict_with_llm(target, unit_map[target], sources, user_config)
+        coro = analyze_grouped_conflict_with_llm(target, sources, user_config, log_callback)
         llm_coroutines.append(coro)
         conflict_details.append({"target_key": target, "target_age": unit_map[target]['age_days'], "sources": sources})
 
@@ -184,8 +193,12 @@ async def calculate_predictive_risks(project_id, user_config):
                 "description": f"\n\n**Function:** `{det['target_key']}`\n\n**Age:** {det['target_age']} days is hit by {len(det['sources'])} new changes. \n\n**Lumis Analysis:** {analysis_result}",
                 "affected_units": [det['target_key']] + [s['source_key'] for s in det['sources']]
             })
+            if log_callback: 
+                label = det['target_key'].split('::')[-1] if isinstance(det['target_key'], str) else "complex node"
+                log_callback(f"⚠️ Risk Detected: legacy conflict at {label}")
 
     # 8. SAVE RESULTS
+    if log_callback: log_callback(f"✅ Risk analysis complete. Identified {len(risks)} architectural risks.")
     save_risk_alerts(project_id, risks)
     return len(risks)
 
