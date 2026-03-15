@@ -9,8 +9,10 @@ interface SettingsState {
     selectedModel: string;
     jiraProjectKey: string;
     notionDatabaseId: string;
+    theme: 'light' | 'dark' | 'system';
 
     setUseDefault: (val: boolean) => void;
+    setTheme: (val: 'light' | 'dark' | 'system') => void;
     setProvider: (val: string) => void;
     setApiKey: (val: string) => void;
     setSelectedModel: (val: string) => void;
@@ -29,8 +31,10 @@ export const useSettingsStore = create<SettingsState>()(
             selectedModel: '',
             jiraProjectKey: '',
             notionDatabaseId: '',
+            theme: 'dark', // default to dark mode
 
             setUseDefault: (val) => set({ useDefault: val }),
+            setTheme: (val) => set({ theme: val }),
             setProvider: (val) => set({ provider: val }),
             setApiKey: (val) => set({ apiKey: val }),
             setSelectedModel: (val) => set({ selectedModel: val }),
