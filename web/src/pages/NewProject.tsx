@@ -51,7 +51,7 @@ const NewProject = () => {
     };
 
     return (
-        <div className="max-w-4xl mx-auto py-12 px-6 animate-fade-in">
+        <div className="max-w-4xl mx-auto p-8 animate-fade-in">
             <button 
                 onClick={() => navigate(-1)}
                 className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-8 text-xs font-bold uppercase tracking-widest"

@@ -128,7 +128,7 @@ const Layout = () => {
         <div className="flex h-screen bg-background overflow-hidden">
             <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
             <div className="flex flex-1 flex-col overflow-hidden">
-                <main className="flex-1 overflow-y-auto p-8 relative">
+                <main className="flex-1 overflow-y-auto relative h-full">
                     <div className="absolute top-8 right-8 z-50">
                         <ProjectSwitcher />
                     </div>

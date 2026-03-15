@@ -77,7 +77,7 @@ const RiskPage = () => {
   const { risks, project } = useProjectStore();
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-8 animate-fade-in p-8">
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-3xl font-black tracking-tighter uppercase">Predictive Risk Analysis</h1>

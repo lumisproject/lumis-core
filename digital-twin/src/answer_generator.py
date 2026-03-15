@@ -86,8 +86,8 @@ Symbol Mappings:
                 
             else:
                 # Fallback for single-turn or no history
-                system_prompt = base_system_prompt + "\n\n**INTERNAL SUMMARY**: End with a hidden <SUMMARY> block analyzing the findings."
-                user_summary_instruction = "- End with <SUMMARY>Files Analyzed; Evidence Found</SUMMARY>"
+                system_prompt = base_system_prompt + "\n\n**INTERNAL SUMMARY**: End with a short summary analyzing the findings."
+                user_summary_instruction = ""
 
             # 4. Build the User Prompt
             history_text = ""
@@ -287,8 +287,8 @@ Symbol Mappings:
                 user_summary_instruction = ""
                 
             else:
-                system_prompt = base_system_prompt + "\n\n**INTERNAL SUMMARY**: End with a hidden <SUMMARY> block analyzing the findings."
-                user_summary_instruction = "- End with <SUMMARY>Files Analyzed; Evidence Found</SUMMARY>"
+                system_prompt = base_system_prompt + "\n\n**INTERNAL SUMMARY**: End with a short summary analyzing the findings."
+                user_summary_instruction = ""
 
             history_text = ""
             if history:

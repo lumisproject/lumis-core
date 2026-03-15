@@ -12,7 +12,8 @@ import {
     Search,
     Zap,
     Plus,
-    AlertTriangle
+    AlertTriangle,
+    RefreshCw
 } from 'lucide-react';
 import { useProjectStore } from '@/stores/useProjectStore';
 import { useUserStore } from '@/stores/useUserStore';
@@ -69,7 +70,8 @@ const RiskCounter = ({ risks }: { risks: any[] }) => {
 
 const Dashboard = () => {
     const { user } = useUserStore();
-    const { project, risks, loading: projectLoading, jiraConnected, notionConnected, projects } = useProjectStore();
+    const { project, risks, loading: projectLoading, jiraConnected, notionConnected, projects, syncProject } = useProjectStore();
+    const [syncing, setSyncing] = useState(false);
     const { tier } = useBillingStore();
     const navigate = useNavigate();
 
@@ -105,7 +107,7 @@ const Dashboard = () => {
     }
 
     return (
-        <div className="space-y-10">
+        <div className="space-y-10 p-8">
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2">
                 <div className="space-y-3">
                     <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.4em] text-primary">
@@ -225,6 +227,24 @@ const Dashboard = () => {
                                     <div className="text-[8px] font-black text-muted-foreground uppercase tracking-widest">Last Commit ID</div>
                                     <div className="text-xs font-mono font-bold mt-1 text-primary">{project?.last_commit?.slice(0, 7) || '---'}</div>
                                 </div>
+                                <button 
+                                    onClick={async () => {
+                                        if (!project) return;
+                                        setSyncing(true);
+                                        try {
+                                            await syncProject(project.id);
+                                        } finally {
+                                            setSyncing(false);
+                                        }
+                                    }}
+                                    disabled={syncing || project?.sync_state?.status === 'ingesting'}
+                                    className="p-4 rounded-2xl bg-primary/10 border border-primary/20 flex flex-col items-center justify-center gap-1 hover:bg-primary/20 transition-all disabled:opacity-50"
+                                >
+                                    <RefreshCw className={cn("h-4 w-4 text-primary", (syncing || project?.sync_state?.status === 'ingesting') && "animate-spin")} />
+                                    <div className="text-[8px] font-black text-primary uppercase tracking-widest">
+                                        {(syncing || project?.sync_state?.status === 'ingesting') ? 'SYNCING' : 'RE-SYNC'}
+                                    </div>
+                                </button>
                             </div>
                         </div>
                     </BentoCard>

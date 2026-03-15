@@ -14,7 +14,10 @@ import {
     BookOpen,
     Search,
     ChevronDown,
-    AlertTriangle
+    AlertTriangle,
+    Sun,
+    Moon,
+    Monitor
 } from 'lucide-react';
 import { useSettingsStore } from '@/stores/useSettingsStore';
 import { useUserStore } from '@/stores/useUserStore';
@@ -127,7 +130,8 @@ const Settings = () => {
         setUseDefault,
         provider, setProvider,
         apiKey, setApiKey,
-        selectedModel, setSelectedModel
+        selectedModel, setSelectedModel,
+        theme, setTheme
     } = useSettingsStore();
 
     const [saving, setSaving] = useState(false);
@@ -212,7 +216,7 @@ const Settings = () => {
     const providers = ["groq", "openrouter", "openai", "anthropic"];
 
     return (
-        <div className="pb-20 max-w-5xl mx-auto">
+        <div className="pb-20 max-w-5xl mx-auto p-8">
             <div className="mb-8 space-y-6">
                 <div>
                     <h1 className="text-4xl font-black tracking-tighter uppercase">Configuration</h1>
@@ -262,6 +266,48 @@ const Settings = () => {
                         <InputField label="Target Model ID" icon={Cpu} value={selectedModel} onChange={setSelectedModel} placeholder="e.g. gpt-4o" />
                     </div>
                     <InputField label="Credential Protocol (API Key)" icon={Lock} value={apiKey} onChange={setApiKey} placeholder="sk-..." type="password" hide={true} />
+                </div>
+            </SettingSection>
+
+            <SettingSection
+                title="Interface Overrides"
+                icon={Monitor}
+                description="Customize the digital-twin terminal environment visualization."
+            >
+                <div className="space-y-4">
+                    <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">Theme Configuration</label>
+                    <div className="grid grid-cols-3 gap-4">
+                        <button
+                            onClick={() => setTheme('light')}
+                            className={cn(
+                                "flex flex-col items-center gap-3 rounded-2xl border p-4 transition-all hover:bg-accent/50",
+                                theme === 'light' ? "border-primary bg-primary/10 text-primary shadow-[0_0_15px_-5px_primary]" : "border-black/5 dark:border-white/5 bg-accent/30 text-muted-foreground"
+                            )}
+                        >
+                            <Sun className="h-6 w-6" />
+                            <span className="text-[10px] font-black uppercase tracking-widest">Light</span>
+                        </button>
+                        <button
+                            onClick={() => setTheme('dark')}
+                            className={cn(
+                                "flex flex-col items-center gap-3 rounded-2xl border p-4 transition-all hover:bg-accent/50",
+                                theme === 'dark' ? "border-primary bg-primary/10 text-primary shadow-[0_0_15px_-5px_primary]" : "border-black/5 dark:border-white/5 bg-accent/30 text-muted-foreground"
+                            )}
+                        >
+                            <Moon className="h-6 w-6" />
+                            <span className="text-[10px] font-black uppercase tracking-widest">Dark</span>
+                        </button>
+                        <button
+                            onClick={() => setTheme('system')}
+                            className={cn(
+                                "flex flex-col items-center gap-3 rounded-2xl border p-4 transition-all hover:bg-accent/50",
+                                theme === 'system' ? "border-primary bg-primary/10 text-primary shadow-[0_0_15px_-5px_primary]" : "border-black/5 dark:border-white/5 bg-accent/30 text-muted-foreground"
+                            )}
+                        >
+                            <Monitor className="h-6 w-6" />
+                            <span className="text-[10px] font-black uppercase tracking-widest">System</span>
+                        </button>
+                    </div>
                 </div>
             </SettingSection>
 

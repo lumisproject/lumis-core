@@ -20,6 +20,11 @@ interface Project {
     user_id: string;
     jira_project_id?: string;
     notion_project_id?: string;
+    sync_state?: {
+        status: string;
+        step: string;
+        logs: string[];
+    };
 }
 
 interface IngestionStatus {
@@ -56,6 +61,7 @@ interface ProjectState {
     disconnectNotion: (userId: string) => Promise<void>;
     updateJiraMapping: (projectId: string, jiraKey: string) => Promise<void>;
     updateNotionMapping: (projectId: string, notionDbId: string) => Promise<void>;
+    syncProject: (projectId: string) => Promise<void>;
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -281,12 +287,25 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
                     project: updated,
                     projects: s.projects.map(p => p.id === projectId ? { ...p, notion_project_id: notionDbId } : p)
                 }));
-            } else {
-                const errorData = await res.text();
-                console.error(`Notion mapping failed with status ${res.status}:`, errorData);
             }
         } catch (e) {
             console.error("Failed to update Notion mapping", e);
+        }
+    },
+    syncProject: async (projectId: string) => {
+        const { projects, startIngestion } = get();
+        const currentProject = projects.find(p => p.id === projectId);
+        if (!currentProject) return;
+
+        try {
+            set({ loading: true });
+            await startIngestion(currentProject.user_id, currentProject.repo_url);
+            await get().fetchProjects(currentProject.user_id);
+        } catch (error) {
+            console.error("Re-sync failed:", error);
+            throw error;
+        } finally {
+            set({ loading: false });
         }
     },
 }));

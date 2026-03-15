@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useUserStore } from '@/stores/useUserStore';
+import { useSettingsStore } from '@/stores/useSettingsStore';
 import Layout from '@/components/layout/Layout';
 import Dashboard from '@/pages/Dashboard';
 import Chat from '@/pages/Chat';
@@ -38,6 +39,20 @@ function App() {
     const { unsubscribe } = setupAuthListener();
     return () => unsubscribe();
   }, []);
+
+  const theme = useSettingsStore((state) => state.theme);
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove('light', 'dark');
+
+    if (theme === 'system') {
+      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      root.classList.add(systemTheme);
+    } else {
+      root.classList.add(theme || 'dark');
+    }
+  }, [theme]);
 
   return (
     <Router>
