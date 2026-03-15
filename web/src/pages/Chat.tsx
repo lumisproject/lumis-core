@@ -15,7 +15,7 @@ const Chat = () => {
 
     const { reasoningEnabled, setReasoningEnabled, chatMode, setChatMode, messages, sending, sendMessage } = useChatStore();
     const { selectedModel, useDefault, provider, apiKey } = useSettingsStore();
-    const { project } = useProjectStore();
+    const { project, jiraConnected, notionConnected } = useProjectStore();
     const { user } = useUserStore();
     const { tier } = useBillingStore();
 
@@ -74,6 +74,13 @@ const Chat = () => {
                             )}
                         </div>
                     </div>
+                    
+                    {(jiraConnected && !project?.jira_project_id) || (notionConnected && !project?.notion_project_id) ? (
+                        <Link to="/app/settings" className="ml-4 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[8px] font-black uppercase tracking-widest hover:bg-orange-500/20 transition-all">
+                            <AlertTriangle className="h-3 w-3" />
+                            No Project Managment tool is detected
+                        </Link>
+                    ) : null}
                 </div>
             </div>
 

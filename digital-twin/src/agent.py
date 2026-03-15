@@ -219,7 +219,7 @@ class LumisAgent:
             self.conversation_history.append({"role": "user", "content": q})
             self.conversation_history.append({"role": "assistant", "content": a})
 
-    def analyze_fulfillment(self, issue: Dict, code_diff: str) -> Dict:
+    def analyze_fulfillment(self, issue: Dict, code: str) -> Dict:
         """
         Standalone background AI job to compare code diffs against Jira task requirements.
         This is triggered by webhooks and uses the centralized LLM services.
@@ -270,7 +270,7 @@ class LumisAgent:
         prompt = f"""
         JIRA TASK SUMMARY: {summary}
         JIRA TASK DESCRIPTION: {description}
-        CODE CHANGES (DIFF): {code_diff}
+        CODE CHANGES (DIFF): {code}
         
         Analyze the commit and respond STRICTLY in the JSON format defined in your instructions. Do not change the JSON keys.
         """
@@ -323,13 +323,13 @@ class LumisAgent:
         except Exception:
             return None
     
-    def analyze_risks(self, commit_message: str, code_diff: str) -> dict:
+    def analyze_risks(self, commit_message: str, code: str) -> dict:
         """
         Standalone AI code reviewer that uses graph context to predict 
         breaking changes and side effects.
         """
         # 1. Extract potential unit names from the diff to seed the graph search
-        potential_units = re.findall(r'(?:def|class)\s+([a-zA-Z_][a-zA-Z0-9_]*)', code_diff[:10000])
+        potential_units = re.findall(r'(?:def|class)\s+([a-zA-Z_][a-zA-Z0-9_]*)', code[:10000])
         
         # 2. Get the architectural context (neighbors in the graph)
         graph_context = self.retriever.get_architectural_context(potential_units)
@@ -365,8 +365,8 @@ class LumisAgent:
         ARCHITECTURAL CONTEXT (Graph Neighbors):
         {graph_context}
         
-        CODE CHANGES (DIFF):
-        {code_diff}
+        CODE:
+        {code}
         """
         
         try:

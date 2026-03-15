@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useUserStore } from '@/stores/useUserStore';
 import { useSettingsStore } from '@/stores/useSettingsStore';
+import { useProjectStore } from '@/stores/useProjectStore';
 import Layout from '@/components/layout/Layout';
 import Dashboard from '@/pages/Dashboard';
 import Chat from '@/pages/Chat';
@@ -39,6 +40,16 @@ function App() {
     const { unsubscribe } = setupAuthListener();
     return () => unsubscribe();
   }, []);
+
+  const { user } = useUserStore();
+  const { setupProjectSubscriptions } = useProjectStore();
+
+  useEffect(() => {
+    if (user?.id) {
+      const unsub = setupProjectSubscriptions(user.id);
+      return () => unsub();
+    }
+  }, [user?.id, setupProjectSubscriptions]);
 
   const theme = useSettingsStore((state) => state.theme);
 

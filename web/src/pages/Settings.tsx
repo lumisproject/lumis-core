@@ -314,7 +314,7 @@ const Settings = () => {
             <SettingSection
                 title="Workspace Mapping"
                 icon={Database}
-                description="Synchronize project specific backlogs and documentation. Changes apply to the currently selected project."
+                description="Synchronize project-specific backlogs and documentation. Mappings are unique to each neural instance."
             >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* JIRA */}
@@ -329,7 +329,9 @@ const Settings = () => {
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <Plug className="h-4 w-4 text-blue-500" />
-                                <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">Jira Backlog</span>
+                                <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                                    Jira Backlog {project?.jira_project_id && <CheckCircle2 className="inline h-3 w-3 ml-1 text-primary" />}
+                                </span>
                             </div>
                             <div className={cn("h-2 w-2 rounded-full", jiraConnected ? "bg-primary animate-pulse shadow-[0_0_10px_rgba(var(--primary),0.5)]" : "bg-muted")} />
                         </div>
@@ -367,7 +369,9 @@ const Settings = () => {
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <BookOpen className="h-4 w-4 text-foreground" />
-                                <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">Notion Knowledge</span>
+                                <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                                    Notion Docs {project?.notion_project_id && <CheckCircle2 className="inline h-3 w-3 ml-1 text-primary" />}
+                                </span>
                             </div>
                             <div className={cn("h-2 w-2 rounded-full", notionConnected ? "bg-primary animate-pulse shadow-[0_0_10px_rgba(var(--primary),0.5)]" : "bg-muted")} />
                         </div>
