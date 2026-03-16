@@ -61,7 +61,7 @@ function App() {
       const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
       root.classList.add(systemTheme);
     } else {
-      root.classList.add(theme || 'dark');
+      root.classList.add(theme || 'light');
     }
   }, [theme]);
 

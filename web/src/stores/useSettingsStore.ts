@@ -31,7 +31,7 @@ export const useSettingsStore = create<SettingsState>()(
             selectedModel: '',
             jiraProjectKey: '',
             notionDatabaseId: '',
-            theme: 'dark', // default to dark mode
+            theme: 'light', // default to light mode
 
             setUseDefault: (val) => set({ useDefault: val }),
             setTheme: (val) => set({ theme: val }),
