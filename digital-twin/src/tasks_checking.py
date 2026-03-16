@@ -1,3 +1,5 @@
+import re
+import logging
 from src.agent import LumisAgent
 from src.services import get_commit_diff
 from src.db_client import supabase
@@ -9,8 +11,7 @@ from src.jira_client import (
     get_active_issues,
     add_comment as add_jira_comment,
     transition_issue as transition_jira_issue,
-    create_issue as create_jira_issue,
-    get_projects
+    create_issue as create_jira_issue
 )
 
 # Notion Integration Modules
@@ -22,11 +23,19 @@ from src.notion_client import (
     create_task as create_notion_task
 )
 
-import logging
 logger = logging.getLogger(__name__)
 
-async def process_notion(commits: list, repo_name:str, access_token: str, database_id: str, agent: LumisAgent = None):
-    """Handles auto-syncing GitHub commits to Notion."""    
+def extract_jira_key(message: str) -> str:
+    """Fast deterministic check for Jira keys in commit messages (e.g., PROJ-123)"""
+    match = re.search(r'([A-Z]+-\d+)', message.upper())
+    return match.group(1) if match else None
+
+# --- NOTION BACKGROUND WORKER ---
+async def process_notion(commits: list, repo_name:str, access_token: str, database_id: str, project_id: str, agent: LumisAgent = None):
+    if not database_id:
+        logger.info("No Notion Database ID mapped for this project. Skipping Notion sync.")
+        return
+
     active_tasks = get_notion_tasks(database_id, access_token)
 
     for commit in commits:
@@ -41,19 +50,47 @@ async def process_notion(commits: list, repo_name:str, access_token: str, databa
         # 1. SEMANTIC MATCHING
         matched_task = agent.match_task_to_commit(message, active_tasks) if active_tasks else None
         
-        # 2. Rogue Commit Auto-Fulfillment
+        # 2. Rogue Commit Auto-Fulfillment & AI Checking
         if not matched_task:
             logger.info(f"No existing Notion task found for commit. Auto-generating...")
             try:
+                title = f"[Lumis Auto-Sync] {message[:100]}"
                 desc = f"Auto-generated ticket for commit {sha[:7]} in {repo_name}.\n\nMessage: {message}"
-                new_task = create_notion_task(database_id, message[:200], desc, access_token)
+                new_task = create_notion_task(database_id, title, desc, access_token)
+                
                 if new_task:
                     new_task_id = new_task['id']
                     logger.info(f"✅ Auto-created Notion rogue ticket {new_task_id}")
-                    add_notion_comment(new_task_id, f"✅ **Auto-Completed!**\nCode committed directly: `{message}`", access_token)
-                    transition_notion_task(new_task_id, access_token)
+                    
+                    diff_text = get_commit_diff(repo_name, sha)
+                    dummy_task = {"key": new_task_id, "fields": {"summary": title, "description": desc}}
+                    
+                    # FIX: Changed code_diff to code
+                    analysis = agent.analyze_fulfillment(issue=dummy_task, code=diff_text)
+                    
+                    status = analysis.get("fulfillment_status", "PARTIAL")
+                    risks = analysis.get("identified_risks", [])
+                    comment_body = f"🤖 **Lumis AI Sync**\n\n{analysis.get('summary', 'Code analyzed.')}"
+
+                    if status != "COMPLETE" or risks:
+                        if not risks:
+                            risks = [{"risk_type": "CODE_RISK", "severity": "Medium", "description": analysis.get("summary", "Potential issue in rogue commit."), "affected_units": [new_task_id]}]
+                        
+                        for risk in risks:
+                            units = risk.get("affected_units", [])
+                            if new_task_id not in units: units.append(new_task_id)
+                            new_risk = {"project_id": project_id, "risk_type": risk.get("risk_type", "INCOMPLETE"), "severity": risk.get("severity", "Medium"), "description": risk.get("description", "Missing requirements or code errors"), "affected_units": units}
+                            supabase.table("project_risks").insert(new_risk).execute()
+                        
+                        add_notion_comment(new_task_id, f"⚠️ **Risks Detected!**\nCode was committed directly but contained issues:\n{comment_body}\n\n*Ticket left in To Do. Risks logged in Lumis.*", access_token)
+                        logger.info(f"⚠️ Rogue commit {sha} had errors. Left in To Do.")
+                    else:
+                        add_notion_comment(new_task_id, f"✅ **Auto-Completed!**\nCode committed directly and passed AI checks: `{message}`\n\n{comment_body}", access_token)
+                        transition_notion_task(new_task_id, access_token)
+                        logger.info(f"✅ Rogue commit {sha} passed checks. Marked as COMPLETE.")
+
             except Exception as e:
-                logger.error(f"❌ Failed to auto-create Notion ticket: {e}")
+                logger.error(f"❌ Failed to auto-create/process Notion ticket: {e}")
             continue
 
         # 3. EXISTING LOGIC: Handled matched issues
@@ -63,9 +100,10 @@ async def process_notion(commits: list, repo_name:str, access_token: str, databa
 
         try:
             diff_text = get_commit_diff(repo_name, sha)
-            # The AI prompt expects "matched_issue" to have 'fields' -> 'summary'. Adapt dict.
             ai_adapted_task = {"key": task_id, "fields": {"summary": task_summary, "description": ""}}
-            analysis = agent.analyze_fulfillment(issue=ai_adapted_task, code_diff=diff_text)
+            
+            # FIX: Changed code_diff to code
+            analysis = agent.analyze_fulfillment(issue=ai_adapted_task, code=diff_text)
 
             status = analysis.get("fulfillment_status", "PARTIAL")
             comment_body = f"🤖 **Lumis AI Sync**\n\n{analysis.get('summary', 'Work processed.')}"
@@ -85,7 +123,11 @@ async def process_notion(commits: list, repo_name:str, access_token: str, databa
 
 
 # --- JIRA BACKGROUND WORKER ---
-async def process_jira(commits: list, repo_name: str, access_token: str, project_id: str, jira_project_id: str = None, agent: LumisAgent = None):
+async def process_jira(commits: list, repo_name: str, access_token: str, project_id: str, jira_project_id: str, agent: LumisAgent = None):
+    if not jira_project_id:
+        logger.info("No Jira Project ID explicitly mapped. Skipping Jira sync.")
+        return
+
     resources = get_accessible_resources(access_token)
     if not resources:
         logger.error("No active Jira sites found for this user.")
@@ -93,15 +135,6 @@ async def process_jira(commits: list, repo_name: str, access_token: str, project
     
     current_cloud_id = resources[0]["id"]
     project_key = jira_project_id
-    if not project_key:
-        projects = get_projects(current_cloud_id, access_token)
-        if projects:
-            project_key = projects[0]["key"]
-
-    if not project_key:
-        logger.error("Could not determine a Jira Project Key. Aborting Jira sync.")
-        return
-
     active_issues = get_active_issues(current_cloud_id, access_token, project_key)
     
     for commit in commits:
@@ -113,51 +146,52 @@ async def process_jira(commits: list, repo_name: str, access_token: str, project
 
         logger.info(f"--- Processing Commit for Jira: {message[:50]}... ---")
 
-        matched_issue = agent.match_task_to_commit(message, active_issues) if active_issues else None
+        # 1. Try Fast Regex Match First
+        extracted_key = extract_jira_key(message)
+        matched_issue = None
+        
+        if extracted_key and active_issues:
+            matched_issue = next((i for i in active_issues if i['key'] == extracted_key), None)
+            if matched_issue:
+                logger.info(f"⚡ Fast Regex Match Found: {extracted_key}")
+
+        # 2. Fallback to AI Semantic Matching
+        if not matched_issue and active_issues:
+            matched_issue = agent.match_task_to_commit(message, active_issues)
         
         if not matched_issue:
             logger.info(f"No existing ticket found for commit. Auto-generating ticket.")
             try:
+                title = f"[Lumis Auto-Sync] {message[:100]}"
                 desc = f"Auto-generated ticket for commit {sha} in {repo_name}."
-                new_ticket = create_jira_issue(current_cloud_id, project_key, message[:250], desc, access_token)
+                new_ticket = create_jira_issue(current_cloud_id, project_key, title, desc, access_token)
                 new_task_id = new_ticket['key']
                 
                 logger.info(f"✅ Auto-created rogue ticket {new_task_id}")
                 
-                # --- NEW: AI Analysis for Rogue Commits ---
                 diff_text = get_commit_diff(repo_name, sha)
+                dummy_issue = {"key": new_task_id, "fields": {"summary": title, "description": desc}}
                 
-                # Create a fake issue context for the AI
-                dummy_issue = {"key": new_task_id, "fields": {"summary": message[:250], "description": desc}}
-                analysis = agent.analyze_fulfillment(issue=dummy_issue, code_diff=diff_text)
+                # FIX: Changed code_diff to code
+                analysis = agent.analyze_fulfillment(issue=dummy_issue, code=diff_text)
                 
                 status = analysis.get("fulfillment_status", "PARTIAL")
                 risks = analysis.get("identified_risks", [])
                 comment_body = f"🤖 **Lumis AI Sync**\n\n{analysis.get('summary', 'Code analyzed.')}"
 
                 if status != "COMPLETE" or risks:
-                    # Errors detected! Don't transition to Done.
                     if not risks:
                         risks = [{"risk_type": "CODE_RISK", "severity": "Medium", "description": analysis.get("summary", "Potential issue in rogue commit."), "affected_units": [new_task_id]}]
                     
-                    # Save the risks to Supabase
                     for risk in risks:
                         units = risk.get("affected_units", [])
                         if new_task_id not in units: units.append(new_task_id)
-                        new_risk = {
-                            "project_id": project_id, 
-                            "risk_type": risk.get("risk_type", "INCOMPLETE"), 
-                            "severity": risk.get("severity", "Medium"), 
-                            "description": risk.get("description", "Missing requirements or code errors"), 
-                            "affected_units": units
-                        }
+                        new_risk = {"project_id": project_id, "risk_type": risk.get("risk_type", "INCOMPLETE"), "severity": risk.get("severity", "Medium"), "description": risk.get("description", "Missing requirements or code errors"), "affected_units": units}
                         supabase.table("project_risks").insert(new_risk).execute()
                     
                     add_jira_comment(current_cloud_id, new_task_id, f"⚠️ **Risks Detected!**\nCode was committed directly but contained issues:\n{comment_body}\n\n*Ticket left in To Do. Risks logged in Lumis.*", access_token)
                     logger.info(f"⚠️ Rogue commit {sha} had errors. Left in To Do.")
-                    
                 else:
-                    # No errors, safe to transition to Done
                     add_jira_comment(current_cloud_id, new_task_id, f"✅ **Auto-Completed!**\nCode was committed directly and passed AI checks: \n`{message}`\n\n{comment_body}", access_token)
                     transition_jira_issue(current_cloud_id, new_task_id, access_token)
                     logger.info(f"✅ Rogue commit {sha} passed checks. Marked as COMPLETE.")
@@ -166,13 +200,16 @@ async def process_jira(commits: list, repo_name: str, access_token: str, project
                 logger.error(f"❌ Failed to process rogue commit: {e}")
             continue
 
+        # 3. Handle Matched Issue
         task_id = matched_issue["key"]
         task_summary = matched_issue['fields'].get('summary', 'No summary')
-        logger.info(f"✅ AI Linked commit to {task_id}: {task_summary}")
+        logger.info(f"✅ Linked commit to {task_id}: {task_summary}")
 
         try:
             diff_text = get_commit_diff(repo_name, sha)
-            analysis = agent.analyze_fulfillment(issue=matched_issue, code_diff=diff_text)
+            
+            # FIX: Changed code_diff to code
+            analysis = agent.analyze_fulfillment(issue=matched_issue, code=diff_text)
 
             status = analysis.get("fulfillment_status", "PARTIAL")
             risks = analysis.get("identified_risks", [])
@@ -193,16 +230,13 @@ async def process_jira(commits: list, repo_name: str, access_token: str, project
                     supabase.table("project_risks").insert(new_risk).execute()
                 
                 add_jira_comment(current_cloud_id, task_id, f"🛠️ **Progress Update**\n{comment_body}\n\n⚠️ *Risks logged in Lumis.*", access_token)
-                logger.info(f"📝 {task_id} updated. {len(risks)} risks saved.")
 
             elif status == "COMPLETE" and not risks:
                 add_jira_comment(current_cloud_id, task_id, f"✅ **Task Completed!**\n{comment_body}\n\n🎉 *All risks resolved.*", access_token)
                 transition_jira_issue(current_cloud_id, task_id, access_token)
-                logger.info(f"🚀 {task_id} marked as COMPLETE.")
 
             for follow_up in analysis.get("follow_up_tasks", []):
-                create_jira_issue(current_cloud_id, project_key, f"Follow-up: {follow_up['title'][:200]}", f"Created by Lumis based on commit {sha}:\n\n{follow_up['description']}", access_token)
-                logger.info(f"⚠️ Created critical follow-up task.")
+                create_jira_issue(current_cloud_id, project_key, f"Follow-up: {follow_up['title'][:100]}", f"Created by Lumis based on commit {sha}:\n\n{follow_up['description']}", access_token)
 
         except Exception as e:
             logger.error(f"❌ Failed to sync commit {sha} with Jira: {e}")
@@ -211,37 +245,29 @@ async def process_jira(commits: list, repo_name: str, access_token: str, project
 
 
 def check_taskes(user_id, project_id, commits, repo_name, background_tasks, jira_project_id, notion_project_id, agent):
-    jira_token = get_valid_token(user_id)
-    if jira_token:
-        try:
-            resources = get_accessible_resources(jira_token)
-            if resources:
-                background_tasks.add_task(
-                    process_jira,
-                    commits=commits,
-                    repo_name=repo_name,
-                    access_token=jira_token,
-                    project_id=project_id,
-                    jira_project_id=jira_project_id,
-                    agent=agent
-                )
-                logger.info(f"Jira sync queued for user {user_id}")
-        except Exception as jira_err:
-            logger.error(f"Jira Sync Auth Error: {str(jira_err)}")
-    else:
-        logger.warning(f"Jira Sync Skipped: No valid token for user {user_id}")
+    """Router function. Strictly mutually exclusive: Prefers Jira if mapped, otherwise Notion."""
     
-    # Trigger Notion Sync if connected
-    notion_token = get_valid_notion_token(user_id)
-    if notion_token:
-        background_tasks.add_task(
-            process_notion,
-            commits=commits,
-            repo_name=repo_name,
-            access_token=notion_token,
-            database_id=notion_project_id,
-            agent=agent
-        )
-        logger.info(f"Notion sync queued for user {user_id}")
+    if jira_project_id:
+        jira_token = get_valid_token(user_id)
+        if jira_token:
+            background_tasks.add_task(
+                process_jira, commits=commits, repo_name=repo_name, access_token=jira_token,
+                project_id=project_id, jira_project_id=jira_project_id, agent=agent
+            )
+            logger.info(f"Jira sync queued for user {user_id}")
+        else:
+            logger.warning(f"Jira Project mapped, but no valid Jira token for user {user_id}")
+            
+    elif notion_project_id:
+        notion_token = get_valid_notion_token(user_id)
+        if notion_token:
+            background_tasks.add_task(
+                process_notion, commits=commits, repo_name=repo_name, access_token=notion_token,
+                database_id=notion_project_id, project_id=project_id, agent=agent
+            )
+            logger.info(f"Notion sync queued for user {user_id}")
+        else:
+            logger.warning(f"Notion Project mapped, but no valid Notion token for user {user_id}")
+            
     else:
-        logger.warning(f"Notion Sync Skipped: No valid token for user {user_id}")
+        logger.info(f"No Project Management integration mapped for project {project_id}. Skipping task checks.")

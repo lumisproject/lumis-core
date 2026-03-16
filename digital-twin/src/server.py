@@ -72,9 +72,14 @@ def get_repo_name_from_url(repo_url: str) -> str:
 def fetch_commits(repo_full_name: str):
     """Return the most recent commits for the repository as a normalized list."""
     url = f"https://api.github.com/repos/{repo_full_name}/commits"
-    headers = {"Authorization": f"token {Config.GITHUB_TOKEN}"}
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    
+    # Safely attach token if it exists
+    if getattr(Config, 'GITHUB_TOKEN', None):
+        headers["Authorization"] = f"token {Config.GITHUB_TOKEN}"
+        
     try:
-        resp = requests.get(url, headers=headers, params={"per_page": 5})
+        resp = requests.get(url, headers=headers, params={"per_page": 10})
         resp.raise_for_status()
         commits_data = resp.json()
         
@@ -86,7 +91,7 @@ def fetch_commits(repo_full_name: str):
             })
         return formatted_commits
     except Exception as e:
-        logger.error(f"Failed to fetch commits for {repo_full_name}: {e}")
+        logger.error(f"Failed to fetch commits for {repo_full_name}. Ensure your GITHUB_TOKEN in .env has 'repo' access. Error: {e}")
         return []
     
 def update_progress(project_id, task, message):
@@ -376,16 +381,30 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, ti
         
         repo_name = get_repo_name_from_url(req.repo_url)
         all_commits = fetch_commits(repo_name)
-        commits = [all_commits[0]] if all_commits else [] 
 
         if is_existing_project:
             project_data = existing.data[0]
             project_id = project_data.get('id')
             jira_proj = project_data.get('jira_project_id')
             notion_proj = project_data.get('notion_project_id')
+            last_commit = project_data.get('last_commit')
             logger.info(f"Existing project found for {req.repo_url} (ID: {project_id})")
+            
+            # --- NEW: Extract all commits since the last sync ---
+            commits = []
+            for c in all_commits:
+                if c["sha"] == last_commit:
+                    break
+                commits.append(c)
+                
+            # Fallback if last_commit wasn't in the recent list or list is empty
+            if not commits and all_commits:
+                commits = [all_commits[0]]
+                
         else:
+            commits = [all_commits[0]] if all_commits else [] 
             latest_commit_sha = commits[0]["sha"] if commits else None
+            
             insert_payload = {
                 "user_id": req.user_id,
                 "repo_url": req.repo_url,
@@ -583,10 +602,11 @@ async def update_jira_mapping(
     current_user = Depends(get_current_user)
 ):
     jira_key = payload.get("jira_project_id")
+    # If empty or 'none', set to None to clear the column in database
+    if not jira_key or jira_key == "none":
+        jira_key = None
+        
     logger.info(f"Updating Jira mapping for project {project_id} to {jira_key} for user {current_user.id}")
-    
-    if not jira_key: 
-        raise HTTPException(status_code=400, detail="Missing jira_project_id")
         
     res = supabase.table("projects").select("user_id").eq("id", project_id).limit(1).execute()
     if not res or not res.data:
@@ -608,10 +628,11 @@ async def update_notion_mapping(
 ):
     """Saves the user's selected Notion database ID."""
     notion_db_id = payload.get("notion_project_id")
-    logger.info(f"Updating Notion mapping for project {project_id} to {notion_db_id} for user {current_user.id}")
+    # If empty or 'none', set to None to clear the column in database
+    if not notion_db_id or notion_db_id == "none":
+        notion_db_id = None
 
-    if not notion_db_id:
-        raise HTTPException(status_code=400, detail="Missing notion_project_id")
+    logger.info(f"Updating Notion mapping for project {project_id} to {notion_db_id} for user {current_user.id}")
         
     res = supabase.table("projects").select("user_id").eq("id", project_id).limit(1).execute()
     if not res or not res.data:

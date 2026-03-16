@@ -70,7 +70,7 @@ const ModernSelect = ({ label, icon: Icon, value, onChange, options, placeholder
                             initial={{ opacity: 0, y: 10, scale: 0.98 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: 10, scale: 0.98 }}
-                            className="absolute left-0 right-0 top-[calc(100%+8px)] z-[70] max-h-[240px] overflow-y-auto rounded-2xl border border-black/10 bg-white p-2 shadow-2xl dark:border-white/10 dark:bg-[#0F0F0F]"
+                            className="absolute left-0 right-0 top-[calc(100%+8px)] z-[70] max-h-[320px] overflow-y-auto rounded-2xl border border-black/10 bg-white p-2 shadow-2xl dark:border-white/10 dark:bg-[#0F0F0F]"
                         >
                             {options.length === 0 ? (
                                 <div className="p-4 text-center text-xs text-muted-foreground">No records found. Link account first.</div>
@@ -318,9 +318,9 @@ const Settings = () => {
             >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* JIRA */}
-                    <div className="space-y-4 p-6 rounded-3xl border border-black/5 bg-accent/10 dark:border-white/5 relative overflow-hidden">
+                    <div className="space-y-4 p-6 rounded-3xl border border-black/5 bg-accent/10 dark:border-white/5 relative">
                         {!project && (
-                            <div className="absolute inset-0 z-20 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
+                            <div className="absolute inset-0 z-20 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center rounded-3xl">
                                 <AlertTriangle className="h-6 w-6 text-orange-500 mb-2" />
                                 <div className="text-[10px] font-black uppercase tracking-widest">No Active Instance</div>
                                 <p className="text-[9px] text-muted-foreground mt-1">Select a project in the Command Center to map integrations.</p>
@@ -341,9 +341,9 @@ const Settings = () => {
                                 <ModernSelect 
                                     label="Target Project" 
                                     icon={Search} 
-                                    value={project?.jira_project_id || ''} 
-                                    onChange={(val: string) => project?.id && updateJiraMapping(project.id, val)} 
-                                    options={availableJiraProjects} 
+                                    value={project?.jira_project_id || 'none'} 
+                                    onChange={(val: string) => project?.id && updateJiraMapping(project.id, val === 'none' ? '' : val)} 
+                                    options={[{ key: 'none', name: 'None / Not Linked' }, ...availableJiraProjects]} 
                                     loading={loadingJira}
                                 />
                                 <button 
@@ -381,9 +381,9 @@ const Settings = () => {
                                 <ModernSelect 
                                     label="Docs Database" 
                                     icon={Database} 
-                                    value={project?.notion_project_id || ''} 
-                                    onChange={(val: string) => project?.id && updateNotionMapping(project.id, val)} 
-                                    options={availableNotionDBs} 
+                                    value={project?.notion_project_id || 'none'} 
+                                    onChange={(val: string) => project?.id && updateNotionMapping(project.id, val === 'none' ? '' : val)} 
+                                    options={[{ id: 'none', name: 'None / Not Linked' }, ...availableNotionDBs]} 
                                     loading={loadingNotion}
                                 />
                                 <button 

@@ -252,9 +252,11 @@ def get_commit_diff(repo_full_name: str, commit_sha: str):
     url = f"https://api.github.com/repos/{repo_full_name}/commits/{commit_sha}"
     
     headers = {
-        "Authorization": f"token {Config.GITHUB_TOKEN}",
         "Accept": "application/vnd.github.v3.diff" 
     }
+    
+    if getattr(Config, 'GITHUB_TOKEN', None):
+        headers["Authorization"] = f"token {Config.GITHUB_TOKEN}"
     
     try:
         response = requests.get(url, headers=headers)
