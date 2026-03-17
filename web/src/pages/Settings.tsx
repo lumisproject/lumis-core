@@ -96,8 +96,8 @@ const ModernSelect = ({ label, icon: Icon, value, onChange, options, placeholder
     );
 };
 
-const InputField = ({ label, icon: Icon, value, onChange, placeholder, type = "text", hide = false }: any) => (
-    <div className="space-y-2">
+const InputField = ({ label, icon: Icon, value, onChange, placeholder, type = "text", hide = false, disabled = false }: any) => (
+    <div className={cn("space-y-2", disabled && "opacity-50 pointer-events-none")}>
         <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">{label}</label>
         <div className="relative group">
             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary">
@@ -108,6 +108,7 @@ const InputField = ({ label, icon: Icon, value, onChange, placeholder, type = "t
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={placeholder}
+                disabled={disabled}
                 className="flex h-12 w-full rounded-2xl border border-black/5 bg-accent/30 pl-11 pr-4 text-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/10 dark:border-white/5"
             />
         </div>
@@ -127,7 +128,7 @@ const Settings = () => {
         updateJiraMapping, updateNotionMapping
     } = useProjectStore();
     const {
-        setUseDefault,
+        useDefault, setUseDefault,
         provider, setProvider,
         apiKey, setApiKey,
         selectedModel, setSelectedModel,
@@ -149,6 +150,40 @@ const Settings = () => {
             fetchNotionStatus(user.id);
         }
     }, [user, project?.id]);
+
+    // NEW: Fetch User Settings on mount
+    useEffect(() => {
+        const loadSettings = async () => {
+            if (!user?.id) return;
+            try {
+                // Must pass auth token because the backend endpoint uses Depends(get_current_user)
+                const { data: { session } } = await supabase.auth.getSession();
+                
+                const res = await fetch(`${API_BASE}/api/settings/${user.id}`, {
+                    headers: {
+                        'Authorization': `Bearer ${session?.access_token}`
+                    }
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    setUseDefault(data.useDefault);
+                    setProvider(data.provider);
+                    setSelectedModel(data.selectedModel);
+                    
+                    // If the backend says we are using defaults, force the local API key to be empty
+                    if (data.useDefault) {
+                        setApiKey(""); 
+                    } else {
+                        setApiKey(data.apiKey);
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to load settings", e);
+            }
+        };
+        loadSettings();
+    }, [user]);
 
     useEffect(() => {
         const fetchJira = async () => {
@@ -186,7 +221,7 @@ const Settings = () => {
             const payload = {
                 provider: provider,
                 selectedModel: selectedModel,
-                useDefault: false,
+                useDefault: useDefault, // FIX: Use the actual state, not a hardcoded false!
                 apiKey: apiKey // If it's masked (••••), the backend handles preserving the old one
             };
 
@@ -243,17 +278,35 @@ const Settings = () => {
                 description="Power the inference engine with your preferred provider. Credentials are encrypted at rest."
             >
                 <div className="space-y-6">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2 col-span-full md:col-span-1">
                             <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">Inference Provider</label>
                             <div className="flex flex-wrap gap-2">
+                                {/* DEFAULT BUTTON */}
+                                <button
+                                    onClick={() => {
+                                        setUseDefault(true);
+                                        setProvider("");
+                                        setSelectedModel("");
+                                        setApiKey("");
+                                    }}
+                                    className={cn(
+                                        "rounded-xl border px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all",
+                                        useDefault 
+                                            ? "border-primary bg-primary/10 text-primary shadow-[0_0_15px_-5px_primary]" 
+                                            : "border-black/5 bg-accent/30 text-muted-foreground hover:bg-accent/50 dark:border-white/5"
+                                    )}
+                                >
+                                    LUMIS ENGINE (DEFAULT)
+                                </button>
+
                                 {providers.map((p) => (
                                     <button
                                         key={p}
                                         onClick={() => { setProvider(p); setUseDefault(false); }}
                                         className={cn(
                                             "rounded-xl border px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all",
-                                            provider === p 
+                                            (provider === p && !useDefault)
                                                 ? "border-primary bg-primary/10 text-primary shadow-[0_0_15px_-5px_primary]" 
                                                 : "border-black/5 bg-accent/30 text-muted-foreground hover:bg-accent/50 dark:border-white/5"
                                         )}
@@ -263,9 +316,9 @@ const Settings = () => {
                                 ))}
                             </div>
                         </div>
-                        <InputField label="Target Model ID" icon={Cpu} value={selectedModel} onChange={setSelectedModel} placeholder="e.g. gpt-4o" />
+                        <InputField disabled={useDefault} label="Target Model ID" icon={Cpu} value={selectedModel} onChange={setSelectedModel} placeholder="e.g. gpt-4o" />
                     </div>
-                    <InputField label="Credential Protocol (API Key)" icon={Lock} value={apiKey} onChange={setApiKey} placeholder="sk-..." type="password" hide={true} />
+                    <InputField disabled={useDefault} label="Credential Protocol (API Key)" icon={Lock} value={apiKey} onChange={setApiKey} placeholder="sk-..." type="password" hide={true} />
                 </div>
             </SettingSection>
 
