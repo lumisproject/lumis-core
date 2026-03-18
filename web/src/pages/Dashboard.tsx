@@ -86,7 +86,7 @@ const Dashboard = () => {
         return slug.split('/').pop() || slug;
     };
 
-    const webhookUrl = project ? `https://unsparing-kaley-unmodest.ngrok-free.dev/api/webhook/${user?.id}/${project?.id}` : '';
+    const webhookUrl = project ? `${import.meta.env.VITE_API_URL}/api/webhook/${user?.id}/${project?.id}` : '';
     const [copied, setCopied] = useState(false);
 
     const handleCopy = () => {

@@ -8,7 +8,6 @@ import {
     CreditCard,
     ChevronLeft,
     ChevronRight,
-    Cpu,
     LogOut,
     ShieldAlert
 } from 'lucide-react';
@@ -38,18 +37,10 @@ const Sidebar = ({ collapsed, setCollapsed }: { collapsed: boolean, setCollapsed
         >
             <div className="flex h-16 items-center px-6">
                 <Link to="/app" className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                        <Cpu className="h-5 w-5 text-primary-foreground" />
+                    <div className="flex items-center justify-center">
+                        <img src="/lumis-black.svg" alt="Lumis Logo" className="h-6 w-auto block dark:hidden" />
+                        <img src="/lumis-white.svg" alt="Lumis Logo" className="h-6 w-auto hidden dark:block" />
                     </div>
-                    {!collapsed && (
-                        <motion.span
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="text-lg font-bold tracking-tight"
-                        >
-                            Lumis
-                        </motion.span>
-                    )}
                 </Link>
             </div>
 

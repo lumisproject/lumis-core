@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Cpu, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { useUserStore } from '@/stores/useUserStore';
 
 const Login = () => {
@@ -24,8 +24,9 @@ const Login = () => {
                 className="w-full max-w-md"
             >
                 <div className="mb-8 flex flex-col items-center">
-                    <Link to="/" className="mb-8 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary shadow-xl shadow-primary/20">
-                        <Cpu className="h-6 w-6 text-primary-foreground" />
+                    <Link to="/" className="mb-8 flex items-center justify-center transition-transform hover:scale-105">
+                        <img src="/lumis-black.svg" alt="Lumis Logo" className="h-10 w-auto block dark:hidden" />
+                        <img src="/lumis-white.svg" alt="Lumis Logo" className="h-10 w-auto hidden dark:block" />
                     </Link>
                     <h1 className="text-3xl font-black tracking-tight">Welcome back</h1>
                     <p className="mt-2 text-sm text-muted-foreground">Continue to your intelligence layer</p>

@@ -364,7 +364,11 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, ti
         
         # Validate LLM Config: Must have either use_default=True 
         # OR all three: provider, api_key, and model.
-        is_default = global_config.get("use_default") is True
+        # For brand new users (use_default is None), we fallback to True.
+        
+        saved_use_default = global_config.get("use_default")
+        is_default = saved_use_default is True or saved_use_default is None
+        
         has_custom = all([
             global_config.get("provider"),
             global_config.get("api_key"),
@@ -376,6 +380,11 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, ti
                 status_code=400, 
                 detail="Inference Engine Offline: No valid LLM configuration found. Please setup your Provider, API Key, and Model in Settings."
             )
+            
+        # Ensure the fallback use_default flag is actively set in the config object
+        # so downstream services know to use the default keys.
+        if is_default:
+            global_config["use_default"] = True
 
         global_config["user_id"] = req.user_id
         

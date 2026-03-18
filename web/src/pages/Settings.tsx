@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Database,
@@ -17,7 +17,8 @@ import {
     AlertTriangle,
     Sun,
     Moon,
-    Monitor
+    Monitor,
+    PartyPopper
 } from 'lucide-react';
 import { useSettingsStore } from '@/stores/useSettingsStore';
 import { useUserStore } from '@/stores/useUserStore';
@@ -142,6 +143,32 @@ const Settings = () => {
     const [loadingJira, setLoadingJira] = useState(false);
     const [availableNotionDBs, setAvailableNotionDBs] = useState<{id: string, name: string}[]>([]);
     const [loadingNotion, setLoadingNotion] = useState(false);
+    const [showBillingSuccess, setShowBillingSuccess] = useState(false);
+
+    const location = useLocation();
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const billingSuccess = params.get('billing') === 'success';
+        const msg = params.get('message');
+        const err = params.get('error');
+
+        if (billingSuccess) {
+            setShowBillingSuccess(true);
+            setTimeout(() => {
+                setShowBillingSuccess(false);
+                navigate('/app/billing', { replace: true });
+            }, 5000);
+        } else if (msg || err) {
+            if (msg) {
+                setSuccess(true);
+                setTimeout(() => setSuccess(false), 5000);
+            }
+            // Clear params from URL
+            navigate(location.pathname, { replace: true });
+        }
+    }, [location]);
 
     useEffect(() => {
         if (user?.id) {
@@ -251,7 +278,45 @@ const Settings = () => {
     const providers = ["groq", "openrouter", "openai", "anthropic"];
 
     return (
-        <div className="pb-20 max-w-5xl mx-auto p-8">
+        <div className="pb-20 max-w-5xl mx-auto p-8 relative">
+            <AnimatePresence>
+                {showBillingSuccess && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-background/80 backdrop-blur-xl"
+                    >
+                        <div className="relative max-w-md w-full overflow-hidden rounded-[3rem] border border-primary/20 bg-card p-12 text-center shadow-2xl shadow-primary/20">
+                            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent pointer-events-none" />
+                            <div className="relative z-10 space-y-6">
+                                <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-[2rem] bg-primary/10 text-primary border border-primary/20 shadow-inner overflow-hidden relative group">
+                                    <div className="absolute inset-0 bg-primary/20 blur-xl opacity-50 group-hover:opacity-100 transition-opacity" />
+                                    <PartyPopper className="h-10 w-10 relative z-10 animate-bounce" />
+                                </div>
+                                <div className="space-y-2">
+                                    <h2 className="text-3xl font-black tracking-tighter uppercase text-primary">Upgrade Successful</h2>
+                                    <p className="text-sm text-muted-foreground font-medium">
+                                        Your neural capacity has been expanded. Welcome to the elite tier of engineering intelligence.
+                                    </p>
+                                </div>
+                                <div className="flex flex-col gap-2 pt-4">
+                                    <div className="text-[10px] font-black uppercase tracking-widest text-primary animate-pulse">Relocating to Command Center...</div>
+                                    <div className="h-1 w-full bg-primary/10 rounded-full overflow-hidden">
+                                        <motion.div 
+                                            initial={{ width: 0 }}
+                                            animate={{ width: '100%' }}
+                                            transition={{ duration: 5, ease: "linear" }}
+                                            className="h-full bg-primary shadow-[0_0_10px_primary]"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             <div className="mb-8 space-y-6">
                 <div>
                     <h1 className="text-4xl font-black tracking-tighter uppercase">Configuration</h1>
