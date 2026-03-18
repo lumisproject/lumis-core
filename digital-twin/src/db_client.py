@@ -101,6 +101,11 @@ def save_risk_alerts(project_id, risks):
     supabase.table("project_risks").insert(risks).execute()
 
 def get_global_user_config(user_id: str) -> dict:
+    """
+    Fetches the user's configuration from Supabase.
+    If 'use_default' is True, it returns a configuration that triggers 
+    a fallback to the .env file in the LLM service.
+    """
     res = (
         supabase.table("user_settings")
         .select("user_config")
@@ -109,10 +114,24 @@ def get_global_user_config(user_id: str) -> dict:
         .execute()
     )
     
-    if res and res.data and len(res.data) > 0 and res.data[0].get("user_config"):
-        return res.data[0]["user_config"]
+    # Extract the configuration from the database response
+    db_config = res.data[0].get("user_config", {}) if res and res.data else {}
+
+    # If the user explicitly chose 'Use System Default', we wipe the custom 
+    # fields in the returned dict so the get_llm() service falls back to .env
+    if db_config.get("use_default") is True:
+        return {
+            "provider": None,
+            "api_key": None,
+            "model": None,
+            "use_default": True
+        }
     
-    return {"use_default": True}
+    # If the database record is empty entirely, default to system settings
+    if not db_config:
+        return {"use_default": True}
+        
+    return db_config
 
 def get_current_user(authorization: str = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
