@@ -191,7 +191,7 @@ const Chat = () => {
                                     <span className={cn("font-bold", !isConfigComplete && "text-orange-500 italic")}>
                                         {!isConfigComplete
                                             ? "Setup LLM (API Key / Provider)"
-                                            : (selectedModel ? selectedModel : (useDefault ? 'Unconfigured Output' : 'Active Engine'))
+                                            : (useDefault ? 'Lumis (Default)' : (selectedModel || 'Active Engine'))
                                         }
                                     </span>
                                 </Link>

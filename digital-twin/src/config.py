@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
+    backend_url = "https://unsparing-kaley-unmodest.ngrok-free.dev"
+    frontend_url = "https://unsparing-kaley-unmodest.ngrok-free.dev"
     # Default LLM settings
     DEFAULT_LLM_PROVIDER = os.getenv("DEFAULT_LLM_PROVIDER", "openrouter")
     DEFAULT_LLM_MODEL = os.getenv("MODEL", "stepfun/step-3.5-flash:free")
@@ -15,8 +17,8 @@ class Config:
     # Jira settings
     JIRA_CLIENT_ID = os.getenv("JIRA_CLIENT_ID")
     JIRA_CLIENT_SECRET = os.getenv("JIRA_CLIENT_SECRET")
-    JIRA_REDIRECT_URI = os.getenv("JIRA_REDIRECT_URI", "http://localhost:5000/auth/jira/callback")
-    JIRA_REDIRECT=os.getenv("JIRA_REDIRECT", "http://localhost:8080/auth/jira/callback")
+    JIRA_REDIRECT_URI = os.getenv("JIRA_REDIRECT_URI", backend_url+"/auth/jira/callback")
+    JIRA_REDIRECT=os.getenv("JIRA_REDIRECT", frontend_url+"/app/settings")
     
     JIRA_AUTH_URL = "https://auth.atlassian.com/authorize"
     JIRA_TOKEN_URL = "https://auth.atlassian.com/oauth/token"
@@ -41,4 +43,4 @@ class Config:
     # Billing settings
     STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
     STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
-    FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8080")
+    FRONTEND_URL = os.getenv("FRONTEND_URL", frontend_url)

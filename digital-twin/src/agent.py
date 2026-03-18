@@ -76,7 +76,7 @@ class LumisAgent:
 
             yield json.dumps({"type": "thought", "content": f"[{confidence}%] {thought}"})
 
-            if confidence >= 95 or action == "final_answer":
+            if action == "final_answer":
                 yield json.dumps({"type": "thought", "content": "Confidence threshold reached. Formulating final answer."})
                 break
             
