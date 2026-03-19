@@ -76,6 +76,8 @@ class LumisAgent:
 
             yield json.dumps({"type": "thought", "content": f"[{confidence}%] {thought}"})
 
+            #Testing
+            """if confidence >= 95 or action == "final_answer":"""
             if action == "final_answer":
                 yield json.dumps({"type": "thought", "content": "Confidence threshold reached. Formulating final answer."})
                 break
@@ -131,6 +133,23 @@ class LumisAgent:
     def _parse_response(self, text: str, fallback_query: str = "") -> Dict[str, Any]:
         if not text: 
             return self._create_fallback(fallback_query, "Empty response from LLM")
+        
+        # NEW: Catch XML tool calls from stubborn models (like Stepfun or Claude)
+        if "<tool_call>" in text or "<function=" in text:
+            import re
+            func_match = re.search(r'<function=([^>]+)>', text)
+            param_match = re.search(r'<parameter=[^>]+>\s*(.*?)\s*</parameter>', text, re.DOTALL)
+            if func_match:
+                action = func_match.group(1).strip()
+                action_input = param_match.group(1).strip() if param_match else fallback_query
+                return {
+                    "thought": "Model used XML format. Translating to JSON action...",
+                    "action": action,
+                    "action_input": action_input,
+                    "confidence": 90
+                }
+            
+        # Existing JSON parsing logic  
         clean_text = text.replace("```json", "").replace("```", "").strip()
         start_idx = clean_text.find('{')
         end_idx = clean_text.rfind('}')

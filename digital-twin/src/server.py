@@ -511,6 +511,34 @@ async def get_user_jira_projects(user_id: str):
     projects = get_projects(cloud_id, access_token)
     return [{"key": p["key"], "name": p["name"]} for p in projects]
 
+@app.get("/api/settings/{user_id}")
+async def get_user_settings(user_id: str, current_user = Depends(get_current_user)):
+    """
+    Retrieves the user's global LLM configuration.
+    Masks the API key for security and handles 'System Default' state.
+    """
+    if str(current_user.id) != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    config = get_global_user_config(user_id)
+    
+    # Logic: If using system default, the UI should show empty fields
+    if config.get("use_default") is True:
+        return {
+            "provider": "",
+            "selectedModel": "",
+            "apiKey": "",
+            "useDefault": True
+        }
+    
+    # Logic: If using custom, mask the key so the UI knows it is set but stays secure
+    return {
+        "provider": config.get("provider", ""),
+        "selectedModel": config.get("model", ""),
+        "apiKey": "••••••••" if config.get("api_key") else "",
+        "useDefault": False
+    }
+
 @app.post("/api/settings/{user_id}")
 async def update_user_settings(
     user_id: str, 
