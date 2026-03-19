@@ -1,67 +1,88 @@
 import logging
 from src.agent import LumisAgent
 from src.db_client import supabase
+from src.retriever import GraphRetriever
 
 logger = logging.getLogger(__name__)
 
-async def process_full_codebase_review(project_id: str, agent: LumisAgent, log_callback=None):
-    """Scans the entire codebase stored in memory_units for bugs (used for ingestion/sync)."""
-    logger.info(f"--- Running Full Codebase Review for Project: {project_id} ---")
+async def process_impact_review(project_id: str, agent: LumisAgent, log_callback=None):
+    """
+    Smart Code Review: Only reviews recently changed units (Hotspots) 
+    and their Graph-RAG neighbors to save LLM tokens and increase accuracy.
+    """
+    logger.info(f"--- Running Impact-Based Code Review for Project: {project_id} ---")
     
-    # Clear old risks before a full scan
-    risk_types_to_clear = ["CODE_RISK", "SECURITY_FLAW", "BUG", "TECH_DEBT", "BREAKING_CHANGE"]
+    # Clear old architectural risks before a new scan
+    risk_types_to_clear = ["ARCHITECTURAL_FLAW", "TIGHT_COUPLING", "CIRCULAR_DEPENDENCY", "CONTRACT_BREAK"]
     supabase.table("project_risks").delete().eq("project_id", project_id).in_("risk_type", risk_types_to_clear).execute()
     
-    # Fetch all code files from the database that were just ingested
-    res = supabase.table("memory_units").select("unit_name, content").eq("project_id", project_id).execute()
+    # 1. HOTSPOT FILTER: Fetch only the top 15 most recently modified units
+    res = supabase.table("memory_units")\
+        .select("unit_name, content, file_path")\
+        .eq("project_id", project_id)\
+        .order("last_modified_at", desc=True)\
+        .limit(15)\
+        .execute()
+        
     if not res or not res.data:
-        logger.warning("No files found in memory_units for full scan.")
+        logger.warning("No files found in memory_units for impact scan.")
         return
         
-    for file in res.data:
-        file_name = file.get("unit_name", "unknown_file")
-        content = file.get("content", "")
+    hotspots = res.data
+    retriever = GraphRetriever(project_id)
+    all_risks = []
+
+    for unit in hotspots:
+        unit_name = unit.get("unit_name", "unknown_unit")
+        content = unit.get("content", "")
         
         # Skip empty files
         if not content or len(content.strip()) == 0:
             continue
         
-        logger.info(f"Analyzing full file: {file_name}")
-        
-        # FIX: Trigger the UI log update
+        logger.info(f"Analyzing impact radius for: {unit_name}")
         if log_callback: 
-            log_callback(f"Scanning file for vulnerabilities: {file_name}...")
+            log_callback(f"Tracing architectural blast radius for {unit_name}...")
             
         try:
-            # Pass the full file content to the LLM
-            analysis = agent.analyze_risks(
-                commit_message=f"Full repository scan: analyzing {file_name}", 
-                code=f"File: {file_name}\n\n{content}"
+            # 2. GRAPH-RAG: Use your existing retriever to fetch callers/callees
+            graph_context = retriever.get_architectural_context([unit_name])
+            
+            # 3. AI AGENT: Pass the Slice to the Aggressive Architect
+            analysis = agent.analyze_architectural_risks(
+                unit_name=unit_name,
+                code=content,
+                graph_context=graph_context
             )
+            
             risks = analysis.get("identified_risks", [])
             
             if risks:
                 for risk in risks:
-                    new_risk = {
+                    # Merge affected neighbors from the LLM with the core unit
+                    affected = [unit_name] + risk.get("affected_neighbors", [])
+                    
+                    all_risks.append({
                         "project_id": project_id, 
-                        "risk_type": risk.get("risk_type", "CODE_RISK"), 
+                        "risk_type": risk.get("risk_type", "ARCHITECTURAL_FLAW"), 
                         "severity": risk.get("severity", "Medium"), 
-                        "description": f"[{file_name}] {risk.get('description', 'Code issue detected')}", 
-                        "affected_units": [file_name]
-                    }
-                    supabase.table("project_risks").insert(new_risk).execute()
+                        "description": f"[{unit_name}] {risk.get('description', 'Architectural issue detected')}", 
+                        "affected_units": list(set(affected))  # Deduplicate
+                    })
                 
-                logger.info(f"⚠️ Found {len(risks)} risks in {file_name}.")
-                
-                # FIX: Send found risks to the UI log stream
+                logger.info(f"⚠️ Found {len(risks)} architectural risks in {unit_name}.")
                 if log_callback: 
-                    log_callback(f"⚠️ Found {len(risks)} risks in {file_name}.")
+                    log_callback(f"⚠️ Found {len(risks)} risks in {unit_name}.")
                     
         except Exception as e:
-            logger.error(f"❌ Failed to analyze {file_name}: {e}")
+            logger.error(f"❌ Failed to analyze impact for {unit_name}: {e}")
             if log_callback: 
-                log_callback(f"❌ Failed to analyze {file_name}")
+                log_callback(f"❌ Failed to analyze {unit_name}")
     
-    logger.info("✅ Full codebase review complete.")
+    # 4. BATCH SAVE: Insert all found risks efficiently
+    if all_risks:
+        supabase.table("project_risks").insert(all_risks).execute()
+
+    logger.info("✅ Impact-based codebase review complete.")
     if log_callback: 
-        log_callback("✅ Full codebase review complete.")
+        log_callback("✅ Impact-based review complete.")

@@ -154,11 +154,13 @@ async def run_risk_analysis_task(project_id: str, user_config: Dict = None):
 
     try:
         from src.risk_engine import calculate_predictive_risks
-        from src.code_reviewer import process_full_codebase_review
+        from src.code_reviewer import process_impact_review
         
         progress_cb("ANALYZING", "Neural Risk Engine: Initializing codebase scan...")
         await calculate_predictive_risks(project_id, user_config=user_config, log_callback=lambda msg: progress_cb("ANALYZING", msg))
-        await process_full_codebase_review(
+        
+        # Trigger the new Graph-RAG Impact Review
+        await process_impact_review(
                     project_id, 
                     LumisAgent(project_id=project_id, user_config=user_config),
                     log_callback=lambda msg: progress_cb("ANALYZING", msg)

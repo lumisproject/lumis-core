@@ -76,4 +76,12 @@
   .bento-card {
     @apply bg-card border border-black/5 dark:border-white/5 rounded-2xl overflow-hidden transition-all duration-300;
   }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }
