@@ -410,3 +410,73 @@ class LumisAgent:
         except Exception as e:
             self.logger.error(f"Code reviewer error: {e}")
             return {"identified_risks": []}
+    
+    def analyze_architectural_risks(self, unit_name: str, code: str, graph_context: str) -> dict:
+        """
+        Aggressively evaluates a specific code slice against its graph dependencies 
+        to detect architectural rot and scope creep.
+        """
+        system_prompt = """
+        You are a highly aggressive, strict Staff Software Architect.
+        Your goal is to protect the codebase from Architectural Degradation, Tight Coupling, and Breaking Changes.
+        
+        CRITICAL RULES:
+        1. Look closely at the TARGET UNIT and its GRAPH CONTEXT (what it calls, and who calls it).
+        2. AGGRESSIVELY FLAG:
+           - Tight Coupling / Bypassing Data Layers.
+           - Breaking Contracts (Changing behavior that will break the 'Callers' in the Graph).
+           - Circular Dependencies.
+           - God Objects / Unbounded Scope.
+        3. Do NOT flag minor stylistic choices. Only flag structural/architectural issues.
+        
+        JSON OUTPUT FORMAT (STRICT):
+        {
+          "analysis_trace": "Briefly track how this unit interacts with its neighbors.",
+          "identified_risks": [
+            {
+              "risk_type": "TIGHT_COUPLING" | "CONTRACT_BREAK" | "CIRCULAR_DEPENDENCY" | "ARCHITECTURAL_FLAW",
+              "severity": "High" | "Medium",
+              "description": "Precise explanation of the architectural failure mechanism.",
+              "affected_neighbors": ["neighboring_unit_name"]
+            }
+          ]
+        }
+        - If the architecture is clean, leave "identified_risks" as an empty array [].
+        """
+        
+        user_prompt = f"""
+        TARGET UNIT: {unit_name}
+        
+        GRAPH CONTEXT (Dependencies & Callers):
+        {graph_context}
+        
+        CODE TO REVIEW:
+        {code}
+        """
+        
+        try:
+            from src.services import get_llm_completion
+            
+            # Disable reasoning tokens to keep this step incredibly fast and cheap
+            review_config = self.user_config.copy()
+            review_config["reasoning_enabled"] = False 
+            
+            response_text = get_llm_completion(system_prompt, user_prompt, user_config=review_config)
+            
+            if not response_text:
+                self.logger.error("LLM returned None. Skipping architectural analysis.")
+                return {"identified_risks": []}
+            
+            clean_json = response_text.strip().replace('```json', '').replace('```', '')
+            start_idx = clean_json.find('{')
+            end_idx = clean_json.rfind('}')
+            
+            if start_idx != -1 and end_idx != -1:
+                import json
+                return json.loads(clean_json[start_idx:end_idx + 1])
+                
+            import json
+            return json.loads(clean_json)
+        except Exception as e:
+            self.logger.error(f"Architectural reviewer error: {e}")
+            return {"identified_risks": []}

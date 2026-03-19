@@ -1,14 +1,40 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShieldAlert, AlertTriangle, Bug, FileWarning, Clock, UserX, GitMerge, RefreshCw } from 'lucide-react';
+import { 
+  ShieldAlert, 
+  AlertTriangle, 
+  Bug, 
+  FileWarning, 
+  Clock, 
+  UserX, 
+  GitMerge, 
+  RefreshCw, 
+  Activity, 
+  FileCode
+} from 'lucide-react';
 import { useProjectStore } from '@/stores/useProjectStore';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 
 const severityConfig = {
-  high: { color: 'text-destructive', bg: 'bg-destructive/10', border: 'border-destructive/30', label: 'High' },
-  medium: { color: 'text-orange-500', bg: 'bg-orange-500/10', border: 'border-orange-500/30', label: 'Medium' },
-  low: { color: 'text-green-500', bg: 'bg-green-500/10', border: 'border-green-500/30', label: 'Low' },
+  high: { 
+    color: 'text-rose-500', 
+    bg: 'bg-rose-500/10', 
+    border: 'border-rose-500/20', 
+    label: 'Critical' 
+  },
+  medium: { 
+    color: 'text-orange-500', 
+    bg: 'bg-orange-500/10', 
+    border: 'border-orange-500/20', 
+    label: 'Warning' 
+  },
+  low: { 
+    color: 'text-emerald-500', 
+    bg: 'bg-emerald-500/10', 
+    border: 'border-emerald-500/20', 
+    label: 'Notice' 
+  },
 };
 
 const getRiskIcon = (riskType: string, title: string) => {
@@ -27,50 +53,83 @@ const RiskCard = ({ risk }: { risk: any }) => {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      layout
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.98 }}
       className={cn(
-        "group relative overflow-hidden rounded-2xl border bg-card p-6 transition-all hover:ring-2 hover:ring-primary/20 dark:bg-card/20",
+        "group relative flex flex-col overflow-hidden rounded-3xl border bg-card/60 backdrop-blur-sm p-7 transition-all hover:bg-card hover:shadow-xl",
         config.border
       )}
     >
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl border", config.bg, config.border)}>
-              <Icon className={cn("h-5 w-5", config.color)} />
-            </div>
-            <div>
-              <div className={cn("text-[10px] font-bold uppercase tracking-widest", config.color)}>
-                {config.label} Priority
-              </div>
-              <h3 className="text-lg font-bold tracking-tight text-foreground">{risk.title}</h3>
-            </div>
+      <div className="flex items-start gap-5">
+        <div className={cn(
+          "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border bg-card shadow-sm", 
+          config.border
+        )}>
+          <Icon className={cn("h-6 w-6", config.color)} />
+        </div>
+        
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+             <span className={cn("text-[9px] font-black uppercase tracking-widest", config.color)}>
+              {config.label}
+             </span>
+             <span className="h-1 w-1 rounded-full bg-muted-foreground/30" />
+             <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest leading-none">
+               {risk.riskType || 'Architectural Risk'}
+             </span>
           </div>
+          
+          <h3 className="text-lg font-black tracking-tight text-foreground uppercase leading-tight mb-2">
+            {risk.title}
+          </h3>
+
           {risk.file && (
-            <div className="flex items-center gap-2 rounded-lg bg-accent/50 px-3 py-1.5 text-[10px] font-mono text-muted-foreground border border-black/5 dark:border-white/5">
-              <span className="truncate max-w-[150px]">{risk.file.split('/').pop()}</span>
+            <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground/60 mb-4 bg-accent/30 w-fit px-2 py-1 rounded-md border border-black/5 dark:border-white/5">
+              <FileCode className="h-3 w-3" />
+              <span className="truncate">{risk.file}</span>
             </div>
           )}
-        </div>
 
-        {risk.file && (
-          <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/60 px-1">
-            <FileWarning className="h-3 w-3" />
-            <span className="truncate">{risk.file}</span>
-          </div>
-        )}
-
-        <div className="relative mt-2">
-          <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed">
-            <ReactMarkdown>{risk.description}</ReactMarkdown>
+          <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed font-medium">
+             <ReactMarkdown>{risk.description}</ReactMarkdown>
           </div>
         </div>
       </div>
       
-      {/* Side accent */}
-      <div className={cn("absolute left-0 top-0 h-full w-1 opacity-40", config.color.replace('text-', 'bg-'))} />
+      {/* Subtle indicator line */}
+      <div className={cn("absolute left-0 top-1/4 h-1/2 w-1 rounded-r-full", config.bg.replace('/10', ''))} />
     </motion.div>
+  );
+};
+
+const StatButton = ({ label, count, severity, isActive, onClick }: { label: string, count: number, severity: string | null, isActive: boolean, onClick: () => void }) => {
+  const config = severity ? severityConfig[severity as keyof typeof severityConfig] : { color: 'text-primary', label: 'All' };
+  
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-3 px-6 py-3 rounded-2xl border transition-all duration-200",
+        isActive 
+          ? "bg-primary border-primary text-primary-foreground shadow-lg shadow-primary/20 scale-[1.02]"
+          : "bg-card border-black/5 dark:border-white/5 text-muted-foreground hover:border-black/20 dark:hover:border-white/20 hover:text-foreground"
+      )}
+    >
+      <span className={cn(
+        "text-xs font-black uppercase tracking-widest",
+        isActive ? "text-primary-foreground" : (severity ? config.color : "text-muted-foreground")
+      )}>
+        {label}
+      </span>
+      <span className={cn(
+        "px-2 py-0.5 rounded-lg text-[10px] font-black",
+        isActive ? "bg-white/20 text-white" : "bg-accent text-foreground opacity-60"
+      )}>
+        {count}
+      </span>
+    </button>
   );
 };
 
@@ -79,31 +138,27 @@ const RiskPage = () => {
   const [sessionForceLoad, setSessionForceLoad] = React.useState(false);
   const [isAnalyzingLocal, setIsAnalyzingLocal] = React.useState(false);
   const [isFetchingResults, setIsFetchingResults] = React.useState(false);
+  const [filter, setFilter] = useState<string | null>(null);
 
   const syncState = project?.sync_state;
 
   const handleAnalyze = async () => {
     if (!project?.id) return;
-    
     setSessionForceLoad(true);
     setIsAnalyzingLocal(true);
-    
     await analyzeRisks(project.id);
-    
-    // Guarantee minimum loader time, and prevent 'old ready' state from aborting early
     setTimeout(() => {
         setSessionForceLoad(false);
     }, 2500);
   };
 
   React.useEffect(() => {
-    if (sessionForceLoad) return; // ignore any DB state until grace period ends
-    if (isFetchingResults) return; // ignore state changes while actively downloading risks
+    if (sessionForceLoad) return;
+    if (isFetchingResults) return;
     
     if (isAnalyzingLocal && syncState?.status === 'ready') {
        setIsFetchingResults(true);
        if (project?.id) {
-           // Keep loader active UNTIL the new risks are fully fetched from the backend
            fetchRisks(project.id).finally(() => {
                setIsAnalyzingLocal(false);
                setIsFetchingResults(false);
@@ -119,89 +174,144 @@ const RiskPage = () => {
     }
   }, [syncState?.status, isAnalyzingLocal, sessionForceLoad, project?.id, fetchRisks, isFetchingResults]);
 
-  // If page loads while DB is analyzing
   React.useEffect(() => {
     if (!isAnalyzingLocal && syncState?.status === 'ANALYZING') {
        setIsAnalyzingLocal(true);
     }
   }, [syncState?.status, isAnalyzingLocal]);
 
+  const stats = useMemo(() => {
+    return {
+      total: risks.length,
+      high: risks.filter(r => r.severity === 'high').length,
+      medium: risks.filter(r => r.severity === 'medium').length,
+      low: risks.filter(r => r.severity === 'low').length,
+    };
+  }, [risks]);
+
+  const filteredRisks = useMemo(() => {
+    if (!filter) return risks;
+    return risks.filter(r => r.severity === filter);
+  }, [risks, filter]);
+
   const showLoader = sessionForceLoad || isAnalyzingLocal;
 
   return (
-    <div className="space-y-8 animate-fade-in p-8">
-      <div className="flex flex-col gap-6">
-        <div className="flex items_center justify-between">
-          <div className="space-y-1">
-            <h1 className="text-3xl font-black tracking-tighter uppercase text-black dark:text-white">Predictive Risk Analysis</h1>
-            <p className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">
-              AI-driven identification of architectural vulnerabilities in <span className="text-black dark:text-white font-bold">{project?.repo_name || 'the codebase'}</span>.
+    <div className="max-w-6xl mx-auto space-y-10 p-8 pt-12 animate-fade-in pb-24">
+      {/* Simplified Header */}
+      <div className="flex flex-col gap-8">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <div className="space-y-4">
+            <h1 className="text-5xl font-black tracking-tighter uppercase leading-none text-foreground">
+              Operational Risks
+            </h1>
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground opacity-60">
+              Instance: <span className="text-foreground">{project?.repo_name || 'Active Workspace'}</span>
             </p>
           </div>
         </div>
 
-        <div className="flex">
-          {!showLoader && (
-            <button
-              onClick={handleAnalyze}
-              className="group flex items-center gap-3 px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-orange-500 text-white hover:bg-orange-600 hover:shadow-xl hover:shadow-orange-500/20 active:scale-95"
-            >
-              <ShieldAlert className="h-4 w-4 group-hover:rotate-12 transition-transform" />
-              Trigger Risks Analysis
-            </button>
-          )}
-        </div>
+        {/* Actions Bar: Filters + Rescan */}
+        {!showLoader && risks.length > 0 && (
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+             <div className="flex flex-wrap items-center gap-3">
+                <StatButton 
+                    label="All" 
+                    count={stats.total} 
+                    severity={null} 
+                    isActive={filter === null} 
+                    onClick={() => setFilter(null)} 
+                  />
+                  <StatButton 
+                    label="Critical" 
+                    count={stats.high} 
+                    severity="high" 
+                    isActive={filter === 'high'} 
+                    onClick={() => setFilter('high')} 
+                  />
+                  <StatButton 
+                    label="Warning" 
+                    count={stats.medium} 
+                    severity="medium" 
+                    isActive={filter === 'medium'} 
+                    onClick={() => setFilter('medium')} 
+                  />
+                  <StatButton 
+                    label="Notice" 
+                    count={stats.low} 
+                    severity="low" 
+                    isActive={filter === 'low'} 
+                    onClick={() => setFilter('low')} 
+                  />
+             </div>
+
+             <button
+                onClick={handleAnalyze}
+                className="group relative flex items-center gap-3 px-6 h-12 rounded-2xl border border-orange-500/30 bg-orange-500/5 text-orange-500 font-black uppercase tracking-widest text-[9px] transition-all hover:bg-orange-500 hover:text-white hover:shadow-2xl hover:shadow-orange-500/20 active:scale-95 overflow-hidden"
+              >
+                <RefreshCw className="h-3.5 w-3.5 group-hover:rotate-180 transition-transform duration-700" />
+                <span>Re-Scan Intelligence</span>
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+              </button>
+          </div>
+        )}
       </div>
 
       <AnimatePresence mode="wait">
-        {showLoader && (
+        {showLoader ? (
           <motion.div
             key="loader"
-            initial={{ opacity: 0, scale: 0.98, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -10 }}
-            className="rounded-[2rem] border border-orange-500/20 bg-orange-500/[0.03] p-12 flex items-center justify-center text-center backdrop-blur-md shadow-2xl shadow-orange-500/5"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex flex-col items-center justify-center py-32 space-y-6"
           >
-            <div className="flex flex-col items-center gap-6">
-              <div className="relative">
-                <div className="absolute inset-0 bg-orange-500/20 blur-2xl rounded-full animate-pulse" />
-                <div className="relative flex h-16 w-16 items-center justify-center rounded-3xl bg-orange-500 text-white shadow-xl shadow-orange-500/20">
-                  <RefreshCw className="h-8 w-8 animate-spin" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <h3 className="text-sm font-black uppercase tracking-[0.2em] text-orange-600">Lumis Architecture Scan</h3>
-                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest max-w-xs leading-relaxed">
-                  Lumis is currently detecting architectural risks. <br/> 
-                </p>
-              </div>
+            <div className="relative flex h-16 w-16 items-center justify-center">
+              <div className="absolute inset-0 border-4 border-primary/20 rounded-2xl" />
+              <div className="absolute inset-0 border-t-4 border-primary rounded-2xl animate-spin" />
+              <Activity className="h-6 w-6 text-primary animate-pulse" />
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Intelligence Scan</span>
+              <span className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest opacity-40 animate-pulse">Navigating code synapses...</span>
             </div>
           </motion.div>
+        ) : (
+          <motion.div 
+            layout
+            className="grid grid-cols-1 gap-4"
+          >
+            {risks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-40 rounded-[2.5rem] border border-black/5 dark:border-white/5 bg-accent/5">
+                <ShieldAlert className="h-10 w-10 text-muted-foreground/30 mb-4" />
+                <h2 className="text-xl font-black tracking-tight uppercase opacity-40">System Clear</h2>
+                <p className="text-[8px] text-muted-foreground mt-2 uppercase tracking-widest font-black opacity-30 mb-8">
+                  No operational risks detected in the current stratum.
+                </p>
+                <button
+                    onClick={handleAnalyze}
+                    className="group relative flex items-center gap-3 px-8 h-14 rounded-2xl border border-orange-500/30 bg-orange-500/5 text-orange-500 font-black uppercase tracking-widest text-[10px] transition-all hover:bg-orange-500 hover:text-white hover:shadow-2xl hover:shadow-orange-500/20 active:scale-95 overflow-hidden"
+                >
+                    <RefreshCw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-700" />
+                    <span>Initialize Intelligence Scan</span>
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-6">
+                <AnimatePresence mode="popLayout">
+                  {filteredRisks.map((risk) => (
+                    <RiskCard key={risk.id} risk={risk} />
+                  ))}
+                </AnimatePresence>
+              </div>
+            )}
+          </motion.div>
         )}
-
       </AnimatePresence>
-
-      {!showLoader && (
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-          {risks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 rounded-3xl border border-dashed border-black/10 dark:border-white/10 opacity-50">
-              <ShieldAlert className="h-12 w-12 text-muted-foreground mb-4" />
-              <h2 className="text-xl font-bold font-black tracking-tight uppercase">No active threats detected</h2>
-              <p className="text-[10px] text-muted-foreground mt-2 text-center max-w-md uppercase tracking-widest font-bold">
-                All code paths are currently within optimal operational parameters.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {risks.map((risk) => (
-                <RiskCard key={risk.id} risk={risk} />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 };
 
 export default RiskPage;
+
