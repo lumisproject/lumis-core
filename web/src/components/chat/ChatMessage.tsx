@@ -17,6 +17,58 @@ interface ChatMessageProps {
 
 const ChatMessage = ({ role, content, isThinking, thoughts }: ChatMessageProps) => {
     const [showThoughts, setShowThoughts] = React.useState(true);
+    const [displayedContent, setDisplayedContent] = React.useState(content);
+    const [isTyping, setIsTyping] = React.useState(false);
+    const queueRef = React.useRef("");
+    const timerRef = React.useRef<any>(null);
+
+    // Initial content Sync
+    React.useEffect(() => {
+        if (role === 'user') {
+            setDisplayedContent(content);
+            return;
+        }
+
+        // For Lumis messages, we manage the stream
+        if (content.length > (displayedContent.length + queueRef.current.length)) {
+            const newPart = content.slice(displayedContent.length + queueRef.current.length);
+            queueRef.current += newPart;
+            if (!isTyping) {
+                processQueue();
+            }
+        }
+        
+        // If message is finished, make sure we show everything eventually
+        if (!isThinking && queueRef.current.length === 0) {
+            setDisplayedContent(content);
+        }
+    }, [content, isThinking]);
+
+    const processQueue = () => {
+        if (queueRef.current.length === 0) {
+            setIsTyping(false);
+            return;
+        }
+
+        setIsTyping(true);
+        
+        // Adaptive speed: faster if queue is long
+        const baseSpeed = 20;
+        const speed = Math.max(2, baseSpeed - Math.floor(queueRef.current.length / 5));
+        
+        timerRef.current = setTimeout(() => {
+            const char = queueRef.current[0];
+            queueRef.current = queueRef.current.slice(1);
+            setDisplayedContent(prev => prev + char);
+            processQueue();
+        }, speed);
+    };
+
+    React.useEffect(() => {
+        return () => {
+            if (timerRef.current) clearTimeout(timerRef.current);
+        };
+    }, []);
 
     if (role === 'user') {
         return (
@@ -54,7 +106,9 @@ const ChatMessage = ({ role, content, isThinking, thoughts }: ChatMessageProps) 
     }
 
     // Append a blinking cursor if it's currently thinking/generating to make the stream intentional
-    const displayContent = content + (isThinking && content ? ' ▍' : '');
+    // Only show cursor if we are typing or if thinking and at the end of content
+    const showCursor = isTyping || (isThinking && !isTyping);
+    const displayContent = displayedContent;
 
     return (
         <motion.div
@@ -113,7 +167,7 @@ const ChatMessage = ({ role, content, isThinking, thoughts }: ChatMessageProps) 
                                 {/* Subtle internal gradient */}
                                 <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent pointer-events-none" />
                                 
-                                <div className="relative z-10">
+                                <div className="relative z-10 flex flex-wrap items-end">
                                     <ReactMarkdown
                                         remarkPlugins={[remarkGfm]}
                                         rehypePlugins={[rehypeRaw]}
@@ -148,7 +202,7 @@ const ChatMessage = ({ role, content, isThinking, thoughts }: ChatMessageProps) 
                                                 </code>
                                             );
                                         },
-                                        p: ({ children }) => <p className="mb-6 last:mb-0 leading-[1.8] tracking-wide text-foreground/90">{children}</p>,
+                                        p: ({ children }) => <span className="mb-6 last:mb-0 leading-[1.8] tracking-wide text-foreground/90 block">{children}</span>,
                                         ul: ({ children }) => <ul className="mb-6 space-y-3 list-none pl-0">{children}</ul>,
                                         ol: ({ children }) => <ol className="mb-6 space-y-3 list-decimal pl-5 font-mono text-sm marker:text-primary font-bold">{children}</ol>,
                                         li: ({ children }) => (
@@ -176,6 +230,13 @@ const ChatMessage = ({ role, content, isThinking, thoughts }: ChatMessageProps) 
                                     >
                                         {displayContent}
                                     </ReactMarkdown>
+                                    {showCursor && (
+                                        <motion.span
+                                            animate={{ opacity: [0, 1, 0] }}
+                                            transition={{ repeat: Infinity, duration: 0.8 }}
+                                            className="inline-block w-2.5 h-5 bg-primary/80 ml-1.5 self-center rounded-sm shadow-[0_0_12px_theme(colors.primary.DEFAULT)]"
+                                        />
+                                    )}
                                 </div>
                             </div>
                         ) : null}

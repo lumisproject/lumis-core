@@ -249,7 +249,7 @@ const Chat = () => {
                     </div>
                 </div>
                 <p className="mt-3 text-center text-[10px] font-medium text-muted-foreground opacity-90">
-                    LLM models are provided by third-party providers. Lumis is not responsible for the accuracy of the responses.
+                    Make sure to provide a good LLM model for even better accuracy.
                 </p>
             </div>
         </div>

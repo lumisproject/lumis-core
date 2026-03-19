@@ -61,7 +61,7 @@ const IntelligencePanel = ({ children, className, title, icon: Icon, description
                     {children}
                 </div>
             </div>
-            
+
             {/* Background flourish */}
             <div className={cn(
                 "absolute -right-16 -top-16 h-64 w-64 rounded-full blur-[100px] opacity-20 transition-opacity group-hover:opacity-40",
@@ -151,22 +151,22 @@ const Dashboard = () => {
             <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
                 <div className="absolute -top-[20%] -right-[10%] w-[60%] h-[60%] bg-primary/5 blur-[150px] rounded-full animate-pulse" />
                 <div className="absolute -bottom-[20%] -left-[10%] w-[50%] h-[50%] bg-accent/20 blur-[150px] rounded-full" />
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full opacity-[0.03] dark:opacity-[0.05]" 
-                     style={{ backgroundImage: 'radial-gradient(circle, #888 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full opacity-[0.03] dark:opacity-[0.05]"
+                    style={{ backgroundImage: 'radial-gradient(circle, #888 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
             </div>
 
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2 relative z-10">
                 <div className="space-y-3">
                     <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.4em] text-primary">
-                         <Zap className="h-4 w-4" />
-                         Lumis AI - version 1.0
+                        <Zap className="h-4 w-4" />
+                        Lumis AI - version 1.0
                     </div>
                     <h1 className="text-5xl font-black tracking-tighter uppercase leading-none">LUMIS Dashboard</h1>
                     <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                         Active Instance: <span className="text-foreground font-black uppercase tracking-widest bg-accent px-2 py-0.5 rounded-md border border-black/5 dark:border-white/5">{getRepoName()}</span>
                     </p>
                 </div>
-                
+
                 <div className="flex flex-col md:flex-row items-center gap-3">
                     {isLimitReached && (
                         <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[9px] font-black uppercase tracking-widest animate-in fade-in slide-in-from-right-4">
@@ -175,13 +175,13 @@ const Dashboard = () => {
                             <Link to="/app/billing" className="ml-2 underline hover:text-orange-400">Upgrade</Link>
                         </div>
                     )}
-                    <button 
+                    <button
                         onClick={() => !isLimitReached && navigate('/app/new-project')}
                         disabled={isLimitReached}
                         className={cn(
                             "h-14 px-8 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all flex items-center gap-2 shadow-2xl",
-                            isLimitReached 
-                                ? "bg-muted text-muted-foreground cursor-not-allowed opacity-50" 
+                            isLimitReached
+                                ? "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
                                 : "bg-primary text-primary-foreground shadow-primary/20 hover:scale-[1.02] active:scale-[0.98]"
                         )}
                     >
@@ -192,7 +192,7 @@ const Dashboard = () => {
             </header>
 
             {!useProjectStore.getState().isUpToDate && project && (
-                <motion.div 
+                <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     className="group relative flex flex-col md:flex-row items-center justify-between gap-6 p-8 rounded-[3rem] bg-orange-500/[0.03] backdrop-blur-xl border border-orange-500/20 shadow-2xl shadow-orange-500/10"
@@ -206,7 +206,7 @@ const Dashboard = () => {
                             <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mt-1">Updates detected in the master branch. Current map is invalid.</p>
                         </div>
                     </div>
-                    <button 
+                    <button
                         onClick={async () => {
                             setSyncing(true);
                             try { await syncProject(project.id); } finally { setSyncing(false); }
@@ -283,9 +283,9 @@ const Dashboard = () => {
                     >
                         <div className="space-y-8">
                             <div className="p-6 rounded-[2.5rem] bg-accent/20 border border-black/5 dark:border-white/5">
-                                <p className="text-xs text-muted-foreground font-medium leading-relaxed opacity-70">
+                                <p className="text-xs text-muted-foreground font-medium leading-relaxed opacity-90">
                                     Bridge your repository and the Lumis Intelligence Layer. Every push event triggers an instant neural re-scan.
-                                    <br/><span className="text-[9px] font-black uppercase text-orange-500 mt-2 block tracking-widest opacity-80">System Connectivity Required for full sync.</span>
+                                    <br /><span className="text-[10px] font-bold uppercase text-yellow-500 mt-2 block tracking-wider">Make sure Lumis is connected to sync your project automatically.</span>
                                 </p>
                             </div>
 
@@ -368,7 +368,7 @@ const Dashboard = () => {
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <div className="grid grid-cols-1 gap-4">
                                 <div className="p-6 rounded-[2.2rem] bg-accent/20 border border-black/5 dark:border-white/5 flex items-center justify-between">
                                     <div className="space-y-1">
@@ -389,7 +389,7 @@ const Dashboard = () => {
                                         </div>
                                     )}
                                 </div>
-                                <button 
+                                <button
                                     onClick={async () => {
                                         if (!project) return;
                                         setSyncing(true);
@@ -415,18 +415,18 @@ const Dashboard = () => {
                                 Neural Query
                             </div>
                             <h4 className="text-4xl font-black tracking-tighter uppercase leading-[0.9] text-primary-foreground">
-                                Initiate <br/> Brain Access
+                                Initiate <br /> Brain Access
                             </h4>
                             <Link to="/app/chat" className="inline-flex h-14 px-10 rounded-2xl bg-primary-foreground text-primary text-[10px] font-black uppercase tracking-[0.2em] items-center gap-3 hover:gap-5 transition-all shadow-2xl">
                                 System Chat
                                 <ArrowRight className="h-4 w-4" />
                             </Link>
                         </div>
-                        
+
                         {/* Abstract Background flourishes */}
                         <div className="absolute top-0 right-0 w-full h-full opacity-10 pointer-events-none transition-transform group-hover:scale-110 duration-1000">
-                             <Binary className="absolute -top-10 -right-10 h-64 w-64 rotate-12" />
-                             <Binary className="absolute -bottom-20 -left-10 h-48 w-48 -rotate-12 opacity-50" />
+                            <Binary className="absolute -top-10 -right-10 h-64 w-64 rotate-12" />
+                            <Binary className="absolute -bottom-20 -left-10 h-48 w-48 -rotate-12 opacity-50" />
                         </div>
                         <div className="absolute -right-10 -bottom-10 h-48 w-48 bg-white/20 blur-[80px] rounded-full" />
                     </div>

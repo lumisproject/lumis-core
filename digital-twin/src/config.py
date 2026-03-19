@@ -11,6 +11,11 @@ class Config:
     DEFAULT_LLM_MODEL = os.getenv("MODEL", "stepfun/step-3.5-flash:free")
     DEFAULT_LLM_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
     
+    DEFAULT_CHAT_MODEL = os.getenv("DEFAULT_CHAT_MODEL", "stepfun/step-3.5-flash:free")
+    DEFAULT_RISK_MODEL = os.getenv("DEFAULT_RISK_MODEL", "openai/gpt-oss-120b")
+    OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+    
     # Embedding settings
     EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 
