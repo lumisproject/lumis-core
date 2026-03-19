@@ -344,9 +344,8 @@ const Landing = () => {
                         &copy; {new Date().getFullYear()} NovaGate Solutions Aps. All rights reserved.
                     </p>
                     <div className="flex gap-6 text-[13px] font-bold text-neutral-500">
-                        <Link to="#" className="hover:text-orange-500 dark:hover:text-yellow-400 transition-colors">Twitter</Link>
-                        <Link to="#" className="hover:text-orange-500 dark:hover:text-yellow-400 transition-colors">GitHub</Link>
-                        <Link to="#" className="hover:text-orange-500 dark:hover:text-yellow-400 transition-colors">System Status</Link>
+                        <Link to="https://www.linkedin.com/company/novagate-solutions/" className="hover:text-orange-500 dark:hover:text-yellow-400 transition-colors">LinkedIn</Link>
+                        <Link to="https://www.novagate-solutions.com" className="hover:text-orange-500 dark:hover:text-yellow-400 transition-colors">NovaGate Solutions Aps</Link>
                     </div>
                 </div>
             </footer>

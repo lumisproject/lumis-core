@@ -108,6 +108,7 @@ Symbol Mappings:
             )
             
             # 5. Execute
+            user_config = {**(user_config or {}), "feature_mode": "chat"}
             raw_response = get_llm_completion(system_prompt, user_prompt, user_config=user_config)
             
             if not raw_response:
@@ -308,6 +309,7 @@ Symbol Mappings:
             )
             
             from src.services import stream_llm_completion
+            user_config = {**(user_config or {}), "feature_mode": "chat"}
             async for chunk in stream_llm_completion(system_prompt, user_prompt, user_config=user_config):
                 yield chunk
             

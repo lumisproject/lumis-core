@@ -60,11 +60,12 @@ class LumisAgent:
 
         for step in range(self.max_steps):
             # Still use the synchronous completion here since we need the FULL JSON object to parse it before moving forward
+            user_config = {**(self.user_config or {}), "feature_mode": "chat"}
             response_text = await asyncio.to_thread(
                 get_llm_completion,
                 self._get_system_prompt(), 
                 self._build_step_prompt(processed_query, scratchpad),
-                user_config=self.user_config
+                user_config=user_config
             )
             
             data = self._parse_response(response_text, fallback_query=user_query)
@@ -295,7 +296,8 @@ class LumisAgent:
         """
         
         try:
-            response_text = get_llm_completion(system_prompt, prompt, user_config=self.user_config)
+            user_config = {**(self.user_config or {}), "feature_mode": "chat"}
+            response_text = get_llm_completion(system_prompt, prompt, user_config=user_config)
             # Robustly extract JSON block
             clean_json = response_text.strip().replace('```json', '').replace('```', '')
             start_idx = clean_json.find('{')
@@ -332,7 +334,8 @@ class LumisAgent:
         """
 
         try:
-            response = get_llm_completion(system_prompt, user_prompt, user_config=self.user_config)
+            user_config = {**(self.user_config or {}), "feature_mode": "chat"}
+            response = get_llm_completion(system_prompt, user_prompt, user_config=user_config)
             match_id = response.strip().upper()
             
             if "NONE" in match_id: return None
@@ -391,8 +394,9 @@ class LumisAgent:
         try:
             from src.services import get_llm_completion
              # disable reasoning
-            user_config = self.user_config 
+            user_config = self.user_config.copy()
             user_config["reasoning_enabled"] = False
+            user_config["feature_mode"] = "risk"
             response_text = get_llm_completion(system_prompt, user_prompt, user_config=user_config)
             
             if not response_text:
@@ -460,6 +464,7 @@ class LumisAgent:
             # Disable reasoning tokens to keep this step incredibly fast and cheap
             review_config = self.user_config.copy()
             review_config["reasoning_enabled"] = False 
+            review_config["feature_mode"] = "risk"
             
             response_text = get_llm_completion(system_prompt, user_prompt, user_config=review_config)
             

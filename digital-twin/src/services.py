@@ -130,17 +130,33 @@ def anthropic_chat(system_prompt, user_prompt, api_key, model, temperature, reas
 
 def get_llm_completion(system_prompt, user_prompt, user_config=None):
     try:
-        reasoning_enabled = user_config.get("reasoning_enabled", False) if user_config else False
-        use_default = user_config.get("use_default", False) if user_config else False
+        user_config = user_config or {}
+        reasoning_enabled = user_config.get("reasoning_enabled", False)
+        feature_mode = user_config.get("feature_mode", "chat")
+        
+        # Check if user has provided their own full config
+        has_custom_config = all(user_config.get(k) for k in ["provider", "model", "api_key"])
 
-        provider = Config.DEFAULT_LLM_PROVIDER if use_default else (user_config.get("provider") or Config.DEFAULT_LLM_PROVIDER)
-        api_key = Config.DEFAULT_LLM_API_KEY if use_default else (user_config.get("api_key") or Config.DEFAULT_LLM_API_KEY)
-        model_name = Config.DEFAULT_LLM_MODEL if use_default else (user_config.get("model") or Config.DEFAULT_LLM_MODEL)
-        reasoning = {"reasoning": {"enabled": True}} if reasoning_enabled else None
+        if not has_custom_config:
+            # Default mode logic
+            if feature_mode == "risk":
+                provider = "groq"
+                model_name = Config.DEFAULT_RISK_MODEL
+                api_key = Config.GROQ_API_KEY
+            else:
+                provider = "openrouter"
+                model_name = Config.DEFAULT_CHAT_MODEL
+                api_key = Config.OPENROUTER_API_KEY
+        else:
+            # User provided config
+            provider = user_config.get("provider")
+            model_name = user_config.get("model")
+            api_key = user_config.get("api_key")
+            # Only decrypt if it's not one of our default keys
+            if api_key not in [Config.OPENROUTER_API_KEY, Config.GROQ_API_KEY]:
+                api_key = decrypt_value(api_key)
+        
         temperature = 0.3
-
-        if not use_default and user_config and user_config.get("api_key") and user_config.get("api_key") != Config.DEFAULT_LLM_API_KEY:
-            api_key = decrypt_value(api_key)
 
         print(f"Using LLM Provider: {provider}, Model: {model_name}, Reasoning: {reasoning_enabled}")
         
@@ -169,18 +185,34 @@ def get_llm_completion(system_prompt, user_prompt, user_config=None):
 async def stream_llm_completion(system_prompt, user_prompt, user_config=None):
     """Asynchronous generator that streams LLM response tokens."""
     try:
-        reasoning_enabled = user_config.get("reasoning_enabled", False) if user_config else False
-        use_default = user_config.get("use_default", False) if user_config else False
-        
-        provider = Config.DEFAULT_LLM_PROVIDER if use_default else (user_config.get("provider") or Config.DEFAULT_LLM_PROVIDER)
-        api_key = Config.DEFAULT_LLM_API_KEY if use_default else (user_config.get("api_key") or Config.DEFAULT_LLM_API_KEY)
-        model_name = Config.DEFAULT_LLM_MODEL if use_default else (user_config.get("model") or Config.DEFAULT_LLM_MODEL)
-        reasoning = {"reasoning": {"enabled": True}} if reasoning_enabled else None
-        temperature = 0.3
+        user_config = user_config or {}
+        reasoning_enabled = user_config.get("reasoning_enabled", False)
+        feature_mode = user_config.get("feature_mode", "chat")
 
-        if not use_default and user_config and user_config.get("api_key") and user_config.get("api_key") != Config.DEFAULT_LLM_API_KEY:
-            from src.cryptography import decrypt_value
-            api_key = decrypt_value(api_key)
+        # Check if user has provided their own full config
+        has_custom_config = all(user_config.get(k) for k in ["provider", "model", "api_key"])
+
+        if not has_custom_config:
+            # Default mode logic
+            if feature_mode == "risk":
+                provider = "groq"
+                model_name = Config.DEFAULT_RISK_MODEL
+                api_key = Config.GROQ_API_KEY
+            else:
+                provider = "openrouter"
+                model_name = Config.DEFAULT_CHAT_MODEL
+                api_key = Config.OPENROUTER_API_KEY
+        else:
+            # User provided config
+            provider = user_config.get("provider")
+            model_name = user_config.get("model")
+            api_key = user_config.get("api_key")
+            # Only decrypt if it's not one of our default keys
+            if api_key not in [Config.OPENROUTER_API_KEY, Config.GROQ_API_KEY]:
+                from src.cryptography import decrypt_value
+                api_key = decrypt_value(api_key)
+        
+        temperature = 0.3
 
         print(f"[STREAM] Using LLM Provider: {provider}, Model: {model_name}")
         
