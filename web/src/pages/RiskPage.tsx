@@ -1,40 +1,17 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  ShieldAlert, 
-  AlertTriangle, 
-  Bug, 
-  FileWarning, 
-  Clock, 
-  UserX, 
-  GitMerge, 
-  RefreshCw, 
-  Activity, 
-  FileCode
+  ShieldAlert, AlertTriangle, Bug, FileWarning, Clock, UserX, 
+  GitMerge, RefreshCw, Activity, FileCode
 } from 'lucide-react';
 import { useProjectStore } from '@/stores/useProjectStore';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 
 const severityConfig = {
-  high: { 
-    color: 'text-rose-500', 
-    bg: 'bg-rose-500/10', 
-    border: 'border-rose-500/20', 
-    label: 'Critical' 
-  },
-  medium: { 
-    color: 'text-orange-500', 
-    bg: 'bg-orange-500/10', 
-    border: 'border-orange-500/20', 
-    label: 'Warning' 
-  },
-  low: { 
-    color: 'text-emerald-500', 
-    bg: 'bg-emerald-500/10', 
-    border: 'border-emerald-500/20', 
-    label: 'Notice' 
-  },
+  high: { color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'border-rose-500/20', label: 'Critical' },
+  medium: { color: 'text-orange-500', bg: 'bg-orange-500/10', border: 'border-orange-500/20', label: 'Warning' },
+  low: { color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', label: 'Notice' },
 };
 
 const getRiskIcon = (riskType: string, title: string) => {
@@ -63,42 +40,27 @@ const RiskCard = ({ risk }: { risk: any }) => {
       )}
     >
       <div className="flex items-start gap-5">
-        <div className={cn(
-          "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border bg-card shadow-sm", 
-          config.border
-        )}>
+        <div className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border bg-card shadow-sm", config.border)}>
           <Icon className={cn("h-6 w-6", config.color)} />
         </div>
-        
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-             <span className={cn("text-[9px] font-black uppercase tracking-widest", config.color)}>
-              {config.label}
-             </span>
+             <span className={cn("text-[9px] font-black uppercase tracking-widest", config.color)}>{config.label}</span>
              <span className="h-1 w-1 rounded-full bg-muted-foreground/30" />
-             <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest leading-none">
-               {risk.riskType || 'Architectural Risk'}
-             </span>
+             <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest leading-none">{risk.riskType || 'Architectural Risk'}</span>
           </div>
-          
-          <h3 className="text-lg font-black tracking-tight text-foreground uppercase leading-tight mb-2">
-            {risk.title}
-          </h3>
-
+          <h3 className="text-lg font-black tracking-tight text-foreground uppercase leading-tight mb-2">{risk.title}</h3>
           {risk.file && (
             <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground/60 mb-4 bg-accent/30 w-fit px-2 py-1 rounded-md border border-black/5 dark:border-white/5">
               <FileCode className="h-3 w-3" />
               <span className="truncate">{risk.file}</span>
             </div>
           )}
-
           <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed font-medium">
              <ReactMarkdown>{risk.description}</ReactMarkdown>
           </div>
         </div>
       </div>
-      
-      {/* Subtle indicator line */}
       <div className={cn("absolute left-0 top-1/4 h-1/2 w-1 rounded-r-full", config.bg.replace('/10', ''))} />
     </motion.div>
   );
@@ -106,7 +68,6 @@ const RiskCard = ({ risk }: { risk: any }) => {
 
 const StatButton = ({ label, count, severity, isActive, onClick }: { label: string, count: number, severity: string | null, isActive: boolean, onClick: () => void }) => {
   const config = severity ? severityConfig[severity as keyof typeof severityConfig] : { color: 'text-primary', label: 'All' };
-  
   return (
     <button
       onClick={onClick}
@@ -117,88 +78,62 @@ const StatButton = ({ label, count, severity, isActive, onClick }: { label: stri
           : "bg-card border-black/5 dark:border-white/5 text-muted-foreground hover:border-black/20 dark:hover:border-white/20 hover:text-foreground"
       )}
     >
-      <span className={cn(
-        "text-xs font-black uppercase tracking-widest",
-        isActive ? "text-primary-foreground" : (severity ? config.color : "text-muted-foreground")
-      )}>
-        {label}
-      </span>
-      <span className={cn(
-        "px-2 py-0.5 rounded-lg text-[10px] font-black",
-        isActive ? "bg-white/20 text-white" : "bg-accent text-foreground opacity-60"
-      )}>
-        {count}
-      </span>
+      <span className={cn("text-xs font-black uppercase tracking-widest", isActive ? "text-primary-foreground" : (severity ? config.color : "text-muted-foreground"))}>{label}</span>
+      <span className={cn("px-2 py-0.5 rounded-lg text-[10px] font-black", isActive ? "bg-white/20 text-white" : "bg-accent text-foreground opacity-60")}>{count}</span>
     </button>
   );
 };
 
 const RiskPage = () => {
-  const { risks, project, analyzeRisks, fetchRisks } = useProjectStore();
-  const [sessionForceLoad, setSessionForceLoad] = React.useState(false);
-  const [isAnalyzingLocal, setIsAnalyzingLocal] = React.useState(false);
-  const [isFetchingResults, setIsFetchingResults] = React.useState(false);
+  const { risks, project, analyzeRisks, pollIngestionStatus } = useProjectStore();
   const [filter, setFilter] = useState<string | null>(null);
 
+  // Read the status strictly from the global store
   const syncState = project?.sync_state;
+  const activeStates = ['ANALYZING', 'PROGRESSING', 'syncing', 'processing'];
+  const isScanning = activeStates.includes(syncState?.status || '');
+
+  // THE FIX: Automatically poll Redis when the component mounts and while scanning
+  // THE FIX: Automatically poll Redis when the component mounts and while scanning
+  useEffect(() => {
+    if (!project?.id) return;
+
+    // 1. Instantly check Redis status when you navigate back to this page
+    pollIngestionStatus(project.id);
+
+    // 2. If it's scanning, ping Redis every 3 seconds to update the UI
+    let interval: ReturnType<typeof setInterval>;
+    
+    if (isScanning) {
+      interval = setInterval(() => {
+        pollIngestionStatus(project.id);
+      }, 3000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [project?.id, isScanning, pollIngestionStatus]);
 
   const handleAnalyze = async () => {
     if (!project?.id) return;
-    setSessionForceLoad(true);
-    setIsAnalyzingLocal(true);
     await analyzeRisks(project.id);
-    setTimeout(() => {
-        setSessionForceLoad(false);
-    }, 2500);
   };
 
-  React.useEffect(() => {
-    if (sessionForceLoad) return;
-    if (isFetchingResults) return;
-    
-    if (isAnalyzingLocal && syncState?.status === 'ready') {
-       setIsFetchingResults(true);
-       if (project?.id) {
-           fetchRisks(project.id).finally(() => {
-               setIsAnalyzingLocal(false);
-               setIsFetchingResults(false);
-           });
-       } else {
-           setIsAnalyzingLocal(false);
-           setIsFetchingResults(false);
-       }
-    }
-    
-    if (isAnalyzingLocal && syncState?.status === 'error') {
-       setIsAnalyzingLocal(false);
-    }
-  }, [syncState?.status, isAnalyzingLocal, sessionForceLoad, project?.id, fetchRisks, isFetchingResults]);
-
-  React.useEffect(() => {
-    if (!isAnalyzingLocal && syncState?.status === 'ANALYZING') {
-       setIsAnalyzingLocal(true);
-    }
-  }, [syncState?.status, isAnalyzingLocal]);
-
-  const stats = useMemo(() => {
-    return {
-      total: risks.length,
-      high: risks.filter(r => r.severity === 'high').length,
-      medium: risks.filter(r => r.severity === 'medium').length,
-      low: risks.filter(r => r.severity === 'low').length,
-    };
-  }, [risks]);
+  const stats = useMemo(() => ({
+    total: risks.length,
+    high: risks.filter(r => r.severity === 'high').length,
+    medium: risks.filter(r => r.severity === 'medium').length,
+    low: risks.filter(r => r.severity === 'low').length,
+  }), [risks]);
 
   const filteredRisks = useMemo(() => {
     if (!filter) return risks;
     return risks.filter(r => r.severity === filter);
   }, [risks, filter]);
 
-  const showLoader = sessionForceLoad || isAnalyzingLocal;
-
   return (
     <div className="max-w-6xl mx-auto space-y-10 p-8 pt-12 animate-fade-in pb-24">
-      {/* Simplified Header */}
       <div className="flex flex-col gap-8">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div className="space-y-4">
@@ -211,40 +146,14 @@ const RiskPage = () => {
           </div>
         </div>
 
-        {/* Actions Bar: Filters + Rescan */}
-        {!showLoader && risks.length > 0 && (
+        {!isScanning && risks.length > 0 && (
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
              <div className="flex flex-wrap items-center gap-3">
-                <StatButton 
-                    label="All" 
-                    count={stats.total} 
-                    severity={null} 
-                    isActive={filter === null} 
-                    onClick={() => setFilter(null)} 
-                  />
-                  <StatButton 
-                    label="Critical" 
-                    count={stats.high} 
-                    severity="high" 
-                    isActive={filter === 'high'} 
-                    onClick={() => setFilter('high')} 
-                  />
-                  <StatButton 
-                    label="Warning" 
-                    count={stats.medium} 
-                    severity="medium" 
-                    isActive={filter === 'medium'} 
-                    onClick={() => setFilter('medium')} 
-                  />
-                  <StatButton 
-                    label="Notice" 
-                    count={stats.low} 
-                    severity="low" 
-                    isActive={filter === 'low'} 
-                    onClick={() => setFilter('low')} 
-                  />
+                <StatButton label="All" count={stats.total} severity={null} isActive={filter === null} onClick={() => setFilter(null)} />
+                <StatButton label="Critical" count={stats.high} severity="high" isActive={filter === 'high'} onClick={() => setFilter('high')} />
+                <StatButton label="Warning" count={stats.medium} severity="medium" isActive={filter === 'medium'} onClick={() => setFilter('medium')} />
+                <StatButton label="Notice" count={stats.low} severity="low" isActive={filter === 'low'} onClick={() => setFilter('low')} />
              </div>
-
              <button
                 onClick={handleAnalyze}
                 className="group relative flex items-center gap-3 px-6 h-12 rounded-2xl border border-orange-500/30 bg-orange-500/5 text-orange-500 font-black uppercase tracking-widest text-[9px] transition-all hover:bg-orange-500 hover:text-white hover:shadow-2xl hover:shadow-orange-500/20 active:scale-95 overflow-hidden"
@@ -258,7 +167,7 @@ const RiskPage = () => {
       </div>
 
       <AnimatePresence mode="wait">
-        {showLoader ? (
+        {isScanning ? (
           <motion.div
             key="loader"
             initial={{ opacity: 0 }}
@@ -277,10 +186,7 @@ const RiskPage = () => {
             </div>
           </motion.div>
         ) : (
-          <motion.div 
-            layout
-            className="grid grid-cols-1 gap-4"
-          >
+          <motion.div layout className="grid grid-cols-1 gap-4">
             {risks.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-40 rounded-[2.5rem] border border-black/5 dark:border-white/5 bg-accent/5">
                 <ShieldAlert className="h-10 w-10 text-muted-foreground/30 mb-4" />
@@ -314,4 +220,3 @@ const RiskPage = () => {
 };
 
 export default RiskPage;
-
