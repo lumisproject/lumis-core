@@ -30,6 +30,8 @@ python-multipart
 # Database & HTTP
 supabase
 requests
+celery
+redis
 
 # Math/Utilities
 numpy

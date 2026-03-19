@@ -228,14 +228,56 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         }
     },
 
+    // Replace these two functions inside your useProjectStore.ts
+
     pollIngestionStatus: async (projectId: string) => {
         try {
             const res = await fetch(`${API_BASE}/api/ingest/status/${projectId}`);
             const data = await res.json();
             set({ ingestionStatus: data });
+            
+            // NEW: Sync the Redis state to the global project object
+            const state = get();
+            if (state.project?.id === projectId) {
+                const oldStatus = state.project.sync_state?.status;
+                set({ project: { ...state.project, sync_state: data } });
+                
+                // If the background worker just finished, auto-fetch the new risks!
+                if (data.status === 'ready' && oldStatus && ['ANALYZING', 'PROGRESSING', 'syncing', 'processing'].includes(oldStatus)) {
+                    state.fetchRisks(projectId);
+                    state.fetchProjectStats(projectId);
+                }
+            }
             return data;
         } catch {
             return null;
+        }
+    },
+
+    analyzeRisks: async (projectId: string) => {
+        const current = get().project;
+        if (current && current.id === projectId) {
+            set({ 
+                project: { 
+                    ...current, 
+                    sync_state: { 
+                        status: 'ANALYZING', 
+                        step: 'ANALYZING', 
+                        logs: ['Queuing risk analysis task...'] 
+                    } 
+                } 
+            });
+        }
+        
+        try {
+            const res = await fetch(`${API_BASE}/api/projects/${projectId}/analyze-risks`, {
+                method: 'POST',
+            });
+            if (!res.ok) throw new Error("Failed to start analysis");
+        } catch (e) {
+            console.error("Failed to analyze risks", e);
+            // If it fails, fetch the real state to revert the loader
+            get().pollIngestionStatus(projectId);
         }
     },
 
@@ -333,17 +375,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             });
         } catch (e) {
             console.error("Failed to check project sync:", e);
-        }
-    },
-
-    analyzeRisks: async (projectId: string) => {
-        try {
-            const res = await fetch(`${API_BASE}/api/projects/${projectId}/analyze-risks`, {
-                method: 'POST',
-            });
-            if (!res.ok) throw new Error("Failed to start analysis");
-        } catch (e) {
-            console.error("Failed to analyze risks", e);
         }
     },
 

@@ -16,11 +16,20 @@ interface ChatMessageProps {
 }
 
 const ChatMessage = ({ role, content, isThinking, thoughts }: ChatMessageProps) => {
-    const [showThoughts, setShowThoughts] = React.useState(true);
+    const [showThoughts, setShowThoughts] = React.useState(isThinking ?? false);
     const [displayedContent, setDisplayedContent] = React.useState(content);
     const [isTyping, setIsTyping] = React.useState(false);
     const queueRef = React.useRef("");
     const timerRef = React.useRef<any>(null);
+
+    // Auto-collapse thoughts when done thinking
+    React.useEffect(() => {
+        if (!isThinking) {
+            setShowThoughts(false);
+        } else {
+            setShowThoughts(true);
+        }
+    }, [isThinking]);
 
     // Initial content Sync
     React.useEffect(() => {
@@ -52,14 +61,17 @@ const ChatMessage = ({ role, content, isThinking, thoughts }: ChatMessageProps) 
 
         setIsTyping(true);
         
-        // Adaptive speed: faster if queue is long
-        const baseSpeed = 20;
-        const speed = Math.max(2, baseSpeed - Math.floor(queueRef.current.length / 5));
+        // Faster adaptive speed
+        const baseSpeed = 10;
+        const speed = Math.max(1, baseSpeed - Math.floor(queueRef.current.length / 20));
+        
+        // Process multiple characters if the queue is backing up to keep it "snappy"
+        const chunkSize = Math.max(1, Math.floor(queueRef.current.length / 100) + 1);
         
         timerRef.current = setTimeout(() => {
-            const char = queueRef.current[0];
-            queueRef.current = queueRef.current.slice(1);
-            setDisplayedContent(prev => prev + char);
+            const chars = queueRef.current.slice(0, chunkSize);
+            queueRef.current = queueRef.current.slice(chunkSize);
+            setDisplayedContent(prev => prev + chars);
             processQueue();
         }, speed);
     };
