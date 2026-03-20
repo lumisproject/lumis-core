@@ -68,6 +68,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     loadSession: async (sessionId) => {
         set({ activeSessionId: sessionId, messages: [] });
         try {
+            const { tier } = (await import('./useBillingStore')).useBillingStore.getState();
             const { data: { session } } = await supabase.auth.getSession();
             const res = await fetch(`${API_BASE}/api/chat/messages/${sessionId}`, {
                 headers: { 'Authorization': `Bearer ${session?.access_token}` }
@@ -79,10 +80,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     role: m.role === 'assistant' ? 'lumis' : m.role,
                     content: m.content
                 }));
-                // Force multi-turn when continuing an old conversation
-                set({ messages: msgs, chatMode: 'multi-turn', sending: false });
+                // Only enable multi-turn if allowed by tier
+                const newMode = tier === 'free' ? 'single-turn' : 'multi-turn';
+                set({ messages: msgs, chatMode: newMode, sending: false });
             }
         } catch (e) {
+
             console.error("Failed to load session messages", e);
         }
     },

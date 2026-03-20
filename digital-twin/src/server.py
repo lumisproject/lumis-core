@@ -236,8 +236,26 @@ async def chat_endpoint(req: ChatRequest, tier_data: dict = Depends(verify_chat_
         
         global_config = get_global_user_config(user_id)
         global_config["user_id"] = user_id
-        global_config["reasoning_enabled"] = req.reasoning
-        global_config["mode"] = req.mode
+        
+        # Enforce tier-based capability restrictions
+        limits = tier_data.get("limits", {})
+        
+        # If reasoning is requested but not allowed, override to False
+        is_reasoning_allowed = limits.get("reasoning", False)
+        if req.reasoning and not is_reasoning_allowed:
+            logger.warning(f"Reasoning requested by Free user {user_id}. Restricting.")
+            global_config["reasoning_enabled"] = False
+        else:
+            global_config["reasoning_enabled"] = req.reasoning
+
+        # If multi-turn(memory) is requested but not allowed, override to single-turn
+        is_memory_allowed = limits.get("memory", False)
+        if req.mode == "multi-turn" and not is_memory_allowed:
+            logger.warning(f"Multi-turn requested by Free user {user_id}. Restricting to single-turn.")
+            global_config["mode"] = "single-turn"
+        else:
+            global_config["mode"] = req.mode
+
 
         logger.info(f"✨ Initializing stateless agent for project {req.project_id}")
         
