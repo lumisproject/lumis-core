@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { API_BASE, supabase } from '@/lib/supabase';
 
 interface BillingState {
-    tier: 'free' | 'pro' | 'team';
+    tier: 'free' | 'premium';
     limits: { queries: number; projects: number; storage_gb: number };
     usage: { query_count: number; project_count: number };
     loading: boolean;

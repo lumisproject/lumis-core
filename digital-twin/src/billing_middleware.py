@@ -12,11 +12,23 @@ logger.info("Initializing Billing Middleware v1.5.1")
 def get_tier_limits(tier: str):
     """Returns a fresh copy of limits for a given tier. Avoids global mutation."""
     limits = {
-        "free": {"queries": 50, "projects": 1, "storage_gb": 1},
-        "pro": {"queries": 500, "projects": 5, "storage_gb": 10},
-        "team": {"queries": float('inf'), "projects": float('inf'), "storage_gb": float('inf')}
+        "free": {
+            "queries": 50, 
+            "projects": 3, 
+            "storage_gb": 1,
+            "reasoning": False,
+            "memory": False
+        },
+        "premium": {
+            "queries": float('inf'), 
+            "projects": float('inf'), 
+            "storage_gb": float('inf'),
+            "reasoning": True,
+            "memory": True
+        }
     }
     return limits.get(tier, limits["free"]).copy()
+
 
 async def get_user_tier_and_usage(current_user=Depends(get_current_user)):
     """Fetches the user's active tier and their usage stats for the current month."""

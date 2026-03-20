@@ -47,7 +47,7 @@ const ModernSelect = ({ label, icon: Icon, value, onChange, options, placeholder
     return (
         <div className="space-y-2 relative">
             <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">{label}</label>
-            <div 
+            <div
                 onClick={() => !loading && setOpen(!open)}
                 className={cn(
                     "flex h-12 w-full cursor-pointer items-center justify-between rounded-2xl border border-black/5 bg-accent/30 px-4 text-sm transition-all hover:bg-accent/50 dark:border-white/5",
@@ -124,7 +124,7 @@ const InputField = ({ label, icon: Icon, value, onChange, placeholder, type = "t
 
 const Settings = () => {
     const { user } = useUserStore();
-    const { 
+    const {
         project, jiraConnected, notionConnected, fetchJiraStatus, fetchNotionStatus, disconnectJira, disconnectNotion,
         updateJiraMapping, updateNotionMapping
     } = useProjectStore();
@@ -138,10 +138,10 @@ const Settings = () => {
 
     const [saving, setSaving] = useState(false);
     const [success, setSuccess] = useState(false);
-    
-    const [availableJiraProjects, setAvailableJiraProjects] = useState<{key: string, name: string}[]>([]);
+
+    const [availableJiraProjects, setAvailableJiraProjects] = useState<{ key: string, name: string }[]>([]);
     const [loadingJira, setLoadingJira] = useState(false);
-    const [availableNotionDBs, setAvailableNotionDBs] = useState<{id: string, name: string}[]>([]);
+    const [availableNotionDBs, setAvailableNotionDBs] = useState<{ id: string, name: string }[]>([]);
     const [loadingNotion, setLoadingNotion] = useState(false);
     const [showBillingSuccess, setShowBillingSuccess] = useState(false);
 
@@ -185,22 +185,22 @@ const Settings = () => {
             try {
                 // Must pass auth token because the backend endpoint uses Depends(get_current_user)
                 const { data: { session } } = await supabase.auth.getSession();
-                
+
                 const res = await fetch(`${API_BASE}/api/settings/${user.id}`, {
                     headers: {
                         'Authorization': `Bearer ${session?.access_token}`
                     }
                 });
-                
+
                 if (res.ok) {
                     const data = await res.json();
                     setUseDefault(data.useDefault);
                     setProvider(data.provider);
                     setSelectedModel(data.selectedModel);
-                    
+
                     // If the backend says we are using defaults, force the local API key to be empty
                     if (data.useDefault) {
-                        setApiKey(""); 
+                        setApiKey("");
                     } else {
                         setApiKey(data.apiKey);
                     }
@@ -244,7 +244,7 @@ const Settings = () => {
         try {
             // Get the JWT session to authenticate with the backend
             const { data: { session } } = await supabase.auth.getSession();
-            
+
             const payload = {
                 provider: provider,
                 selectedModel: selectedModel,
@@ -303,7 +303,7 @@ const Settings = () => {
                                 <div className="flex flex-col gap-2 pt-4">
                                     <div className="text-[10px] font-black uppercase tracking-widest text-primary animate-pulse">Relocating to Command Center...</div>
                                     <div className="h-1 w-full bg-primary/10 rounded-full overflow-hidden">
-                                        <motion.div 
+                                        <motion.div
                                             initial={{ width: 0 }}
                                             animate={{ width: '100%' }}
                                             transition={{ duration: 5, ease: "linear" }}
@@ -327,8 +327,8 @@ const Settings = () => {
                     disabled={saving}
                     className={cn(
                         "flex h-12 items-center gap-2 rounded-2xl px-10 text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 disabled:opacity-50 w-fit shadow-2xl",
-                        success 
-                            ? "bg-green-500 text-white shadow-green-500/20" 
+                        success
+                            ? "bg-green-500 text-white shadow-green-500/20"
                             : "bg-primary text-primary-foreground shadow-primary/20"
                     )}
                 >
@@ -357,8 +357,8 @@ const Settings = () => {
                                     }}
                                     className={cn(
                                         "rounded-xl border px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all",
-                                        useDefault 
-                                            ? "border-primary bg-primary/10 text-primary shadow-[0_0_15px_-5px_primary]" 
+                                        useDefault
+                                            ? "border-primary bg-primary/10 text-primary shadow-[0_0_15px_-5px_primary]"
                                             : "border-black/5 bg-accent/30 text-muted-foreground hover:bg-accent/50 dark:border-white/5"
                                     )}
                                 >
@@ -372,7 +372,7 @@ const Settings = () => {
                                         className={cn(
                                             "rounded-xl border px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all",
                                             (provider === p && !useDefault)
-                                                ? "border-primary bg-primary/10 text-primary shadow-[0_0_15px_-5px_primary]" 
+                                                ? "border-primary bg-primary/10 text-primary shadow-[0_0_15px_-5px_primary]"
                                                 : "border-black/5 bg-accent/30 text-muted-foreground hover:bg-accent/50 dark:border-white/5"
                                         )}
                                     >
@@ -448,23 +448,23 @@ const Settings = () => {
                             <div className="flex items-center gap-2">
                                 <Plug className="h-4 w-4 text-blue-500" />
                                 <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                                    Jira Backlog {project?.jira_project_id && <CheckCircle2 className="inline h-3 w-3 ml-1 text-primary" />}
+                                    Jira Board {project?.jira_project_id && <CheckCircle2 className="inline h-3 w-3 ml-1 text-primary" />}
                                 </span>
                             </div>
                             <div className={cn("h-2 w-2 rounded-full", jiraConnected ? "bg-primary animate-pulse shadow-[0_0_10px_rgba(var(--primary),0.5)]" : "bg-muted")} />
                         </div>
-                        
+
                         {jiraConnected ? (
                             <div className="space-y-4">
-                                <ModernSelect 
-                                    label="Target Project" 
-                                    icon={Search} 
-                                    value={project?.jira_project_id || 'none'} 
-                                    onChange={(val: string) => project?.id && updateJiraMapping(project.id, val === 'none' ? '' : val)} 
-                                    options={[{ key: 'none', name: 'None / Not Linked' }, ...availableJiraProjects]} 
+                                <ModernSelect
+                                    label="Target Project"
+                                    icon={Search}
+                                    value={project?.jira_project_id || 'none'}
+                                    onChange={(val: string) => project?.id && updateJiraMapping(project.id, val === 'none' ? '' : val)}
+                                    options={[{ key: 'none', name: 'None / Not Linked' }, ...availableJiraProjects]}
                                     loading={loadingJira}
                                 />
-                                <button 
+                                <button
                                     onClick={() => user?.id && disconnectJira(user.id)}
                                     className="text-[10px] font-bold uppercase tracking-widest text-destructive hover:underline"
                                 >
@@ -472,7 +472,7 @@ const Settings = () => {
                                 </button>
                             </div>
                         ) : (
-                            <button 
+                            <button
                                 onClick={() => window.location.href = `${API_BASE}/auth/jira/connect?state=${user?.id}`}
                                 className="w-full flex h-12 items-center justify-center gap-2 rounded-2xl bg-blue-500/10 text-blue-500 text-[10px] font-black uppercase tracking-widest hover:bg-blue-500/20 transition-all border border-blue-500/20"
                             >
@@ -483,44 +483,32 @@ const Settings = () => {
                     </div>
 
                     {/* NOTION */}
-                    <div className="space-y-4 p-6 rounded-3xl border border-black/5 bg-accent/10 dark:border-white/5">
+                    <div className="space-y-4 p-6 rounded-3xl border border-black/5 bg-accent/10 dark:border-white/5 relative overflow-hidden group">
+                        <div className="absolute top-3 right-[-35px] rotate-45 bg-amber-500 text-white text-[8px] font-black uppercase tracking-widest py-1 px-10 shadow-xl z-10 border border-white/20">
+                            Soon
+                        </div>
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                                <BookOpen className="h-4 w-4 text-foreground" />
-                                <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                                    Notion Docs {project?.notion_project_id && <CheckCircle2 className="inline h-3 w-3 ml-1 text-primary" />}
+                                <BookOpen className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-xs font-black uppercase tracking-widest text-muted-foreground/60">
+                                    Notion board
                                 </span>
                             </div>
-                            <div className={cn("h-2 w-2 rounded-full", notionConnected ? "bg-primary animate-pulse shadow-[0_0_10px_rgba(var(--primary),0.5)]" : "bg-muted")} />
+                            <div className="h-2 w-2 rounded-full bg-muted opacity-30" />
                         </div>
-                        
-                        {notionConnected ? (
-                            <div className="space-y-4">
-                                <ModernSelect 
-                                    label="Docs Database" 
-                                    icon={Database} 
-                                    value={project?.notion_project_id || 'none'} 
-                                    onChange={(val: string) => project?.id && updateNotionMapping(project.id, val === 'none' ? '' : val)} 
-                                    options={[{ id: 'none', name: 'None / Not Linked' }, ...availableNotionDBs]} 
-                                    loading={loadingNotion}
-                                />
-                                <button 
-                                    onClick={() => user?.id && disconnectNotion(user.id)}
-                                    className="text-[10px] font-bold uppercase tracking-widest text-destructive hover:underline"
-                                >
-                                    Disconnect Vault
-                                </button>
-                            </div>
-                        ) : (
-                            <button 
-                                onClick={() => window.location.href = `${API_BASE}/auth/notion/connect?state=${user?.id}`}
-                                className="w-full flex h-12 items-center justify-center gap-2 rounded-2xl bg-black/10 text-foreground text-[10px] font-black uppercase tracking-widest hover:bg-black/20 dark:bg-white/5 dark:hover:bg-white/10 transition-all border border-black/5 dark:border-white/5"
+
+                        <div className="space-y-4 opacity-50 grayscale-[0.5]">
+                            <button
+                                disabled
+                                className="w-full flex h-12 items-center justify-center gap-2 rounded-2xl bg-black/10 text-foreground text-[10px] font-black uppercase tracking-widest transition-all border border-black/5 dark:border-white/5 cursor-not-allowed"
                             >
-                                <BookOpen className="h-4 w-4" />
-                                Link Knowledge Base
+                                <Lock className="h-4 w-4" />
+                                Under Construction
                             </button>
-                        )}
+                            <p className="text-[10px] text-center font-bold text-amber-500 uppercase tracking-widest animate-pulse">Available in next protocol update</p>
+                        </div>
                     </div>
+
                 </div>
             </SettingSection>
 
