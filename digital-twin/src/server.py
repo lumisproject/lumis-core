@@ -1,27 +1,17 @@
 import os
 import logging
-import requests
-import json
 import redis
-from typing import Dict, Optional, List
+from typing import Dict, Optional
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from src.agent import LumisAgent
-from src.db_client import supabase, get_current_user, get_global_user_config
+from src.db_client import supabase, get_current_user
 from src.config import Config
-from src.jira_auth import jira_auth_router, get_valid_token
-from src.jira_client import get_accessible_resources, get_projects
-from src.notion_auth import notion_auth_router, get_valid_notion_token
-from src.tasks_checking import check_taskes
-from src.cryptography import encrypt_value
+from src.jira_auth import jira_auth_router
+from src.notion_auth import notion_auth_router
 from src.stripe_router import stripe_router
-from src.billing_middleware import verify_chat_limit, get_user_tier_and_usage, increment_query_usage
-
-# Import Celery Tasks
-from src.worker import run_ingestion_pipeline_task, run_risk_analysis_task
+from src.billing_middleware import verify_chat_limit, get_user_tier_and_usage
 
 # --- CONFIGURATION ---
 logging.basicConfig(level=logging.INFO)
@@ -74,6 +64,8 @@ def get_repo_name_from_url(repo_url: str) -> str:
 
 def fetch_commits(repo_full_name: str):
     """Return the most recent commits for the repository as a normalized list."""
+    import requests
+
     url = f"https://api.github.com/repos/{repo_full_name}/commits"
     headers = {"Accept": "application/vnd.github.v3+json"}
     
@@ -97,6 +89,8 @@ def fetch_commits(repo_full_name: str):
         return []
     
 def update_progress(project_id, task, message):
+    import json
+
     # Fetch current state from Redis instead of RAM
     state_str = redis_client.get(f"sync_state:{project_id}")
     state = json.loads(state_str) if state_str else {"status": "processing", "logs": [], "step": "Starting"}
@@ -137,6 +131,11 @@ def update_progress(project_id, task, message):
 
 @app.post("/api/webhook/{user_id}/{project_id}")
 async def github_webhook(user_id: str, project_id: str, request: Request, background_tasks: BackgroundTasks):
+    from src.worker import run_ingestion_pipeline_task
+    from src.tasks_checking import check_taskes
+    from src.db_client import get_global_user_config
+    from src.agent import LumisAgent
+
     try:
         payload = await request.json()
 
@@ -224,6 +223,12 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
 
 @app.post("/api/chat")
 async def chat_endpoint(req: ChatRequest, tier_data: dict = Depends(verify_chat_limit)):
+    from src.billing_middleware import increment_query_usage
+    from src.db_client import get_global_user_config
+    from src.agent import LumisAgent
+    from fastapi.responses import StreamingResponse
+    import json
+
     try:
         proj_row = supabase.table("projects").select("user_id").eq("id", req.project_id).limit(1).execute()
         if not proj_row or not proj_row.data:
@@ -285,6 +290,12 @@ async def chat_endpoint(req: ChatRequest, tier_data: dict = Depends(verify_chat_
     
 @app.post("/api/ingest")
 async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, tier_data: dict = Depends(get_user_tier_and_usage)):
+    from src.worker import run_ingestion_pipeline_task
+    from src.tasks_checking import check_taskes
+    from src.db_client import get_global_user_config
+    from src.agent import LumisAgent
+    import json
+
     try:
         if str(req.user_id) != str(tier_data["user_id"]):
             raise HTTPException(status_code=403, detail="Forbidden: User ID mismatch")
@@ -413,6 +424,8 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, ti
 
 @app.get("/api/ingest/status/{project_id}")
 async def get_ingest_status(project_id: str):
+    import json
+
     state_str = redis_client.get(f"sync_state:{project_id}")
     if state_str:
         return json.loads(state_str)
@@ -483,6 +496,9 @@ async def get_project_stats(project_id: str):
 
 @app.get("/api/jira/projects/{user_id}")
 async def get_user_jira_projects(user_id: str):
+    from src.jira_client import get_accessible_resources, get_projects
+    from src.jira_auth import get_valid_token
+
     access_token = get_valid_token(user_id)
     if not access_token:
         raise HTTPException(status_code=401, detail="Jira not connected")
@@ -496,6 +512,8 @@ async def get_user_jira_projects(user_id: str):
 
 @app.get("/api/settings/{user_id}")
 async def get_user_settings(user_id: str, current_user = Depends(get_current_user)):
+    from src.db_client import get_global_user_config
+
     if str(current_user.id) != user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -517,11 +535,10 @@ async def get_user_settings(user_id: str, current_user = Depends(get_current_use
     }
 
 @app.post("/api/settings/{user_id}")
-async def update_user_settings(
-    user_id: str, 
-    payload: dict, 
-    current_user = Depends(get_current_user)
-):
+async def update_user_settings(user_id: str, payload: dict, current_user = Depends(get_current_user)):
+    from src.cryptography import encrypt_value
+    from src.db_client import get_global_user_config
+
     if str(current_user.id) != user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -591,7 +608,8 @@ async def delete_project(user_id: str, project_id: str):
 
 @app.get("/api/notion/databases/{user_id}")
 async def get_user_notion_databases(user_id: str):
-    from src.notion_client import get_accessible_databases 
+    from src.notion_client import get_accessible_databases
+    from src.notion_auth import get_valid_notion_token
     
     access_token = get_valid_notion_token(user_id)
     if not access_token:
@@ -647,6 +665,7 @@ async def update_notion_mapping(
 
 @app.get("/api/projects/{project_id}/check-remote")
 async def check_remote_sync(project_id: str):
+    
     try:
         res = supabase.table("projects").select("repo_url, last_commit").eq("id", project_id).limit(1).execute()
         if not res or not res.data:
@@ -688,6 +707,9 @@ async def check_remote_sync(project_id: str):
 
 @app.post("/api/projects/{project_id}/analyze-risks")
 async def trigger_risk_analysis(project_id: str):
+    from src.worker import run_risk_analysis_task
+    from src.db_client import get_global_user_config
+
     proj_row = supabase.table("projects").select("user_id").eq("id", project_id).limit(1).execute()
     if not proj_row or not proj_row.data:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -701,6 +723,118 @@ async def trigger_risk_analysis(project_id: str):
     run_risk_analysis_task.delay(project_id, user_config)
     
     return {"status": "analysis_queued"}
+
+@app.get("/api/projects/{project_id}/architecture-graph")
+async def get_architecture_graph(project_id: str):
+    try:
+        # 1. Fetch units (Functions, Classes, Methods)
+        units_res = supabase.table("memory_units")\
+            .select("unit_name, file_path, unit_type, last_modified_at")\
+            .eq("project_id", project_id)\
+            .execute()
+        units = units_res.data or []
+
+        # 2. Fetch edges (Who calls who)
+        edges_res = supabase.table("graph_edges")\
+            .select("source_unit_name, target_unit_name, edge_type")\
+            .eq("project_id", project_id)\
+            .execute()
+        edges = edges_res.data or []
+
+        # 3. Fetch ACTUAL risks
+        risks_res = supabase.table("project_risks")\
+            .select("severity, risk_type, affected_units")\
+            .eq("project_id", project_id)\
+            .execute()
+        risks = risks_res.data or []
+
+        severity_map = {"High": 85, "Medium": 50, "Low": 20}
+        unit_risk_scores = {}
+        unit_legacy_conflicts = set()
+        
+        for r in risks:
+            severity_str = str(r.get("severity", "")).capitalize()
+            sev_score = severity_map.get(severity_str, 0)
+            is_legacy_conflict = r.get("risk_type") == "Legacy Conflict"
+            
+            for affected_unit in r.get("affected_units", []):
+                if affected_unit not in unit_risk_scores or sev_score > unit_risk_scores[affected_unit]:
+                    unit_risk_scores[affected_unit] = sev_score
+                if is_legacy_conflict:
+                    unit_legacy_conflicts.add(affected_unit)
+
+        nodes_dict = {}
+        links = []
+
+        # 4. Build Nodes & Structural Links (File -> Function)
+        for u in units:
+            uname = u.get("unit_name")
+            fpath = u.get("file_path")
+            if not uname or not fpath: continue
+            
+            # A. Create the Big File Node (if it doesn't exist yet)
+            if fpath not in nodes_dict:
+                nodes_dict[fpath] = {
+                    "id": fpath,
+                    "label": fpath.split("/")[-1],
+                    "fullPath": fpath,
+                    "group": "file",
+                    "risk_score": 0,
+                    "legacy_flag": False,
+                    "unit_count": 0
+                }
+
+            # B. Create the Function/Class Node
+            short_name = uname.split("::")[-1] if "::" in uname else uname
+            nodes_dict[uname] = {
+                "id": uname,
+                "label": short_name,
+                "fullPath": fpath,
+                "group": u.get("unit_type", "unknown"),
+                "risk_score": unit_risk_scores.get(uname, 0),
+                "legacy_flag": uname in unit_legacy_conflicts,
+                "unit_count": 1
+            }
+
+            # Bubble up risk/legacy status to the parent file so it turns red/amber if a child is sick
+            file_node = nodes_dict[fpath]
+            file_node["unit_count"] += 1
+            if nodes_dict[uname]["risk_score"] > file_node["risk_score"]:
+                file_node["risk_score"] = nodes_dict[uname]["risk_score"]
+            if nodes_dict[uname]["legacy_flag"]:
+                file_node["legacy_flag"] = True
+
+            # C. Link the Function to its Parent File (Structural Link)
+            links.append({
+                "source": fpath,
+                "target": uname,
+                "types": ["contains"],
+                "weight": 2 # Stronger weight so functions stay near their files
+            })
+
+        # 5. Filter Noise & Build Dependency Links (Function -> Function)
+        for e in edges:
+            src = e.get("source_unit_name")
+            tgt = e.get("target_unit_name")
+            
+            # NOISE FILTER: Only draw a connection if BOTH source and target exist in our parsed memory_units
+            if src in nodes_dict and tgt in nodes_dict:
+                links.append({
+                    "source": src,
+                    "target": tgt,
+                    "types": [e.get("edge_type", "calls")],
+                    "weight": 1
+                })
+
+        return {
+            "nodes": list(nodes_dict.values()),
+            "links": links
+        }
+
+    except Exception as e:
+        import logging
+        logging.getLogger("LumisAPI").error(f"Failed to generate architecture graph: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate graph data")
 
 @app.get("/api/status")
 async def health_check():

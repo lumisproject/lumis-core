@@ -9,7 +9,8 @@ import {
     ChevronLeft,
     ChevronRight,
     LogOut,
-    ShieldAlert
+    ShieldAlert,
+    Network
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUserStore } from '@/stores/useUserStore';
@@ -25,6 +26,7 @@ const Sidebar = ({ collapsed, setCollapsed }: { collapsed: boolean, setCollapsed
         { icon: BarChart3, label: 'Dashboard', path: '/app' },
         { icon: MessageSquare, label: 'The Brain', path: '/app/chat' },
         { icon: ShieldAlert, label: 'Risks', path: '/app/risks' },
+        { icon: Network, label: 'Architecture', path: '/app/architecture' },
         { icon: CreditCard, label: 'Billing', path: '/app/billing' },
         { icon: Settings, label: 'Settings', path: '/app/settings' },
     ];
