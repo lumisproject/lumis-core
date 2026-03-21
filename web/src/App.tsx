@@ -14,6 +14,7 @@ import Landing from '@/pages/Landing';
 import RiskPage from '@/pages/RiskPage';
 import JiraCallback from '@/pages/JiraCallback';
 import NewProject from '@/pages/NewProject';
+import ArchitectureGraph from '@/pages/ArchitectureGraph';
 
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -89,6 +90,7 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="billing" element={<Billing />} />
           <Route path="new-project" element={<NewProject />} />
+          <Route path="architecture" element={<ArchitectureGraph />} />
         </Route>
       </Routes>
     </Router>
