@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Zap, Sparkles, Shield, Lock, Command, Code2, AlertTriangle, Workflow, Brain } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Send, Zap, Sparkles, Shield, Lock, Command, Code2, AlertTriangle, Workflow, Brain, History, Plus, PanelLeftClose, PanelLeftOpen, Trash2 } from 'lucide-react';
 import { useChatStore } from '@/stores/useChatStore';
 import { useProjectStore } from '@/stores/useProjectStore';
 import { useUserStore } from '@/stores/useUserStore';
@@ -11,13 +12,27 @@ import { cn } from '@/lib/utils';
 
 const Chat = () => {
     const [input, setInput] = useState('');
+    const [showHistory, setShowHistory] = useState(true);
+    const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
 
-    const { reasoningEnabled, setReasoningEnabled, chatMode, setChatMode, messages, sending, sendMessage } = useChatStore();
+    const { 
+        reasoningEnabled, setReasoningEnabled, chatMode, setChatMode, 
+        messages, sending, sendMessage, 
+        sessions, fetchSessions, loadSession, deleteSession, startNewSession, activeSessionId 
+    } = useChatStore();
+    
     const { selectedModel, useDefault, provider, apiKey } = useSettingsStore();
     const { project, jiraConnected, notionConnected } = useProjectStore();
     const { user } = useUserStore();
     const { tier } = useBillingStore();
+
+    // Fetch sessions when the active project changes
+    useEffect(() => {
+        if (project?.id) {
+            fetchSessions(project.id);
+        }
+    }, [project?.id]);
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -42,10 +57,212 @@ const Chat = () => {
     const isConfigComplete = useDefault || (provider && selectedModel && apiKey);
 
     return (
-        <div className="flex h-full flex-col overflow-hidden bg-background relative">
-            {/* Ambient Background Grid & Glows */}
-            <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-primary/10 blur-[150px] rounded-full pointer-events-none" />
+        <div className="flex h-full w-full overflow-hidden bg-background relative">
+            {/* Sidebar - Chat History */}
+            <div className={cn(
+                "relative z-30 flex flex-col bg-card/30 backdrop-blur-xl transition-all duration-300 ease-in-out h-full",
+                showHistory ? "w-72 border-r border-black/5 dark:border-white/5 opacity-100" : "w-0 opacity-0 -translate-x-full overflow-hidden"
+            )}>
+                {/* Sidebar Header */}
+                <div className="p-4 flex items-center justify-between border-b border-black/5 dark:border-white/5">
+                    <div className="flex items-center gap-2">
+                        <History className="h-4 w-4 text-primary" />
+                        <span className="text-[10px] font-black uppercase tracking-widest">History</span>
+                    </div>
+                    <button 
+                        onClick={() => setShowHistory(false)}
+                        className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 text-muted-foreground transition-all"
+                    >
+                        <PanelLeftClose className="h-4 w-4" />
+                    </button>
+                </div>
+
+                {/* New Chat Button */}
+                <div className="p-4">
+                    <button 
+                        onClick={startNewSession}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 transition-all group"
+                    >
+                        <Plus className="h-4 w-4 transition-transform group-hover:rotate-90" />
+                        <span className="text-[10px] font-black uppercase tracking-widest">New Session</span>
+                    </button>
+                </div>
+
+                {/* History List */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-6 custom-scrollbar">
+                    {(() => {
+                        const now = new Date();
+                        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                        const yesterday = new Date(today);
+                        yesterday.setDate(yesterday.getDate() - 1);
+
+                        const groups = {
+                            today: sessions.filter(s => new Date(s.updated_at) >= today),
+                            yesterday: sessions.filter(s => {
+                                const d = new Date(s.updated_at);
+                                return d >= yesterday && d < today;
+                            }),
+                            older: sessions.filter(s => new Date(s.updated_at) < yesterday)
+                        };
+
+                        return Object.entries(groups).map(([key, items]) => {
+                            if (items.length === 0) return null;
+                            const title = key === 'today' ? 'Today' : key === 'yesterday' ? 'Yesterday' : 'Previous Intel';
+                            
+                            return (
+                                <div key={key} className="space-y-2">
+                                    <div className="px-3 flex items-center gap-2 mb-3">
+                                        <div className="h-px flex-1 bg-black/[0.03] dark:bg-white/[0.03]" />
+                                        <span className="text-[7px] font-black uppercase tracking-[0.3em] text-muted-foreground/40 whitespace-nowrap">{title}</span>
+                                        <div className="h-px flex-1 bg-black/[0.03] dark:bg-white/[0.03]" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        {items.map((item) => (
+                                            <div 
+                                                key={item.id}
+                                                className="group relative"
+                                            >
+                                                <div 
+                                                    onClick={() => loadSession(item.id)}
+                                                    className={cn(
+                                                        "flex flex-col gap-1.5 p-3 rounded-xl cursor-pointer transition-all border relative overflow-hidden",
+                                                        activeSessionId === item.id 
+                                                            ? "bg-primary/[0.08] border-primary/20 shadow-[0_4px_12px_rgba(var(--primary),0.05)]" 
+                                                            : "hover:bg-black/[0.03] dark:hover:bg-white/[0.03] border-transparent hover:border-black/5 dark:hover:border-white/5",
+                                                        deletingSessionId === item.id && "bg-red-500/5 border-red-500/20"
+                                                    )}
+                                                >
+                                                    <AnimatePresence mode="wait">
+                                                        {deletingSessionId === item.id ? (
+                                                            <motion.div
+                                                                key="confirm"
+                                                                initial={{ opacity: 0, scale: 0.95 }}
+                                                                animate={{ opacity: 1, scale: 1 }}
+                                                                exit={{ opacity: 0, scale: 0.95 }}
+                                                                className="flex flex-col gap-3 py-1"
+                                                            >
+                                                                <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-red-500">
+                                                                    <Trash2 className="h-3 w-3" />
+                                                                    Delete ?
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            deleteSession(item.id);
+                                                                            setDeletingSessionId(null);
+                                                                        }}
+                                                                        className="flex-1 py-1.5 rounded-lg bg-red-500 text-white text-[8px] font-black uppercase tracking-widest hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
+                                                                    >
+                                                                        Confirm
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setDeletingSessionId(null);
+                                                                        }}
+                                                                        className="flex-1 py-1.5 rounded-lg bg-black/5 dark:bg-white/5 text-[8px] font-black uppercase tracking-widest hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                                                                    >
+                                                                        Cancel
+                                                                    </button>
+                                                                </div>
+                                                            </motion.div>
+                                                        ) : (
+                                                            <motion.div
+                                                                key="normal"
+                                                                initial={{ opacity: 0 }}
+                                                                animate={{ opacity: 1 }}
+                                                                exit={{ opacity: 0 }}
+                                                            >
+                                                                {activeSessionId === item.id && (
+                                                                    <motion.div 
+                                                                        layoutId="sidebar-active"
+                                                                        className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary shadow-[0_0_8px_theme(colors.primary.DEFAULT)]"
+                                                                    />
+                                                                )}
+                                                                <div className="flex items-start justify-between gap-2">
+                                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                                        <div className={cn(
+                                                                            "h-1.5 w-1.5 rounded-full shrink-0",
+                                                                            activeSessionId === item.id ? "bg-primary animate-pulse" : "bg-primary/20"
+                                                                        )} />
+                                                                        <span className={cn(
+                                                                            "text-[10.5px] font-bold truncate leading-none tracking-tight",
+                                                                            activeSessionId === item.id ? "text-primary" : "text-foreground/70 group-hover:text-foreground"
+                                                                        )}>
+                                                                            {item.title}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex items-center justify-between pl-4 mt-2">
+                                                                    <span className="text-[8px] font-bold text-muted-foreground/40 uppercase tracking-widest">
+                                                                        {new Date(item.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                    </span>
+                                                                    <button 
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setDeletingSessionId(item.id);
+                                                                        }}
+                                                                        className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-red-500/10 hover:text-red-500 text-muted-foreground/30 transition-all"
+                                                                    >
+                                                                        <Trash2 className="h-3 w-3" />
+                                                                    </button>
+                                                                </div>
+                                                            </motion.div>
+                                                        )}
+                                                    </AnimatePresence>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        });
+                    })()}
+
+                    {sessions.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-16 px-4 text-center space-y-4 opacity-30">
+                            <div className="p-4 rounded-2xl bg-primary/5 border border-primary/10">
+                                <Brain className="h-8 w-8 text-primary" />
+                            </div>
+                            <div className="space-y-1.5">
+                                <div className="text-[9px] font-black uppercase tracking-[0.2em]">No Neural Cache</div>
+                                <p className="text-[8px] font-medium text-muted-foreground max-w-[160px] leading-relaxed">Initiate a conversation to record architectural intelligence.</p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Sidebar Footer */}
+                <div className="p-4 border-t border-black/5 dark:border-white/5">
+                    <div className="flex items-center gap-3 p-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5">
+                        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center text-[10px] font-black text-white shadow-lg">
+                            {user?.email?.charAt(0).toUpperCase() || 'U'}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                            <span className="text-[10px] font-bold truncate">{user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Engineer'}</span>
+                            <span className="text-[8px] text-muted-foreground uppercase tracking-widest font-black shrink-0">{tier} License</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Main Chat Area */}
+            <div className="flex flex-1 h-full flex-col overflow-hidden bg-background relative">
+                {/* Panel Toggle Button (When sidebar hidden) */}
+                {!showHistory && (
+                    <button 
+                        onClick={() => setShowHistory(true)}
+                        className="absolute left-4 top-20 z-40 p-2 rounded-xl bg-card border border-black/10 dark:border-white/10 shadow-xl hover:scale-105 transition-all text-primary"
+                    >
+                        <PanelLeftOpen className="h-4 w-4" />
+                    </button>
+                )}
+                
+                {/* Ambient Background Grid & Glows */}
+                <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-primary/10 blur-[150px] rounded-full pointer-events-none" />
+
 
             {/* Floating Top Header */}
             <div className="relative z-10 w-full p-4 md:p-6 pointer-events-none">
@@ -86,10 +303,10 @@ const Chat = () => {
 
             <div
                 ref={scrollRef}
-                className="flex-1 overflow-y-auto relative z-10 px-4 mt-[-20px]"
+                className="flex-1 overflow-y-auto relative z-10 px-4 md:px-8 mt-[-20px]"
                 style={{ maskImage: 'linear-gradient(to bottom, transparent 0%, black 5%, black 95%, transparent 100%)' }}
             >
-                <div className="mx-auto w-full max-w-4xl h-full flex flex-col">
+                <div className="w-full h-full flex flex-col">
                     {messages.length === 0 ? (
                         <div className="flex flex-1 flex-col items-center justify-center space-y-10 text-center pb-10">
                             <div className="relative group cursor-default mt-8">
@@ -134,7 +351,7 @@ const Chat = () => {
                     ) : (
                         <div className="flex flex-col pb-6">
                             {messages.map((msg, i) => (
-                                <ChatMessage key={i} {...msg} />
+                                <ChatMessage key={`${activeSessionId}-${i}`} {...msg} />
                             ))}
                             {sending && messages[messages.length - 1]?.role !== 'lumis' && (
                                 <ChatMessage role="lumis" content="" isThinking={true} />
@@ -146,7 +363,7 @@ const Chat = () => {
             </div>
 
             {/* Input Area */}
-            <div className="mx-auto w-full max-w-4xl px-4 pb-4 relative z-20">
+            <div className="w-full px-4 md:px-8 pb-4 relative z-20">
                 <div className="relative group">
                     {!isConfigComplete && (
                         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center rounded-[2rem] bg-background/80 backdrop-blur-xl border border-orange-500/20 p-20 text-center">
@@ -191,7 +408,7 @@ const Chat = () => {
                                     <span className={cn("font-bold", !isConfigComplete && "text-orange-500 italic")}>
                                         {!isConfigComplete
                                             ? "Setup LLM (API Key / Provider)"
-                                            : (selectedModel ? selectedModel : (useDefault ? 'Unconfigured Output' : 'Active Engine'))
+                                            : (useDefault ? 'Lumis (Default)' : (selectedModel || 'Active Engine'))
                                         }
                                     </span>
                                 </Link>
@@ -249,12 +466,12 @@ const Chat = () => {
                     </div>
                 </div>
                 <p className="mt-3 text-center text-[10px] font-medium text-muted-foreground opacity-90">
-                    LLM models are provided by third-party providers. Lumis is not responsible for the accuracy of the responses.
+                    Make sure to provide a good LLM model for even better accuracy.
                 </p>
+                </div>
             </div>
         </div>
     );
 };
 
 export default Chat;
-

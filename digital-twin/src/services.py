@@ -29,7 +29,7 @@ def get_embedding(text: str):
     """Returns a flat list of floats for a single query (used in retriever.py)"""
     return lc_embedder.embed_query(text)
 
-def groq_chat(system_prompt, user_prompt, api_key, model, temperature, reasoning):
+def groq_chat(system_prompt, user_prompt, api_key, model, temperature, reasoning_enabled):
     from langchain_groq import ChatGroq
 
     config = {
@@ -38,9 +38,10 @@ def groq_chat(system_prompt, user_prompt, api_key, model, temperature, reasoning
         "api_key": api_key,
     }
 
-    is_reasoning_enabled = reasoning and reasoning.get("reasoning", {}).get("enabled")
-    if is_reasoning_enabled:
-        config["reasoning_effort"] = "high"
+    if reasoning_enabled:
+        # Some Groq models might support reasoning_effort eventually, 
+        # but for now, we just pass it as a flag if needed.
+        pass
 
     llm = ChatGroq(**config)
 
@@ -50,10 +51,9 @@ def groq_chat(system_prompt, user_prompt, api_key, model, temperature, reasoning
     ]
 
     response = llm.invoke(messages)
-
     return response.content
 
-def google_genai(system_prompt, user_prompt, api_key, model, temperature, reasoning):
+def google_genai(system_prompt, user_prompt, api_key, model, temperature, reasoning_enabled):
     from google import genai
     from google.genai import types
 
@@ -64,96 +64,112 @@ def google_genai(system_prompt, user_prompt, api_key, model, temperature, reason
         "system_instruction": system_prompt,
     }
     
-    if reasoning and reasoning.get("reasoning", {}).get("enabled"):
-                config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level="HIGH")
+    if reasoning_enabled:
+        config_kwargs["thinking_config"] = types.ThinkingConfig(include_thoughts=True)
 
     config = types.GenerateContentConfig(**config_kwargs)
-
     response = client.models.generate_content(model=model, contents=user_prompt, config=config)
-
     return response.text
 
-def openrouter_chat(system_prompt, user_prompt, api_key, model, temperature, reasoning):
+def openrouter_chat(system_prompt, user_prompt, api_key, model, temperature, reasoning_enabled):
     from langchain_openai import ChatOpenAI
 
-    llm = ChatOpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        model=model,
-        temperature=temperature,
-        api_key=api_key,
-        reasoning=reasoning
-    )
+    kwargs = {
+        "base_url": "https://openrouter.ai/api/v1",
+        "model": model,
+        "temperature": temperature,
+        "api_key": api_key,
+    }
+    
+    if reasoning_enabled:
+        kwargs["model_kwargs"] = {"include_reasoning": True}
 
-    messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=user_prompt)
-    ]
-
+    llm = ChatOpenAI(**kwargs)
+    messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
     response = llm.invoke(messages)
-
     return response.content
 
-def openai_chat(system_prompt, user_prompt, api_key, model, temperature, reasoning):
+def openai_chat(system_prompt, user_prompt, api_key, model, temperature, reasoning_enabled):
     from langchain_openai import ChatOpenAI
 
-    llm = ChatOpenAI(
-        model=model,
-        temperature=temperature,
-        api_key=api_key,
-        reasoning=reasoning
-    )
+    kwargs = {
+        "model": model,
+        "api_key": api_key,
+    }
 
-    messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=user_prompt)
-    ]
+    if reasoning_enabled:
+        # o1 models don't support temperature
+        kwargs["reasoning_effort"] = "high"
+    else:
+        kwargs["temperature"] = temperature
 
+    llm = ChatOpenAI(**kwargs)
+    messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
     response = llm.invoke(messages)
-
     return response.content
 
-def anthropic_chat(system_prompt, user_prompt, api_key, model, temperature, reasoning):
+def anthropic_chat(system_prompt, user_prompt, api_key, model, temperature, reasoning_enabled):
     from langchain_anthropic import ChatAnthropic
 
-    llm = ChatAnthropic(
-        model=model,
-        temperature=temperature,
-        api_key=api_key,
-        thinking=reasoning
-    )
-    messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=user_prompt)
-    ]
-    response = llm.invoke(messages)
+    kwargs = {
+        "model": model,
+        "api_key": api_key,
+        "temperature": temperature,
+    }
 
+    if reasoning_enabled:
+        # Claude 3.7 Sonnet thinking configuration
+        kwargs["thinking"] = {"type": "enabled", "budget_tokens": 1024}
+        # Anthropic doesn't allow temperature < 1 when thinking is enabled
+        kwargs["temperature"] = 1.0
+
+    llm = ChatAnthropic(**kwargs)
+    messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+    response = llm.invoke(messages)
     return response.content
 
 def get_llm_completion(system_prompt, user_prompt, user_config=None):
     try:
-        reasoning_enabled = user_config.get("reasoning_enabled", False) if user_config else False
+        user_config = user_config or {}
+        reasoning_enabled = user_config.get("reasoning_enabled", False)
+        feature_mode = user_config.get("feature_mode", "chat")
+        
+        # Check if user has provided their own full config
+        has_custom_config = all(user_config.get(k) for k in ["provider", "model", "api_key"])
 
-        provider = user_config.get("provider") or Config.DEFAULT_LLM_PROVIDER
-        api_key = user_config.get("api_key") or Config.DEFAULT_LLM_API_KEY
-        model_name = user_config.get("model") or Config.DEFAULT_LLM_MODEL
-        reasoning = {"reasoning": {"enabled": True}} if reasoning_enabled else None
+        if not has_custom_config:
+            # Default mode logic
+            if feature_mode == "risk":
+                provider = "groq"
+                model_name = Config.DEFAULT_RISK_MODEL
+                api_key = Config.GROQ_API_KEY
+            else:
+                provider = "openrouter"
+                model_name = Config.DEFAULT_CHAT_MODEL
+                api_key = Config.OPENROUTER_API_KEY
+        else:
+            # User provided config
+            provider = user_config.get("provider")
+            model_name = user_config.get("model")
+            api_key = user_config.get("api_key")
+            # Only decrypt if it's not one of our default keys
+            if api_key not in [Config.OPENROUTER_API_KEY, Config.GROQ_API_KEY]:
+                api_key = decrypt_value(api_key)
+        
         temperature = 0.3
-
-        if user_config and user_config.get("api_key") and user_config.get("api_key") != Config.DEFAULT_LLM_API_KEY:
-            api_key = decrypt_value(api_key)
 
         print(f"Using LLM Provider: {provider}, Model: {model_name}, Reasoning: {reasoning_enabled}")
         
         if provider == "openrouter":
-            content = openrouter_chat(system_prompt, user_prompt, api_key, model_name, temperature, reasoning)
+            content = openrouter_chat(system_prompt, user_prompt, api_key, model_name, temperature, reasoning_enabled)
         elif provider == "openai":
-            content = openai_chat(system_prompt, user_prompt, api_key, model_name, temperature, reasoning)
+            content = openai_chat(system_prompt, user_prompt, api_key, model_name, temperature, reasoning_enabled)
         elif provider == "anthropic":
-            content = anthropic_chat(system_prompt, user_prompt, api_key, model_name, temperature, reasoning)
+            content = anthropic_chat(system_prompt, user_prompt, api_key, model_name, temperature, reasoning_enabled)
         elif provider == "google":
-            content = google_genai(system_prompt, user_prompt, api_key, model_name, temperature, reasoning)
+            content = google_genai(system_prompt, user_prompt, api_key, model_name, temperature, reasoning_enabled)
         elif provider == "groq":
-            content = groq_chat(system_prompt, user_prompt, api_key, model_name, temperature, reasoning)
+            content = groq_chat(system_prompt, user_prompt, api_key, model_name, temperature, reasoning_enabled)
         else:
             raise ValueError(f"Provider {provider} is not supported yet.")
         
@@ -169,23 +185,51 @@ def get_llm_completion(system_prompt, user_prompt, user_config=None):
 async def stream_llm_completion(system_prompt, user_prompt, user_config=None):
     """Asynchronous generator that streams LLM response tokens."""
     try:
-        reasoning_enabled = user_config.get("reasoning_enabled", False) if user_config else False
-        provider = user_config.get("provider") or Config.DEFAULT_LLM_PROVIDER
-        api_key = user_config.get("api_key") or Config.DEFAULT_LLM_API_KEY
-        model_name = user_config.get("model") or Config.DEFAULT_LLM_MODEL
-        reasoning = {"reasoning": {"enabled": True}} if reasoning_enabled else None
-        temperature = 0.3
+        user_config = user_config or {}
+        reasoning_enabled = user_config.get("reasoning_enabled", False)
+        feature_mode = user_config.get("feature_mode", "chat")
 
-        if user_config and user_config.get("api_key") and user_config.get("api_key") != Config.DEFAULT_LLM_API_KEY:
-            from src.cryptography import decrypt_value
-            api_key = decrypt_value(api_key)
+        # Check if user has provided their own full config
+        has_custom_config = all(user_config.get(k) for k in ["provider", "model", "api_key"])
+
+        if not has_custom_config:
+            # Default mode logic
+            if feature_mode == "risk":
+                provider = "groq"
+                model_name = Config.DEFAULT_RISK_MODEL
+                api_key = Config.GROQ_API_KEY
+            else:
+                provider = "openrouter"
+                model_name = Config.DEFAULT_CHAT_MODEL
+                api_key = Config.OPENROUTER_API_KEY
+        else:
+            # User provided config
+            provider = user_config.get("provider")
+            model_name = user_config.get("model")
+            api_key = user_config.get("api_key")
+            # Only decrypt if it's not one of our default keys
+            if api_key not in [Config.OPENROUTER_API_KEY, Config.GROQ_API_KEY]:
+                from src.cryptography import decrypt_value
+                api_key = decrypt_value(api_key)
+        
+        temperature = 0.3
 
         print(f"[STREAM] Using LLM Provider: {provider}, Model: {model_name}")
         
         if provider == "openrouter":
             from langchain_openai import ChatOpenAI
             from langchain_core.messages import SystemMessage, HumanMessage
-            llm = ChatOpenAI(base_url="https://openrouter.ai/api/v1", model=model_name, temperature=temperature, api_key=api_key, reasoning=reasoning, streaming=True)
+            kwargs = {
+                "base_url": "https://openrouter.ai/api/v1",
+                "model": model_name,
+                "temperature": temperature,
+                "api_key": api_key,
+                "streaming": True
+            }
+            if reasoning_enabled:
+                kwargs["model_kwargs"] = {"include_reasoning": True}
+            
+            llm = ChatOpenAI(**kwargs)
             messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
             async for chunk in llm.astream(messages):
                 if chunk.content:
@@ -199,7 +243,13 @@ async def stream_llm_completion(system_prompt, user_prompt, user_config=None):
         elif provider == "openai":
             from langchain_openai import ChatOpenAI
             from langchain_core.messages import SystemMessage, HumanMessage
-            llm = ChatOpenAI(model=model_name, temperature=temperature, api_key=api_key, reasoning=reasoning, streaming=True)
+            kwargs = {"model": model_name, "api_key": api_key, "streaming": True}
+            if reasoning_enabled:
+                kwargs["reasoning_effort"] = "high"
+            else:
+                kwargs["temperature"] = temperature
+            
+            llm = ChatOpenAI(**kwargs)
             messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
             async for chunk in llm.astream(messages):
                 if chunk.content: yield chunk.content
@@ -207,7 +257,12 @@ async def stream_llm_completion(system_prompt, user_prompt, user_config=None):
         elif provider == "anthropic":
             from langchain_anthropic import ChatAnthropic
             from langchain_core.messages import SystemMessage, HumanMessage
-            llm = ChatAnthropic(model=model_name, temperature=temperature, api_key=api_key, thinking=reasoning, streaming=True)
+            kwargs = {"model": model_name, "api_key": api_key, "temperature": temperature, "streaming": True}
+            if reasoning_enabled:
+                kwargs["thinking"] = {"type": "enabled", "budget_tokens": 1024}
+                kwargs["temperature"] = 1.0
+            
+            llm = ChatAnthropic(**kwargs)
             messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
             async for chunk in llm.astream(messages):
                 if chunk.content:
@@ -223,7 +278,7 @@ async def stream_llm_completion(system_prompt, user_prompt, user_config=None):
             client = genai.Client(api_key=api_key)
             config_kwargs = {"temperature": temperature, "system_instruction": system_prompt}
             if reasoning_enabled:
-                config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level="HIGH")
+                config_kwargs["thinking_config"] = types.ThinkingConfig(include_thoughts=True)
             config = types.GenerateContentConfig(**config_kwargs)
             
             response_stream = await client.aio.models.generate_content_stream(model=model_name, contents=user_prompt, config=config)

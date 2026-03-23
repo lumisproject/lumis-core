@@ -76,11 +76,10 @@ def notion_callback(request: Request):
         
     try:
         exchange_code_for_notion_token(code, state)
-        # Redirect back to frontend Settings page
-        return RedirectResponse("http://localhost:8080/settings?message=Notion connected successfully")
+        return RedirectResponse(Config.FRONTEND_URL+"/app/settings?message=Notion connected successfully")
     except Exception as e:
         logger.error(f"Notion Callback error: {e}")
-        return RedirectResponse("http://localhost:8080/settings?error=Failed to connect Notion")
+        return RedirectResponse(Config.FRONTEND_URL+"/app/settings?error=Failed to connect Notion")
 
 @notion_auth_router.delete("/api/notion/disconnect/{user_id}")
 async def disconnect_notion(user_id: str):

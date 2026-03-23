@@ -8,7 +8,6 @@ import {
     CreditCard,
     ChevronLeft,
     ChevronRight,
-    Cpu,
     LogOut,
     ShieldAlert
 } from 'lucide-react';
@@ -36,20 +35,30 @@ const Sidebar = ({ collapsed, setCollapsed }: { collapsed: boolean, setCollapsed
             animate={{ width: collapsed ? 80 : 260 }}
             className="relative flex h-screen flex-col border-r border-black/5 bg-card/50 backdrop-blur-xl dark:border-white/5"
         >
-            <div className="flex h-16 items-center px-6">
-                <Link to="/app" className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                        <Cpu className="h-5 w-5 text-primary-foreground" />
-                    </div>
-                    {!collapsed && (
-                        <motion.span
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="text-lg font-bold tracking-tight"
+            <div className={cn("flex h-16 items-center transition-all duration-300", collapsed ? "justify-center px-0" : "px-6")}>
+                <Link to="/app">
+                    <AnimatePresence mode="wait">
+                        <motion.div
+                            key={collapsed ? 'icon' : 'wordmark'}
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
+                            transition={{ duration: 0.2 }}
+                            className="flex items-center justify-center gap-3"
                         >
-                            Lumis
-                        </motion.span>
-                    )}
+                            {collapsed ? (
+                                <>
+                                    <img src="/black-menu.svg" alt="Lumis Icon" className="h-8 w-8 dark:hidden" />
+                                    <img src="/white-menu.svg" alt="Lumis Icon" className="h-8 w-8 hidden dark:block" />
+                                </>
+                            ) : (
+                                <>
+                                    <img src="/lumis-black.svg" alt="Lumis Logo" className="h-6 w-auto block dark:hidden" />
+                                    <img src="/lumis-white.svg" alt="Lumis Logo" className="h-6 w-auto hidden dark:block" />
+                                </>
+                            )}
+                        </motion.div>
+                    </AnimatePresence>
                 </Link>
             </div>
 
@@ -139,7 +148,7 @@ const Layout = () => {
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -10 }}
                             transition={{ duration: 0.2 }}
-                            className="mx-auto max-w-7xl h-full"
+                            className="w-full h-full"
                         >
                             <Outlet />
                         </motion.div>

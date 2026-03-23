@@ -1,7 +1,9 @@
+import os
 import logging
 import requests
 import json
-from typing import Dict, Optional
+import redis
+from typing import Dict, Optional, List
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -17,6 +19,9 @@ from src.tasks_checking import check_taskes
 from src.cryptography import encrypt_value
 from src.stripe_router import stripe_router
 from src.billing_middleware import verify_chat_limit, get_user_tier_and_usage, increment_query_usage
+
+# Import Celery Tasks
+from src.worker import run_ingestion_pipeline_task, run_risk_analysis_task
 
 # --- CONFIGURATION ---
 logging.basicConfig(level=logging.INFO)
@@ -38,9 +43,9 @@ app.include_router(jira_auth_router)
 app.include_router(notion_auth_router)
 app.include_router(stripe_router)
 
-# --- STATE MANAGEMENT ---
-active_agents: Dict[str, LumisAgent] = {}
-ingestion_state: Dict[str, Dict] = {}
+# --- STATE MANAGEMENT (Now Stateless via Redis) ---
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
 
 # --- MODELS ---
 class ChatRequest(BaseModel):
@@ -49,6 +54,7 @@ class ChatRequest(BaseModel):
     mode: str = "single-turn"
     reasoning: bool = False
     user_config: Optional[Dict] = None
+    session_id: Optional[str] = None  # NEW: Tracks active chat history
 
 class IngestRequest(BaseModel):
     user_id: str
@@ -57,24 +63,20 @@ class IngestRequest(BaseModel):
 
 def get_repo_name_from_url(repo_url: str) -> str:
     """Normalize a GitHub URL to the `owner/repo` form expected by the API."""
-    # strip .git suffix and any trailing slash
     name = repo_url.rstrip("/")
     if name.endswith(".git"):
         name = name[:-4]
-    # remove protocol and domain if present
     for prefix in ("https://github.com/", "http://github.com/", "git@github.com:"):
         if name.startswith(prefix):
             name = name[len(prefix) :]
             break
     return name
 
-
 def fetch_commits(repo_full_name: str):
     """Return the most recent commits for the repository as a normalized list."""
     url = f"https://api.github.com/repos/{repo_full_name}/commits"
     headers = {"Accept": "application/vnd.github.v3+json"}
     
-    # Safely attach token if it exists
     if getattr(Config, 'GITHUB_TOKEN', None):
         headers["Authorization"] = f"token {Config.GITHUB_TOKEN}"
         
@@ -95,10 +97,9 @@ def fetch_commits(repo_full_name: str):
         return []
     
 def update_progress(project_id, task, message):
-    if project_id not in ingestion_state:
-        ingestion_state[project_id] = {"status": "processing", "logs": [], "step": "Starting"}
-    
-    state = ingestion_state[project_id]
+    # Fetch current state from Redis instead of RAM
+    state_str = redis_client.get(f"sync_state:{project_id}")
+    state = json.loads(state_str) if state_str else {"status": "processing", "logs": [], "step": "Starting"}
 
     if task == "STARTING":
         state["status"] = "PROGRESSING"
@@ -111,63 +112,26 @@ def update_progress(project_id, task, message):
     elif task == "Error":
         state["status"] = "error"
     
-    state["step"]=task
+    state["step"] = task
 
     if message:
         state["logs"].append(f"[{task}] {message}")
 
-    # Persist critical status changes to the database inside the sync_state JSONB column
-    # This ensures the frontend can see the current sync progress in real-time
+    # Save back to Redis (expires after 24 hours to save memory)
+    redis_client.setex(f"sync_state:{project_id}", 86400, json.dumps(state))
+
+    # Persist critical status changes to the DB for real-time frontend updates
     try:
         supabase.table("projects").update({
             "sync_state": {
                 "status": state["status"],
                 "step": state["step"],
-                "logs": state["logs"][-20:] # Show last 20 logs for better live tracking
+                "logs": state["logs"][-20:] # Show last 20 logs
             }
         }).eq("id", project_id).execute()
     except Exception as db_err:
         logger.error(f"Failed to persist sync status to DB: {db_err}")
 
-    if project_id in ingestion_state:
-        ingestion_state[project_id] = state
-
-
-async def run_ingestion_pipeline(repo_url: str, project_id: str, user_config: Dict = None, agent: LumisAgent = None):
-    def progress_cb(t, m):
-        update_progress(project_id, t, m)
-        
-    try:
-        from src.ingestor import ingest_repo
-        await ingest_repo(repo_url=repo_url, project_id=project_id, progress_callback=progress_cb, user_config=user_config)
-        
-        progress_cb("DONE", "Sync and analysis complete.")
-
-    except Exception as e:
-        logger.error(f"Ingestion Pipeline Error: {e}")
-        progress_cb("Error", f"Pipeline failed: {str(e)}")
-
-
-async def run_risk_analysis_task(project_id: str, user_config: Dict = None):
-    def progress_cb(t, m):
-        update_progress(project_id, t, m)
-
-    try:
-        from src.risk_engine import calculate_predictive_risks
-        from src.code_reviewer import process_full_codebase_review
-        
-        progress_cb("ANALYZING", "Neural Risk Engine: Initializing codebase scan...")
-        await calculate_predictive_risks(project_id, user_config=user_config, log_callback=lambda msg: progress_cb("ANALYZING", msg))
-        await process_full_codebase_review(
-                    project_id, 
-                    LumisAgent(project_id=project_id, user_config=user_config),
-                    log_callback=lambda msg: progress_cb("ANALYZING", msg)
-                )
-        progress_cb("READY", "Neural Risk Analysis Complete.")
-    except Exception as e:
-        logger.error(f"Risk Analysis Error: {e}")
-        progress_cb("Error", f"Risk analysis failed: {str(e)}")
-            
 
 # --- ENDPOINTS ---
 
@@ -176,15 +140,13 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
     try:
         payload = await request.json()
 
-        # 1. Handle GitHub Zen Ping immediately
         if "zen" in payload:
             logger.info("GitHub Zen ping received. Connection verified.")
             return {"status": "ok", "message": "Lumis Unified Gateway is listening"}
 
-        # 2. Only proceed if it is a push to main or master
         ref = payload.get("ref", "")
         if ref not in ["refs/heads/main", "refs/heads/master"]:
-            reason = f"Ignored event on branch: {ref}" if ref else "Unsupported webhook event (e.g. Pull Request)"
+            reason = f"Ignored event on branch: {ref}" if ref else "Unsupported webhook event"
             logger.info(f"Webhook Ignored: {reason}")
             return {"status": "ignored", "reason": reason}
 
@@ -199,7 +161,6 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
             .execute()
         )
         
-        db_user_config = {}
         jira_proj = None
         notion_proj = None
 
@@ -208,13 +169,9 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
             jira_proj = proj_data.get("jira_project_id")
             notion_proj = proj_data.get("notion_project_id")
 
-        agent = LumisAgent(project_id=project_id, max_steps=3, user_config=global_config, mode="single-turn")
-
-        # Extract commit data from main/master push
         new_sha = payload.get("after")
         repo_url = payload.get("repository", {}).get("clone_url")
 
-        # Set status to syncing immediately
         supabase.table("projects").update({
             "last_commit": new_sha,
             "sync_state": {
@@ -229,16 +186,11 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
         update_progress(
             project_id, 
             "STARTING", 
-            f"GitHub Push detected ({new_sha[:7]}). Initializing Unified Sync..."
+            f"GitHub Push detected ({new_sha[:7]}). Dispatching to Worker..."
         )
 
-        background_tasks.add_task(
-            run_ingestion_pipeline,
-            repo_url=repo_url,
-            project_id=project_id,
-            user_config=db_user_config,
-            agent=agent
-        )
+        # Dispatch heavy indexing to Celery worker!
+        run_ingestion_pipeline_task.delay(repo_url, project_id, global_config)
 
         raw_commits = payload.get("commits", [])
         repo_name = payload.get("repository", {}).get("full_name")
@@ -249,6 +201,9 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
                 "sha": c.get("id", c.get("sha")),
                 "message": c.get("message", "")
             })
+
+        # Agent instantiated on the fly for check_taskes
+        agent = LumisAgent(project_id=project_id, max_steps=3, user_config=global_config, mode="single-turn")
 
         check_taskes(
             user_id=user_id,
@@ -261,7 +216,7 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
             agent=agent
         )
         
-        return {"status": "sync_started", "commit": new_sha}
+        return {"status": "sync_queued", "commit": new_sha}
 
     except Exception as e:
         logger.error(f"CRITICAL: Unified Webhook Error: {str(e)}")
@@ -276,7 +231,6 @@ async def chat_endpoint(req: ChatRequest, tier_data: dict = Depends(verify_chat_
             
         user_id = proj_row.data[0]["user_id"]
         
-        # Security check: Ensure the authenticated user actually owns this project
         if str(user_id) != str(tier_data["user_id"]):
             raise HTTPException(status_code=403, detail="Forbidden: You do not own this project")
         
@@ -285,19 +239,18 @@ async def chat_endpoint(req: ChatRequest, tier_data: dict = Depends(verify_chat_
         global_config["reasoning_enabled"] = req.reasoning
         global_config["mode"] = req.mode
 
-        if req.project_id not in active_agents:
-            logger.info(f"✨ Spawning agent for {req.project_id}")
-            agent = LumisAgent(project_id=req.project_id, user_config=global_config)
-            active_agents[req.project_id] = agent
-        else:
-            agent = active_agents[req.project_id]
-            agent.user_config = global_config 
+        logger.info(f"✨ Initializing stateless agent for project {req.project_id}")
+        
+        # Completely stateless. Creates a new agent, tying it to a session if provided
+        agent = LumisAgent(project_id=req.project_id, user_config=global_config, session_id=req.session_id)
 
         async def event_generator():
             try:
                 async for event_str in agent.ask_stream(req.query):
                     yield f"data: {event_str}\n\n"
-                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                    
+                # The agent automatically updates the DB inside its logic. We just return the session ID.
+                yield f"data: {json.dumps({'type': 'done', 'session_id': agent.session_id})}\n\n"
                 
                 increment_query_usage(tier_data["user_id"])
             except Exception as e:
@@ -315,11 +268,9 @@ async def chat_endpoint(req: ChatRequest, tier_data: dict = Depends(verify_chat_
 @app.post("/api/ingest")
 async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, tier_data: dict = Depends(get_user_tier_and_usage)):
     try:
-        # Security check: Ensure requested user_id matches the authenticated token
         if str(req.user_id) != str(tier_data["user_id"]):
             raise HTTPException(status_code=403, detail="Forbidden: User ID mismatch")
 
-        # 1. Check if this is an existing project BEFORE applying limits
         existing = (
             supabase.table("projects")
             .select("id, last_commit, jira_project_id, notion_project_id") 
@@ -330,7 +281,6 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, ti
         )
         is_existing_project = existing and existing.data and len(existing.data) > 0
 
-        # 2. Check Project Count Limit (only if it's a new project)
         if not is_existing_project:
             projects_res = supabase.table("projects").select("id", count="exact").eq("user_id", str(req.user_id)).execute()
             project_count = projects_res.count if projects_res.count is not None else 0
@@ -342,7 +292,6 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, ti
                     detail=f"Project limit of {limit} reached. Please upgrade your plan."
                 )
 
-        # 3. Check Storage Limit (ALWAYS check storage, even for updates)
         storage_limit = tier_data["limits"]["storage_gb"]
         if storage_limit is not None and storage_limit != float('inf'):
             try:
@@ -357,14 +306,13 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, ti
             except Exception as e:
                 logger.error(f"Failed to check storage limit: {e}")
 
-        logger.info(f"✨ Spawning agent for {req.repo_url}")
+        logger.info(f"✨ Queuing ingestion for {req.repo_url}")
 
-        # 4. Fetch Global Secure Config
         global_config = get_global_user_config(req.user_id)
         
-        # Validate LLM Config: Must have either use_default=True 
-        # OR all three: provider, api_key, and model.
-        is_default = global_config.get("use_default") is True
+        saved_use_default = global_config.get("use_default")
+        is_default = saved_use_default is True or saved_use_default is None
+        
         has_custom = all([
             global_config.get("provider"),
             global_config.get("api_key"),
@@ -374,8 +322,11 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, ti
         if not (is_default or has_custom):
             raise HTTPException(
                 status_code=400, 
-                detail="Inference Engine Offline: No valid LLM configuration found. Please setup your Provider, API Key, and Model in Settings."
+                detail="Inference Engine Offline: No valid LLM configuration found."
             )
+            
+        if is_default:
+            global_config["use_default"] = True
 
         global_config["user_id"] = req.user_id
         
@@ -388,16 +339,13 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, ti
             jira_proj = project_data.get('jira_project_id')
             notion_proj = project_data.get('notion_project_id')
             last_commit = project_data.get('last_commit')
-            logger.info(f"Existing project found for {req.repo_url} (ID: {project_id})")
             
-            # --- NEW: Extract all commits since the last sync ---
             commits = []
             for c in all_commits:
                 if c["sha"] == last_commit:
                     break
                 commits.append(c)
                 
-            # Fallback if last_commit wasn't in the recent list or list is empty
             if not commits and all_commits:
                 commits = [all_commits[0]]
                 
@@ -420,18 +368,13 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, ti
             jira_proj = None
             notion_proj = None
 
-        # 5. Initialize Agent
+        # Seed Redis state immediately
+        redis_client.setex(f"sync_state:{project_id}", 86400, json.dumps({"status": "starting", "logs": ["Request received..."], "step": "Init"}))
+
+        # Offload to Celery Background Worker
+        run_ingestion_pipeline_task.delay(req.repo_url, project_id, global_config)
+
         agent = LumisAgent(project_id=project_id, max_steps=3, user_config=global_config)
-        ingestion_state[project_id] = {"status": "starting", "logs": ["Request received..."], "step": "Init"}
-
-        background_tasks.add_task(
-            run_ingestion_pipeline,
-            repo_url=req.repo_url,
-            project_id=project_id,
-            user_config=global_config,
-            agent=agent 
-        )
-
         check_taskes(
             user_id=req.user_id,
             project_id=project_id,
@@ -452,7 +395,41 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, ti
 
 @app.get("/api/ingest/status/{project_id}")
 async def get_ingest_status(project_id: str):
-    return ingestion_state.get(project_id, {"status": "idle", "logs": [], "step": "Ready"})
+    state_str = redis_client.get(f"sync_state:{project_id}")
+    if state_str:
+        return json.loads(state_str)
+    return {"status": "idle", "logs": [], "step": "Ready"}
+
+# --- NEW: CHAT HISTORY ENDPOINTS ---
+@app.get("/api/chat/sessions/{project_id}")
+async def get_chat_sessions(project_id: str, current_user = Depends(get_current_user)):
+    """Fetches the history list for the left sidebar."""
+    res = supabase.table("chat_sessions").select("id, title, updated_at").eq("project_id", project_id).eq("user_id", str(current_user.id)).order("updated_at", desc=True).execute()
+    return res.data if res.data else []
+
+@app.get("/api/chat/messages/{session_id}")
+async def get_chat_messages(session_id: str, current_user = Depends(get_current_user)):
+    """Fetches messages when a user clicks a past session."""
+    res = supabase.table("chat_messages").select("role, content").eq("session_id", session_id).order("created_at", desc=False).execute()
+    return res.data if res.data else []
+
+@app.delete("/api/chat/sessions/{session_id}")
+async def delete_chat_session(session_id: str, current_user = Depends(get_current_user)):
+    """Deletes a chat session and its associated messages."""
+    # First verify ownership
+    owner_check = supabase.table("chat_sessions").select("user_id").eq("id", session_id).limit(1).execute()
+    if not owner_check or not owner_check.data:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    if str(owner_check.data[0]["user_id"]) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    # Cascading delete is handled by DB in common setups, but let's be explicit if needed
+    # Actually Supabase/Supabase-py delete executes immediately.
+    supabase.table("chat_messages").delete().eq("session_id", session_id).execute()
+    supabase.table("chat_sessions").delete().eq("id", session_id).execute()
+    
+    return {"status": "deleted"}
 
 @app.get("/api/get_risks/{project_id}")
 async def get_risks_endpoint(project_id: str):
@@ -463,7 +440,6 @@ async def get_risks_endpoint(project_id: str):
         .execute()
     
     risks_data = response.data if response and response.data else []
-    
     return {"status": "success", "risks": risks_data}
 
 @app.get("/api/stats/{project_id}")
@@ -502,16 +478,11 @@ async def get_user_jira_projects(user_id: str):
 
 @app.get("/api/settings/{user_id}")
 async def get_user_settings(user_id: str, current_user = Depends(get_current_user)):
-    """
-    Retrieves the user's global LLM configuration.
-    Masks the API key for security and handles 'System Default' state.
-    """
     if str(current_user.id) != user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     config = get_global_user_config(user_id)
     
-    # Logic: If using system default, the UI should show empty fields
     if config.get("use_default") is True:
         return {
             "provider": "",
@@ -520,7 +491,6 @@ async def get_user_settings(user_id: str, current_user = Depends(get_current_use
             "useDefault": True
         }
     
-    # Logic: If using custom, mask the key so the UI knows it is set but stays secure
     return {
         "provider": config.get("provider", ""),
         "selectedModel": config.get("model", ""),
@@ -537,13 +507,11 @@ async def update_user_settings(
     if str(current_user.id) != user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    # 1. Encrypt the API key
     api_key = payload.get("apiKey")
     encrypted_key = None
     if api_key and not api_key.startswith("••••"):
         encrypted_key = encrypt_value(api_key)
 
-    # 2. Build the Global Config
     new_user_config = {
         "provider": payload.get("provider"),
         "model": payload.get("selectedModel"),
@@ -553,11 +521,9 @@ async def update_user_settings(
     if encrypted_key:
         new_user_config["api_key"] = encrypted_key
     elif api_key and api_key.startswith("••••"):
-        # Retain existing key if they didn't change it
         existing_config = get_global_user_config(user_id)
         new_user_config["api_key"] = existing_config.get("api_key")
 
-    # 3. Save to the new global table (Upsert handles both insert and update)
     try:
         supabase.table("user_settings").upsert({
             "user_id": user_id,
@@ -571,9 +537,6 @@ async def update_user_settings(
 
 @app.delete("/api/projects/{user_id}/{project_id}")
 async def delete_project(user_id: str, project_id: str):
-    """
-    Permanently deletes a project and all associated analysis data for a given user.
-    """
     try:
         res = (
             supabase.table("projects")
@@ -598,22 +561,18 @@ async def delete_project(user_id: str, project_id: str):
         # Delete the project record itself
         supabase.table("projects").delete().eq("id", project_id).eq("user_id", user_id).execute()
 
-        # Clear in-memory state
-        active_agents.pop(project_id, None)
-        ingestion_state.pop(project_id, None)
+        # Clear Redis in-memory state
+        redis_client.delete(f"sync_state:{project_id}")
 
         return {"status": "deleted"}
     except HTTPException:
-        # Re-raise known HTTP errors
         raise
     except Exception as e:
         logger.error(f"Project delete failed for {project_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete project")
 
-# --- NEW NOTION ENDPOINTS ---
 @app.get("/api/notion/databases/{user_id}")
 async def get_user_notion_databases(user_id: str):
-    """Fetches all Notion databases available to the connected user."""
     from src.notion_client import get_accessible_databases 
     
     access_token = get_valid_notion_token(user_id)
@@ -630,7 +589,6 @@ async def update_jira_mapping(
     current_user = Depends(get_current_user)
 ):
     jira_key = payload.get("jira_project_id")
-    # If empty or 'none', set to None to clear the column in database
     if not jira_key or jira_key == "none":
         jira_key = None
         
@@ -641,7 +599,6 @@ async def update_jira_mapping(
         raise HTTPException(status_code=404, detail="Project not found")
         
     if str(res.data[0]["user_id"]) != str(current_user.id):
-        logger.warning(f"Ownership mismatch for project {project_id}: DB={res.data[0]['user_id']} vs Token={current_user.id}")
         raise HTTPException(status_code=403, detail="Forbidden: You do not own this project")
 
     supabase.table("projects").update({"jira_project_id": jira_key}).eq("id", project_id).execute()
@@ -654,9 +611,7 @@ async def update_notion_mapping(
     payload: dict,
     current_user = Depends(get_current_user)
 ):
-    """Saves the user's selected Notion database ID."""
     notion_db_id = payload.get("notion_project_id")
-    # If empty or 'none', set to None to clear the column in database
     if not notion_db_id or notion_db_id == "none":
         notion_db_id = None
 
@@ -667,7 +622,6 @@ async def update_notion_mapping(
         raise HTTPException(status_code=404, detail="Project not found")
         
     if str(res.data[0]["user_id"]) != str(current_user.id):
-        logger.warning(f"Ownership mismatch for project {project_id}: DB={res.data[0]['user_id']} vs Token={current_user.id}")
         raise HTTPException(status_code=403, detail="Forbidden: You do not own this project")
         
     supabase.table("projects").update({"notion_project_id": notion_db_id}).eq("id", project_id).execute()
@@ -675,7 +629,6 @@ async def update_notion_mapping(
 
 @app.get("/api/projects/{project_id}/check-remote")
 async def check_remote_sync(project_id: str):
-    """Checks if the local project commit matches the latest remote commit."""
     try:
         res = supabase.table("projects").select("repo_url, last_commit").eq("id", project_id).limit(1).execute()
         if not res or not res.data:
@@ -692,12 +645,10 @@ async def check_remote_sync(project_id: str):
         remote_commits = fetch_commits(repo_name)
         
         if not remote_commits:
-            # If we can't get remote info, we shouldn't assume it's up to date
             return {"up_to_date": True, "status": "unknown", "message": "Could not verify remote status"}
             
         latest_remote_sha = remote_commits[0]["sha"]
         
-        # If local_commit is missing (unlikely but possible), it's definitely not up to date
         if not local_commit:
             return {
                 "up_to_date": False,
@@ -718,7 +669,7 @@ async def check_remote_sync(project_id: str):
         return {"up_to_date": True, "error": str(e), "status": "error"}
 
 @app.post("/api/projects/{project_id}/analyze-risks")
-async def trigger_risk_analysis(project_id: str, background_tasks: BackgroundTasks):
+async def trigger_risk_analysis(project_id: str):
     proj_row = supabase.table("projects").select("user_id").eq("id", project_id).limit(1).execute()
     if not proj_row or not proj_row.data:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -727,13 +678,15 @@ async def trigger_risk_analysis(project_id: str, background_tasks: BackgroundTas
     user_config = get_global_user_config(user_id) if user_id else {}
     
     update_progress(project_id, "ANALYZING", "Queuing risk analysis task...")
-    background_tasks.add_task(run_risk_analysis_task, project_id, user_config)
     
-    return {"status": "analysis_started"}
+    # Dispatch heavy analysis to Celery Worker
+    run_risk_analysis_task.delay(project_id, user_config)
+    
+    return {"status": "analysis_queued"}
 
 @app.get("/api/status")
 async def health_check():
-    return {"status": "ok", "service": "Lumis Project"}
+    return {"status": "ok", "service": "Lumis Project Stateless"}
 
 if __name__ == "__main__":
     import uvicorn

@@ -72,6 +72,8 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/auth/jira/callback" element={<JiraCallback />} />
+        <Route path="/settings" element={<Navigate to="/app/settings" replace />} />
+        <Route path="/billing" element={<Navigate to="/app/billing" replace />} />
 
         <Route
           path="/app"

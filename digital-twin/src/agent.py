@@ -9,10 +9,12 @@ from src.services import get_llm_completion
 from src.retriever import GraphRetriever
 from src.answer_generator import AnswerGenerator
 from src.query_processor import QueryProcessor
+from src.db_client import supabase
 
 class LumisAgent:
-    def __init__(self, project_id: str, max_steps: int = 5, user_config: Dict = None, mode: str = "single-turn"):
+    def __init__(self, project_id: str, max_steps: int = 5, user_config: Dict = None, mode: str = "single-turn", session_id: str = None):
         self.project_id = project_id
+        self.session_id = session_id
         self.user_config = user_config or {}
         if "mode" not in self.user_config:
             self.user_config["mode"] = mode
@@ -23,8 +25,18 @@ class LumisAgent:
         self.generator = AnswerGenerator(project_id)
         self.query_processor = QueryProcessor()
         self.max_steps = max_steps
-        self.conversation_history: List[BaseMessage] = []
+        self.conversation_history: List[Dict] = []
         self.logger = logging.getLogger(__name__)
+
+        # If a session ID is provided, load the history from Supabase
+        if self.session_id and self.user_config.get("mode") == "multi-turn":
+            try:
+                res = supabase.table("chat_messages").select("role, content").eq("session_id", self.session_id).order("created_at", asc=True).execute()
+                if res.data:
+                    for msg in res.data:
+                        self.conversation_history.append({"role": msg["role"], "content": msg["content"]})
+            except Exception as e:
+                self.logger.error(f"Failed to load chat history from DB: {e}")
 
     async def ask_stream(self, user_query: str):
         """ Main entry point for user queries. Intercepts Jira keywords to trigger
@@ -60,11 +72,12 @@ class LumisAgent:
 
         for step in range(self.max_steps):
             # Still use the synchronous completion here since we need the FULL JSON object to parse it before moving forward
+            user_config = {**(self.user_config or {}), "feature_mode": "chat"}
             response_text = await asyncio.to_thread(
                 get_llm_completion,
                 self._get_system_prompt(), 
                 self._build_step_prompt(processed_query, scratchpad),
-                user_config=self.user_config
+                user_config=user_config
             )
             
             data = self._parse_response(response_text, fallback_query=user_query)
@@ -76,8 +89,7 @@ class LumisAgent:
 
             yield json.dumps({"type": "thought", "content": f"[{confidence}%] {thought}"})
 
-            # Testing
-            """if confidence >= 95 or action == "final_answer":"""
+            #Testing
             if action == "final_answer":
                 yield json.dumps({"type": "thought", "content": "Confidence threshold reached. Formulating final answer."})
                 break
@@ -114,7 +126,7 @@ class LumisAgent:
         if self.conversation_history and len(self.conversation_history) > 0:
             recent_msgs = self.conversation_history[-6:]
             history_text = "CONVERSATION HISTORY:\n" + "\n".join(
-                [f"{m['role'].upper() if isinstance(m, dict) else m.type.upper()}: {m['content'] if isinstance(m, dict) else m.content}" for m in recent_msgs]
+                [f"{m['role'].upper() if isinstance(m, dict) else getattr(m, 'type', '').upper()}: {m['content'] if isinstance(m, dict) else getattr(m, 'content', '')}" for m in recent_msgs]
             ) + "\n\n"
             
         progress = "\n".join([f"Action: {s['action']} -> {s['observation']}" for s in scratchpad])
@@ -129,12 +141,11 @@ class LumisAgent:
         insight_text = "\n\n".join(insights)
         return f"{history_text}{query_context}\n\n{insight_text}\n\nPROGRESS:\n{progress}\n\nNEXT JSON (Respond strictly with the requested JSON schema and NO native tool calls):"
     
-    # To check later ⚠️️: This parsing logic is now duplicated in query_processor.py. Consider centralizing it in a utility module if it becomes more complex or is needed elsewhere.
     def _parse_response(self, text: str, fallback_query: str = "") -> Dict[str, Any]:
         if not text: 
             return self._create_fallback(fallback_query, "Empty response from LLM")
         
-        # NEW: Catch XML tool calls from stubborn models (like Stepfun or Claude)
+        # Catch XML tool calls from stubborn models (like Stepfun or Claude)
         if "<tool_call>" in text or "<function=" in text:
             import re
             func_match = re.search(r'<function=([^>]+)>', text)
@@ -234,9 +245,42 @@ class LumisAgent:
         )
 
     def _update_history(self, q, a, mode):
-        if mode == "multi-turn":
-            self.conversation_history.append({"role": "user", "content": q})
-            self.conversation_history.append({"role": "assistant", "content": a})
+            # 1. LLM MEMORY (Only happens if Multi-Turn is ON)
+            # This controls what gets fed back into the AI's prompt context
+            if mode == "multi-turn":
+                self.conversation_history.append({"role": "user", "content": q})
+                self.conversation_history.append({"role": "assistant", "content": a})
+
+            user_id = self.user_config.get("user_id")
+
+            # 2. DATABASE HISTORY (Happens ALWAYS, regardless of mode)
+            # This controls the left sidebar so users can find old messages
+            if user_id:
+                try:
+                    # Create session if it doesn't exist
+                    if not self.session_id:
+                        title = q[:30] + "..." if len(q) > 30 else q
+                        res = supabase.table("chat_sessions").insert({
+                            "project_id": self.project_id,
+                            "user_id": user_id,
+                            "title": title
+                        }).execute()
+                        if res.data:
+                            self.session_id = res.data[0]["id"]
+                    
+                    # Insert messages to DB ALWAYS
+                    if self.session_id:
+                        supabase.table("chat_messages").insert([
+                            {"session_id": self.session_id, "user_id": user_id, "role": "user", "content": q},
+                            {"session_id": self.session_id, "user_id": user_id, "role": "assistant", "content": a}
+                        ]).execute()
+                        
+                        # Update session timestamp
+                        from datetime import datetime, timezone
+                        now_str = datetime.now(timezone.utc).isoformat()
+                        supabase.table("chat_sessions").update({"updated_at": now_str}).eq("id", self.session_id).execute()
+                except Exception as e:
+                    self.logger.error(f"Failed to persist chat history to database: {e}")
 
     def analyze_fulfillment(self, issue: Dict, code: str) -> Dict:
         """
@@ -295,8 +339,8 @@ class LumisAgent:
         """
         
         try:
-            response_text = get_llm_completion(system_prompt, prompt, user_config=self.user_config)
-            # Robustly extract JSON block
+            user_config = {**(self.user_config or {}), "feature_mode": "chat"}
+            response_text = get_llm_completion(system_prompt, prompt, user_config=user_config)
             clean_json = response_text.strip().replace('```json', '').replace('```', '')
             start_idx = clean_json.find('{')
             end_idx = clean_json.rfind('}')
@@ -311,7 +355,6 @@ class LumisAgent:
         """Uses AI to determine if a commit message matches one of the active Jira tasks."""
         if not issues: return None
 
-        # Prepare a list of candidate tasks for the AI
         candidates = "\n".join([f"- [{i['key']}] {i['fields']['summary']}" for i in issues])
 
         print(f"\n--- DEBUG: ACTIVE TASKS FED TO AI ---")
@@ -332,12 +375,12 @@ class LumisAgent:
         """
 
         try:
-            response = get_llm_completion(system_prompt, user_prompt, user_config=self.user_config)
+            user_config = {**(self.user_config or {}), "feature_mode": "chat"}
+            response = get_llm_completion(system_prompt, user_prompt, user_config=user_config)
             match_id = response.strip().upper()
             
             if "NONE" in match_id: return None
             
-            # Return the actual issue object from the list
             return next((i for i in issues if i['key'] in match_id), None)
         except Exception:
             return None
@@ -347,13 +390,9 @@ class LumisAgent:
         Standalone AI code reviewer that uses graph context to predict 
         breaking changes and side effects.
         """
-        # 1. Extract potential unit names from the diff to seed the graph search
         potential_units = re.findall(r'(?:def|class)\s+([a-zA-Z_][a-zA-Z0-9_]*)', code[:10000])
-        
-        # 2. Get the architectural context (neighbors in the graph)
         graph_context = self.retriever.get_architectural_context(potential_units)
 
-        # 3. Enhanced Prompt with Chain-of-Thought and Pragmatism
         system_prompt = """
         You are an elite, pragmatic Senior Code Reviewer and Software Architect.
         Analyze the provided code diff for bugs, security risks, and breaking changes.
@@ -390,9 +429,9 @@ class LumisAgent:
         
         try:
             from src.services import get_llm_completion
-             # disable reasoning
-            user_config = self.user_config 
+            user_config = self.user_config.copy()
             user_config["reasoning_enabled"] = False
+            user_config["feature_mode"] = "risk"
             response_text = get_llm_completion(system_prompt, user_prompt, user_config=user_config)
             
             if not response_text:
@@ -410,3 +449,74 @@ class LumisAgent:
         except Exception as e:
             self.logger.error(f"Code reviewer error: {e}")
             return {"identified_risks": []}
+    
+    def analyze_architectural_risks(self, unit_name: str, code: str, graph_context: str) -> dict:
+        """
+        Aggressively evaluates a specific code slice against its graph dependencies 
+        to detect architectural rot and scope creep.
+        """
+        system_prompt = """
+        You are a highly aggressive, strict Staff Software Architect.
+        Your goal is to protect the codebase from Architectural Degradation, Tight Coupling, and Breaking Changes.
+        
+        CRITICAL RULES:
+        1. Look closely at the TARGET UNIT and its GRAPH CONTEXT (what it calls, and who calls it).
+        2. AGGRESSIVELY FLAG:
+           - Tight Coupling / Bypassing Data Layers.
+           - Breaking Contracts (Changing behavior that will break the 'Callers' in the Graph).
+           - Circular Dependencies.
+           - God Objects / Unbounded Scope.
+        3. Do NOT flag minor stylistic choices. Only flag structural/architectural issues.
+        
+        JSON OUTPUT FORMAT (STRICT):
+        {
+          "analysis_trace": "Briefly track how this unit interacts with its neighbors.",
+          "identified_risks": [
+            {
+              "risk_type": "TIGHT_COUPLING" | "CONTRACT_BREAK" | "CIRCULAR_DEPENDENCY" | "ARCHITECTURAL_FLAW",
+              "severity": "High" | "Medium",
+              "description": "Precise explanation of the architectural failure mechanism.",
+              "affected_neighbors": ["neighboring_unit_name"]
+            }
+          ]
+        }
+        - If the architecture is clean, leave "identified_risks" as an empty array [].
+        """
+        
+        user_prompt = f"""
+        TARGET UNIT: {unit_name}
+        
+        GRAPH CONTEXT (Dependencies & Callers):
+        {graph_context}
+        
+        CODE TO REVIEW:
+        {code}
+        """
+        
+        try:
+            from src.services import get_llm_completion
+            
+            review_config = self.user_config.copy()
+            review_config["reasoning_enabled"] = False 
+            review_config["feature_mode"] = "risk"
+            
+            response_text = get_llm_completion(system_prompt, user_prompt, user_config=review_config)
+            
+            if not response_text:
+                self.logger.error("LLM returned None. Skipping architectural analysis.")
+                return {"identified_risks": []}
+            
+            clean_json = response_text.strip().replace('```json', '').replace('```', '')
+            start_idx = clean_json.find('{')
+            end_idx = clean_json.rfind('}')
+            
+            if start_idx != -1 and end_idx != -1:
+                import json
+                return json.loads(clean_json[start_idx:end_idx + 1])
+                
+            import json
+            return json.loads(clean_json)
+        except Exception as e:
+            self.logger.error(f"Architectural reviewer error: {e}")
+            return {"identified_risks": []}
+        

@@ -39,6 +39,7 @@ async def analyze_grouped_conflict_with_llm(target_name, sources, user_config, l
     
     # Wrap synchronous LLM call to run in a separate thread
     loop = asyncio.get_running_loop()
+    user_config = {**(user_config or {}), "feature_mode": "risk"}
     func = functools.partial(get_llm_completion, system_prompt, user_prompt, user_config=user_config)
     analysis= await loop.run_in_executor(None, func)
     return analysis if analysis else "Standard dependency risk detected."
