@@ -14,11 +14,10 @@ STRIPE_WEBHOOK_SECRET = Config.STRIPE_WEBHOOK_SECRET
 FRONTEND_URL = Config.FRONTEND_URL
 
 PRICES = {
-    "pro_monthly": "price_1TABF5HBW6CmGvUgnfBskih3",
-    "pro_yearly": "price_1TABGSHBW6CmGvUgoXcokNbQ",
-    "team_monthly": "price_1TABL2HBW6CmGvUgIysY09Ym",
-    "team_yearly": "price_1TABLMHBW6CmGvUgwMBcGJnz",
+    "premium_monthly": "price_1TABF5HBW6CmGvUgnfBskih3",
+    "premium_yearly": "price_1TABGSHBW6CmGvUgoXcokNbQ",
 }
+
 
 stripe_router = APIRouter(prefix="/api/billing", tags=["Billing"])
 

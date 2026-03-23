@@ -1,28 +1,32 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+
 import { motion } from 'framer-motion';
 import {
     Check,
+    X,
     CreditCard,
     Zap,
     Layers,
     ArrowRight
 } from 'lucide-react';
+
 import { useBillingStore } from '@/stores/useBillingStore';
 import { cn } from '@/lib/utils';
 import { API_BASE, supabase } from '@/lib/supabase';
 
-const PricingCard = ({ tier, price, description, features, active, highlight }: any) => {
+const PricingCard = ({ tier, price, description, features, active, highlight, interval }: any) => {
     const handleCheckout = async () => {
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) return;
 
             // If active plan, go to portal. If upgrading, go to checkout.
-            const endpoint = active 
-                ? `${API_BASE}/api/billing/create-portal-session` 
+            const endpoint = active
+                ? `${API_BASE}/api/billing/create-portal-session`
                 : `${API_BASE}/api/billing/create-checkout-session`;
 
-            const payload = active ? {} : { tier: tier.toLowerCase(), interval: 'monthly' };
+            const payload = active ? {} : { tier: tier.toLowerCase(), interval };
+
 
             const res = await fetch(endpoint, {
                 method: 'POST',
@@ -55,8 +59,8 @@ const PricingCard = ({ tier, price, description, features, active, highlight }: 
             {active && (
                 <div className={cn(
                     "absolute -top-3 left-1/2 -translate-x-1/2 rounded-full px-4 py-1.5 text-[10px] font-black uppercase tracking-widest shadow-xl border",
-                    highlight 
-                        ? "bg-white text-black border-black/10" 
+                    highlight
+                        ? "bg-white text-black border-black/10"
                         : "bg-primary text-primary-foreground border-white/10"
                 )}>
                     Current Plan
@@ -65,24 +69,57 @@ const PricingCard = ({ tier, price, description, features, active, highlight }: 
 
             <div className="mb-8 relative z-10">
                 <h3 className="text-xl font-black tracking-tight">{tier}</h3>
-                <div className="mt-4 flex items-baseline gap-1">
-                    <span className="text-4xl font-black tracking-tighter">${price}</span>
-                    <span className={cn("text-xs font-bold uppercase tracking-widest", highlight ? "text-primary-foreground/90" : "text-muted-foreground")}>/month</span>
+                <div className="mt-4 flex flex-col">
+                    <div className="flex items-baseline gap-1">
+                        <span className="text-4xl font-black tracking-tighter">${price}</span>
+                        <span className={cn("text-xs font-bold uppercase tracking-widest opacity-70", highlight ? "text-primary-foreground" : "text-muted-foreground")}>
+                            /month
+                        </span>
+                    </div>
+                    {interval === 'yearly' && tier !== 'Free' && (
+                        <span className={cn("text-[10px] font-bold uppercase tracking-widest mt-1 opacity-60", highlight ? "text-primary-foreground" : "text-primary")}>
+                            Billed annually
+                        </span>
+                    )}
                 </div>
+
+
                 <p className={cn("mt-4 text-sm font-medium leading-relaxed", highlight ? "text-primary-foreground/90 font-bold" : "text-muted-foreground")}>
                     {description}
                 </p>
             </div>
 
             <div className="mb-8 flex-1 space-y-4 relative z-10">
-                {features.map((feature: string, i: number) => (
-                    <div key={i} className="flex items-center gap-3">
-                        <div className={cn("flex h-5 w-5 items-center justify-center rounded-full shrink-0", highlight ? "bg-white/20" : "bg-primary/10")}>
-                            <Check className={cn("h-3 w-3", highlight ? "text-white" : "text-primary")} />
+                {features.map((feature: string, i: number) => {
+                    const isDisabled = feature.includes('Disabled');
+                    const Icon = isDisabled ? X : Check;
+                    
+                    return (
+                        <div key={i} className="flex items-center gap-3">
+                            <div className={cn(
+                                "flex h-5 w-5 items-center justify-center rounded-full shrink-0", 
+                                isDisabled 
+                                    ? (highlight ? "bg-white/10" : "bg-destructive/10")
+                                    : (highlight ? "bg-green-400/20" : "bg-green-500/10")
+                            )}>
+                                <Icon className={cn(
+                                    "h-3 w-3", 
+                                    isDisabled 
+                                        ? (highlight ? "text-white/70" : "text-destructive") 
+                                        : (highlight ? "text-green-300" : "text-green-500")
+                                )} />
+                            </div>
+
+
+                            <span className={cn(
+                                "text-sm font-medium", 
+                                highlight ? "text-primary-foreground font-semibold" : (isDisabled ? "text-muted-foreground line-through opacity-50" : "text-foreground/80")
+                            )}>
+                                {feature}
+                            </span>
                         </div>
-                        <span className={cn("text-sm font-medium", highlight ? "text-primary-foreground font-semibold" : "text-foreground/80")}>{feature}</span>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
 
             {active && tier === 'Free' ? (
@@ -90,14 +127,14 @@ const PricingCard = ({ tier, price, description, features, active, highlight }: 
                     Free Plan Active
                 </div>
             ) : (
-                <button 
-                    onClick={handleCheckout} 
+                <button
+                    onClick={handleCheckout}
                     className={cn(
-                    "flex h-12 w-full items-center justify-center gap-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg",
-                    highlight
-                        ? "bg-white text-black hover:bg-white/90 shadow-white/20 border border-black"
-                        : "bg-primary/20 text-primary border border-primary/30 hover:bg-primary/30"
-                )}>
+                        "flex h-12 w-full items-center justify-center gap-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg",
+                        highlight
+                            ? "bg-white text-black hover:bg-white/90 shadow-white/20 border border-black"
+                            : "bg-primary/20 text-primary border border-primary/30 hover:bg-primary/30"
+                    )}>
                     {active ? "Manage Subscription" : "Upgrade Now"}
                     {!active && <ArrowRight className={cn("h-4 w-4", highlight ? "text-black" : "text-primary")} />}
                 </button>
@@ -108,61 +145,78 @@ const PricingCard = ({ tier, price, description, features, active, highlight }: 
 
 const Billing = () => {
     const { tier, limits, usage, fetchBilling } = useBillingStore();
+    const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly');
 
     useEffect(() => {
         fetchBilling();
     }, []);
+
+    const premiumPrice = billingInterval === 'monthly' ? "14.9" : "11.9";
+
 
     return (
         <div className="space-y-12 pb-20 p-8">
             <div className="text-center">
                 <h1 className="text-4xl font-black tracking-tight">Billing & Plans</h1>
                 <p className="mt-2 text-muted-foreground">Manage your subscription and project limits.</p>
+                
+                {/* Billing Toggle */}
+                <div className="mt-10 flex items-center justify-center gap-4">
+                    <span className={cn("text-sm font-bold tracking-tight", billingInterval === 'monthly' ? "text-foreground" : "text-muted-foreground")}>Monthly</span>
+                    <button 
+                        onClick={() => setBillingInterval(billingInterval === 'monthly' ? 'yearly' : 'monthly')}
+                        className="relative h-7 w-14 rounded-full bg-accent p-1 transition-colors hover:bg-accent/80"
+                    >
+                        <motion.div 
+                            animate={{ x: billingInterval === 'monthly' ? 0 : 28 }}
+                            className="h-5 w-5 rounded-full bg-primary shadow-lg"
+                        />
+                    </button>
+                    <div className="flex items-center gap-2">
+                        <span className={cn("text-sm font-bold tracking-tight", billingInterval === 'yearly' ? "text-foreground" : "text-muted-foreground")}>Yearly</span>
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-primary border border-primary/20">
+                            Save 20%
+                        </span>
+                    </div>
+                </div>
             </div>
 
-            <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 md:grid-cols-3">
+            <div className="mx-auto grid max-w-5xl grid-cols-1 gap-8 md:grid-cols-2">
                 <PricingCard
                     tier="Free"
                     price="0"
-                    description="Perfect for individuals exploring Lumis."
+                    interval={billingInterval}
+                    description="Essential features for individual explorers."
                     active={tier === 'free'}
-                    highlight={tier === 'free'}
+                    highlight={false}
                     features={[
-                        "1 Project",
-                        "50 Queries / mo",
-                        "Standard Speed",
-                        "Email Support"
+                        "3 Projects",
+                        "50 Queries / month",
+                        "1 GB Storage",
+                        "Email Support",
+                        "Multi-turn Memory Disabled",
+                        "Reasoning Disabled"
                     ]}
                 />
                 <PricingCard
-                    tier="Pro"
-                    price="29"
-                    description="For power users and solo developers."
-                    active={tier === 'pro'}
-                    highlight={tier === 'pro'}
-                    features={[
-                        "10 Projects",
-                        "Unlimited Queries",
-                        "GPT-4o Reasoning",
-                        "Webhooks & API",
-                        "Priority Support"
-                    ]}
-                />
-                <PricingCard
-                    tier="Team"
-                    price="99"
-                    description="Scale your entire engineering team."
-                    active={tier === 'team'}
-                    highlight={tier === 'team'}
+                    tier="Premium"
+                    price={premiumPrice}
+                    interval={billingInterval}
+                    description="Unlimit your potential with full AI capabilities."
+                    active={tier === 'premium'}
+                    highlight={true}
                     features={[
                         "Unlimited Projects",
-                        "Collaborative Chat",
-                        "Custom Constraints",
-                        "SSO & Security",
-                        "Dedicated Manager"
+                        "Unlimited Queries",
+                        "Unlimited Storage",
+                        "Priority Support",
+                        "Multi-turn Memory Enabled",
+                        "LLM Reasoning Enabled"
                     ]}
                 />
             </div>
+
+
 
             <div className="mt-20 space-y-8">
                 <h2 className="text-2xl font-black tracking-tight flex items-center gap-3">
