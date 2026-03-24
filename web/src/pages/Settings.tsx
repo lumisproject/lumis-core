@@ -329,7 +329,7 @@ const Settings = () => {
                         "flex h-12 items-center gap-2 rounded-2xl px-10 text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 disabled:opacity-50 w-fit shadow-2xl",
                         success
                             ? "bg-green-500 text-white shadow-green-500/20"
-                            : "bg-primary text-primary-foreground shadow-primary/20"
+                            : "bg-gradient-to-tr from-orange-600 to-orange-400 text-white shadow-xl shadow-orange-600/30"
                     )}
                 >
                     {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : success ? <CheckCircle2 className="h-4 w-4" /> : <Save className="h-4 w-4" />}
@@ -484,29 +484,49 @@ const Settings = () => {
 
                     {/* NOTION */}
                     <div className="space-y-4 p-6 rounded-3xl border border-black/5 bg-accent/10 dark:border-white/5 relative overflow-hidden group">
-                        <div className="absolute top-3 right-[-35px] rotate-45 bg-amber-500 text-white text-[8px] font-black uppercase tracking-widest py-1 px-10 shadow-xl z-10 border border-white/20">
-                            Soon
-                        </div>
+                        {!project && (
+                            <div className="absolute inset-0 z-20 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center rounded-3xl">
+                                <AlertTriangle className="h-6 w-6 text-orange-500 mb-2" />
+                                <div className="text-[10px] font-black uppercase tracking-widest">No Active Instance</div>
+                                <p className="text-[9px] text-muted-foreground mt-1">Select a project in the Command Center to map integrations.</p>
+                            </div>
+                        )}
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                                <BookOpen className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-xs font-black uppercase tracking-widest text-muted-foreground/60">
-                                    Notion board
+                                <BookOpen className="h-4 w-4 text-emerald-500" />
+                                <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                                    Notion Board {project?.notion_project_id && <CheckCircle2 className="inline h-3 w-3 ml-1 text-primary" />}
                                 </span>
                             </div>
-                            <div className="h-2 w-2 rounded-full bg-muted opacity-30" />
+                            <div className={cn("h-2 w-2 rounded-full", notionConnected ? "bg-primary animate-pulse shadow-[0_0_10px_rgba(var(--primary),0.5)]" : "bg-muted")} />
                         </div>
 
-                        <div className="space-y-4 opacity-50 grayscale-[0.5]">
+                        {notionConnected ? (
+                            <div className="space-y-4">
+                                <ModernSelect
+                                    label="Target Database"
+                                    icon={Search}
+                                    value={project?.notion_project_id || 'none'}
+                                    onChange={(val: string) => project?.id && updateNotionMapping(project.id, val === 'none' ? '' : val)}
+                                    options={[{ id: 'none', name: 'None / Not Linked' }, ...availableNotionDBs]}
+                                    loading={loadingNotion}
+                                />
+                                <button
+                                    onClick={() => user?.id && disconnectNotion(user.id)}
+                                    className="text-[10px] font-bold uppercase tracking-widest text-destructive hover:underline"
+                                >
+                                    Disconnect Node
+                                </button>
+                            </div>
+                        ) : (
                             <button
-                                disabled
-                                className="w-full flex h-12 items-center justify-center gap-2 rounded-2xl bg-black/10 text-foreground text-[10px] font-black uppercase tracking-widest transition-all border border-black/5 dark:border-white/5 cursor-not-allowed"
+                                onClick={() => window.location.href = `${API_BASE}/auth/notion/connect?state=${user?.id}`}
+                                className="w-full flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-500/10 text-emerald-500 text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500/20 transition-all border border-emerald-500/20"
                             >
-                                <Lock className="h-4 w-4" />
-                                Under Construction
+                                <Plug className="h-4 w-4" />
+                                Link Notion Node
                             </button>
-                            <p className="text-[10px] text-center font-bold text-amber-500 uppercase tracking-widest animate-pulse">Available in next protocol update</p>
-                        </div>
+                        )}
                     </div>
 
                 </div>
