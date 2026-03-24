@@ -66,7 +66,7 @@ export const ProjectSwitcher: React.FC = () => {
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ detail: 'Unknown server error' }));
-        alert(`Deletion Protocol Failed: ${errorData.detail || 'Internal System Error'}`);
+        alert(`Project Deletion Failed: ${errorData.detail || 'Internal System Error'}`);
         setDeleting(false);
         return;
       }
@@ -80,7 +80,7 @@ export const ProjectSwitcher: React.FC = () => {
       navigate('/app');
     } catch (err) {
       console.error("Delete request failed:", err);
-      alert("Network Error: Could not connect to the Inference Engine.");
+      alert("Network Error: Could not connect to the Lumis Engine.");
     } finally {
       setDeleting(false);
     }
@@ -124,7 +124,7 @@ export const ProjectSwitcher: React.FC = () => {
             className="absolute right-0 mt-2 w-72 rounded-3xl border border-black/10 bg-white p-3 shadow-2xl dark:border-white/10 dark:bg-[#0F0F0F] z-50 origin-top-right"
           >
             <div className="px-3 py-2 text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground mb-2">
-              Neural Instances
+              Your Projects
             </div>
 
             {!isUpToDate && project && project.status !== 'syncing' && project.sync_state?.status !== 'syncing' && (
@@ -196,7 +196,7 @@ export const ProjectSwitcher: React.FC = () => {
                     )}
                 >
                     {isAtProjectLimit ? <Lock className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                    <span>{isAtProjectLimit ? 'Limit Reached' : 'Initiate New Sync'}</span>
+                    <span>{isAtProjectLimit ? 'Limit Reached' : 'Connect New Repository'}</span>
                 </button>
                 
                 {project && (
@@ -245,9 +245,9 @@ export const ProjectSwitcher: React.FC = () => {
                     <AlertTriangle className="h-10 w-10" />
                 </div>
                 <div className="space-y-2">
-                    <h2 className="text-3xl font-black tracking-tighter uppercase text-destructive">Protocol Termination</h2>
+                    <h2 className="text-3xl font-black tracking-tighter uppercase text-destructive">Delete Project</h2>
                     <p className="text-sm text-muted-foreground font-medium max-w-xs mx-auto">
-                        This action will permanently purge all vectors, logic maps, and risk data associated with this instance.
+                        This action will permanently remove all analysis, architecture maps, and risk data for this project.
                     </p>
                 </div>
               </div>
