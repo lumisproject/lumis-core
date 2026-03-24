@@ -28,11 +28,12 @@ const Signup = () => {
                         <img src="/lumis-black.svg" alt="Lumis Logo" className="h-12 w-auto block dark:hidden" />
                         <img src="/lumis-white.svg" alt="Lumis Logo" className="h-12 w-auto hidden dark:block" />
                     </Link>
-                    <h1 className="text-5xl font-black tracking-tight leading-tight">Build better software with <span className="text-primary">Lumis</span>.</h1>
-                    <div className="space-y-4">
-                        <FeatureItem text="Analyze codebases autonomously" />
-                        <FeatureItem text="Detect architectural risks early" />
-                        <FeatureItem text="Sync Jira and Notion workflows" />
+                    <h1 className="text-5xl font-black tracking-tight leading-tight">Teams using <span className="text-primary">Lumis</span> reclaim 10+ hours per dev per week.</h1>
+                    <p className="text-xl font-medium text-muted-foreground mt-4">Connect your repo in 60 seconds. See your first risk scan in 5 minutes.</p>
+                    <div className="space-y-4 pt-4">
+                        <FeatureItem text="Autonomous codebase analysis" />
+                        <FeatureItem text="Early architectural risk detection" />
+                        <FeatureItem text="Jira and Notion workflow sync" />
                         <FeatureItem text="Real-time Github integration" />
                     </div>
                 </div>

@@ -25,12 +25,12 @@ const NewProject = () => {
         if (!repoUrl || !user?.id) return;
         
         if (isLimitReached) {
-            alert("Protocol Violation: Free Tier is limited to 1 active repository. Please upgrade your subscription to ingest more projects.");
+            alert("Tier Limit Reached: Free Tier is limited to 1 active repository. Please upgrade your subscription to connect more projects.");
             return;
         }
 
         if (!isConfigComplete) {
-            alert("Inference Bridge Offline: You must configure your own LLM (Provider, API Key, and Model) in Settings before you can index a repository.");
+            alert("AI Engine Unconfigured: You must configure your own LLM (Provider, API Key, and Model) in Settings before you can index a repository.");
             navigate('/app/settings');
             return;
         }
@@ -67,17 +67,17 @@ const NewProject = () => {
                     </div>
                     
                     <div className="space-y-4">
-                        <h1 className="text-5xl font-black tracking-tighter leading-tight uppercase">Initiate Core Protocol</h1>
+                        <h1 className="text-5xl font-black tracking-tighter leading-tight uppercase">Connect Repository</h1>
                         <p className="text-lg text-muted-foreground font-medium leading-relaxed">
-                            Lumis will parse, index, and monitor your intelligence layer. Paste your repository link to begin secure indexing.
+                            Lumis will parse and index your codebase. Paste your GitHub repository link to begin.
                         </p>
                     </div>
 
                     <div className="flex flex-col gap-6 pt-4">
                         {[
-                            { icon: ShieldCheck, title: "Secure Handshake", desc: "Encrypted OAuth & Private Access" },
-                            { icon: Database, title: "Deep Vector Indexing", desc: "Full Architectural Content Analysis" },
-                            { icon: Zap, title: "Real-time Sync", desc: "Live Webhook Logic Mapping" }
+                            { icon: ShieldCheck, title: "Secure Access", desc: "Private & Encrypted GitHub Sync" },
+                            { icon: Database, title: "Codebase Indexing", desc: "Deep Analysis of your Architecture" },
+                            { icon: Zap, title: "Real-time Sync", desc: "Always up to date with your commits" }
                         ].map((feat, i) => (
                             <div key={i} className="flex gap-4 items-start">
                                 <div className="mt-1 h-5 w-5 text-primary">
@@ -97,10 +97,10 @@ const NewProject = () => {
                     <div className="relative glass-panel rounded-[3rem] p-10 border border-black/5 dark:border-white/5 space-y-8 shadow-2xl">
                         <form onSubmit={handleIngest} className="space-y-6">
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground ml-1">GitHub Repository URI</label>
+                                <label className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground ml-1">GitHub Repository URL</label>
                                 <input
                                     type="text"
-                                    placeholder="https://github.com/organization/core-intelligence"
+                                    placeholder="https://github.com/organization/project"
                                     value={repoUrl}
                                     onChange={(e) => setRepoUrl(e.target.value)}
                                     className="flex h-14 w-full rounded-2xl border border-black/5 bg-accent/30 px-6 text-sm font-medium transition-all focus:border-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/10 dark:border-white/5"
