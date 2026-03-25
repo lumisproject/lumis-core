@@ -8,9 +8,10 @@ import {
     CreditCard,
     ChevronLeft,
     ChevronRight,
-    LogOut,
+    LayoutGrid,
     ShieldAlert,
-    Network
+    Network,
+    LogOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUserStore } from '@/stores/useUserStore';
@@ -25,6 +26,7 @@ const Sidebar = ({ collapsed, setCollapsed }: { collapsed: boolean, setCollapsed
     const menuItems = [
         { icon: BarChart3, label: 'Dashboard', path: '/app' },
         { icon: MessageSquare, label: 'The Brain', path: '/app/chat' },
+        { icon: LayoutGrid, label: 'Board', path: '/app/board' },
         { icon: ShieldAlert, label: 'Risks', path: '/app/risks' },
         { icon: Network, label: 'Architecture', path: '/app/architecture' },
         { icon: CreditCard, label: 'Billing', path: '/app/billing' },
@@ -133,16 +135,20 @@ const Layout = () => {
             fetchNotionStatus(user.id);
             fetchBilling();
         }
-    }, [user?.id]); // Depend on user.id specifically
+    }, [user?.id, fetchProjects, fetchJiraStatus, fetchNotionStatus, fetchBilling]); // Depend on user.id specifically
+
+    const location = useLocation();
 
     return (
-        <div className="flex h-screen bg-background overflow-hidden">
+        <div className="flex h-screen bg-background overflow-hidden" id="main-layout">
             <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
             <div className="flex flex-1 flex-col overflow-hidden">
                 <main className="flex-1 overflow-y-auto relative h-full">
-                    <div className="absolute top-8 right-8 z-50">
-                        <ProjectSwitcher />
-                    </div>
+                    {location.pathname === '/app' && (
+                        <div className="absolute top-8 right-8 z-50">
+                            <ProjectSwitcher />
+                        </div>
+                    )}
                     <AnimatePresence mode="wait">
                         <motion.div
                             key={window.location.pathname}
