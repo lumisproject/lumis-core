@@ -178,6 +178,8 @@ const Settings = () => {
         }
     }, [user, project?.id]);
 
+
+
     // NEW: Fetch User Settings on mount
     useEffect(() => {
         const loadSettings = async () => {
@@ -470,6 +472,7 @@ const Settings = () => {
                                 >
                                     Disconnect Node
                                 </button>
+
                             </div>
                         ) : (
                             <button
@@ -553,6 +556,7 @@ const Settings = () => {
                     </Link>
                 </div>
             </SettingSection>
+
         </div>
     );
 };

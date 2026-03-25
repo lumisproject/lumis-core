@@ -219,157 +219,31 @@ const Dashboard = () => {
                 </motion.div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-                {/* Main Intel Column */}
-                <div className="lg:col-span-8 space-y-10">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                        <IntelligencePanel
-                            title="Risk Mesh"
-                            description="Deep Scan Analysis"
-                            icon={ShieldAlert}
-                            accent="rose"
-                        >
-                            <RiskStatus risks={risks} />
-                            <Link to="/app/risks" className="mt-10 flex items-center justify-between p-5 rounded-[2rem] bg-accent/50 border border-black/5 dark:border-white/5 group/link hover:bg-primary transition-all duration-500 group">
-                                <span className="text-[10px] font-black uppercase tracking-[0.2em] group-hover/link:text-primary-foreground">Full Security Audit</span>
-                                <ArrowRight className="h-5 w-5 transition-transform group-hover/link:translate-x-2 group-hover/link:text-primary-foreground" />
-                            </Link>
-                        </IntelligencePanel>
-
-                        <IntelligencePanel
-                            title="Ecosystem"
-                            description="External Data Fabric"
-                            icon={Layers}
-                            accent="primary"
-                        >
-                            <div className="space-y-4">
-                                {[
-                                    { label: 'Atlassian Jira', icon: Search, connected: jiraConnected, mapped: !!project?.jira_project_id },
-                                    { label: 'Notion Node', icon: Cpu, connected: notionConnected, mapped: !!project?.notion_project_id }
-                                ].map((integ, i) => (
-                                    <div key={i} className="flex items-center justify-between p-5 rounded-[2.2rem] bg-accent/20 border border-black/5 dark:border-white/5 transition-all hover:bg-accent/40 group/item">
-                                        <div className="flex items-center gap-4">
-                                            <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center transition-colors", integ.connected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground opacity-40")}>
-                                                <integ.icon className="h-5 w-5" />
-                                            </div>
-                                            <div className="flex flex-col">
-                                                <span className="text-[10px] font-black uppercase tracking-widest">{integ.label}</span>
-                                                {integ.connected && !integ.mapped && (
-                                                    <span className="text-[8px] font-black text-orange-500 uppercase tracking-tighter">Linking Required</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            {integ.connected && !integ.mapped && (
-                                                <Link to="/app/settings" className="text-[9px] font-black uppercase text-primary hover:underline">Connect</Link>
-                                            )}
-                                            <div className={cn(
-                                                "h-2 w-2 rounded-full transition-shadow duration-500",
-                                                integ.mapped ? "bg-primary shadow-[0_0_15px_rgba(var(--primary),0.8)]" : (integ.connected ? "bg-orange-500 animate-pulse" : "bg-muted opacity-30")
-                                            )} />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </IntelligencePanel>
-                    </div>
-
-                    <IntelligencePanel
-                        title="Neural Gateway"
-                        description="Direct Integration Link"
-                        icon={Webhook}
-                        accent="primary"
-                        className="md:col-span-2"
-                    >
-                        <div className="space-y-8">
-                            <div className="p-6 rounded-[2.5rem] bg-accent/20 border border-black/5 dark:border-white/5">
-                                <p className="text-xs text-muted-foreground font-medium leading-relaxed opacity-90">
-                                    Bridge your repository and the Lumis Intelligence Layer. Every push event triggers an instant neural re-scan.
-                                    <br /><span className="text-[10px] font-bold uppercase text-yellow-500 mt-2 block tracking-wider">Make sure Lumis is connected to sync your project automatically.</span>
-                                </p>
-                            </div>
-
-                            <button
-                                onClick={handleCopy}
-                                className={cn(
-                                    "w-full h-20 rounded-[2.5rem] border flex items-center justify-between px-10 transition-all duration-500 active:scale-[0.98]",
-                                    copied
-                                        ? "bg-emerald-500 border-emerald-500 text-white shadow-xl shadow-emerald-500/20"
-                                        : "bg-white/5 border-black/5 dark:border-white/5 text-foreground hover:bg-accent/50 shadow-inner"
-                                )}
-                            >
-                                <div className="flex flex-col items-start">
-                                    <span className={cn("text-[9px] font-black uppercase tracking-[0.3em]", copied ? "opacity-60" : "text-primary")}>
-                                        {copied ? 'Link Copied' : 'Secure Transfer Link'}
-                                    </span>
-                                    <span className="text-[13px] font-black uppercase tracking-widest">
-                                        {copied ? 'Intelligence Payload In Clipboard' : 'Transfer Integration URI'}
-                                    </span>
-                                </div>
-                                <div className={cn(
-                                    "h-12 w-12 rounded-2xl flex items-center justify-center transition-all",
-                                    copied ? "bg-white/20" : "bg-primary/10 text-primary shadow-inner"
-                                )}>
-                                    {copied ? <Check className="h-6 w-6" /> : <Copy className="h-5 w-5" />}
-                                </div>
-                            </button>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                                <div className="space-y-5">
-                                    <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-primary underline underline-offset-8">Setup Sequence</h4>
-                                    <div className="space-y-3">
-                                        {[
-                                            "Settings > Webhooks",
-                                            "Add New Webhook",
-                                            "Input Generated Payload",
-                                            "Set Type: application/json"
-                                        ].map((step, i) => (
-                                            <div key={i} className="flex items-center gap-4">
-                                                <div className="h-6 w-6 rounded-lg bg-accent/50 flex items-center justify-center text-[10px] font-black opacity-50">{i + 1}</div>
-                                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest opacity-60">{step}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div className="flex flex-col justify-end">
-                                    <div className="p-6 rounded-[2.5rem] bg-primary/5 border border-primary/10">
-                                        <div className="flex items-center gap-3 mb-2 text-primary">
-                                            <Binary className="h-4 w-4" />
-                                            <span className="text-[9px] font-black uppercase tracking-widest">Advanced Tip</span>
-                                        </div>
-                                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-loose opacity-60">
-                                            Enable "Push Events" to maintain a real-time intelligence thread between your code and the Lumis brain.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </IntelligencePanel>
-                </div>
-
-                {/* Side Stream Column */}
-                <div className="lg:col-span-4 space-y-10">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 relative z-10">
+                {/* PRIMARY MONITORING LAYER */}
+                <div className="lg:col-span-8">
                     <IntelligencePanel
                         title="Terminal"
                         description="Instance Status"
                         icon={Terminal}
                         accent="primary"
+                        className="h-full"
                     >
                         <div className="space-y-8">
                             <div className="flex items-center gap-6">
-                                <div className="h-20 w-20 rounded-[2.2rem] bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white shadow-2xl transition-transform hover:scale-110">
+                                <div className="h-20 w-20 rounded-[2.2rem] bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white shadow-2xl transition-transform hover:scale-110 flex-shrink-0">
                                     <Github className="h-10 w-10" />
                                 </div>
-                                <div className="space-y-1">
-                                    <div className="text-2xl font-black tracking-tighter uppercase leading-none truncate max-w-[180px]">{getRepoName()}</div>
-                                    <div className="flex items-center gap-2 text-[9px] font-bold text-muted-foreground uppercase tracking-widest opacity-60">
+                                <div className="min-w-0 flex-1">
+                                    <div className="text-3xl font-black tracking-tighter uppercase leading-none break-all">{getRepoName()}</div>
+                                    <div className="flex items-center gap-2 text-[9px] font-bold text-muted-foreground uppercase tracking-widest opacity-60 mt-2">
                                         <div className="h-1 w-1 rounded-full bg-emerald-500 animate-pulse" />
                                         Linked Branch: Main
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="p-6 rounded-[2.2rem] bg-accent/20 border border-black/5 dark:border-white/5 flex items-center justify-between">
                                     <div className="space-y-1">
                                         <div className="text-[9px] font-black text-muted-foreground uppercase opacity-40">Active Commit Layer</div>
@@ -407,28 +281,183 @@ const Dashboard = () => {
                             </div>
                         </div>
                     </IntelligencePanel>
+                </div>
 
-                    <div className="relative p-10 rounded-[4rem] bg-gradient-to-tr from-primary to-accent overflow-hidden group hover:scale-[1.02] transition-all duration-700 shadow-2xl shadow-primary/20">
-                        <div className="relative z-10 space-y-6">
-                            <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.4em] text-primary-foreground">
-                                <Zap className="h-4 w-4 fill-current" />
-                                Neural Query
+                <div className="lg:col-span-4">
+                    <IntelligencePanel
+                        title="Risk Mesh"
+                        description="Deep Scan Analysis"
+                        icon={ShieldAlert}
+                        accent="rose"
+                        className="h-full"
+                    >
+                        <RiskStatus risks={risks} />
+                        <Link to="/app/risks" className="mt-8 flex items-center justify-between p-5 rounded-[2rem] bg-accent/50 border border-black/5 dark:border-white/5 group/link hover:bg-primary transition-all duration-500">
+                            <span className="text-[10px] font-black uppercase tracking-widest group-hover/link:text-primary-foreground">Full Security Audit</span>
+                            <ArrowRight className="h-5 w-5 transition-transform group-hover/link:translate-x-2 group-hover/link:text-primary-foreground" />
+                        </Link>
+                    </IntelligencePanel>
+                </div>
+
+                {/* INTEGRATION & ECOSYSTEM LAYER */}
+                <div className="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    <div className="lg:col-span-8">
+                        <IntelligencePanel
+                            title="Neural Gateway"
+                            description="Direct Integration Link"
+                            icon={Webhook}
+                            accent="primary"
+                        >
+                            <div className="space-y-6">
+                                <button
+                                    onClick={handleCopy}
+                                    className={cn(
+                                        "w-full h-20 rounded-[2.5rem] border flex items-center justify-between px-10 transition-all duration-500 active:scale-[0.98]",
+                                        copied
+                                            ? "bg-emerald-500 border-emerald-500 text-white shadow-xl shadow-emerald-500/20"
+                                            : "bg-white/5 border-black/5 dark:border-white/5 text-foreground hover:bg-accent/50 shadow-inner"
+                                    )}
+                                >
+                                    <div className="flex flex-col items-start">
+                                        <span className={cn("text-[9px] font-black uppercase tracking-[0.3em]", copied ? "opacity-60" : "text-primary")}>
+                                            {copied ? 'Link Copied' : 'Secure Transfer Link'}
+                                        </span>
+                                        <span className="text-[13px] font-black uppercase tracking-widest">
+                                            {copied ? 'Intelligence Payload In Clipboard' : 'Transfer Integration URI'}
+                                        </span>
+                                    </div>
+                                    <div className={cn(
+                                        "h-12 w-12 rounded-2xl flex items-center justify-center transition-all",
+                                        copied ? "bg-white/20" : "bg-primary/10 text-primary shadow-inner"
+                                    )}>
+                                        {copied ? <Check className="h-6 w-6" /> : <Copy className="h-5 w-5" />}
+                                    </div>
+                                </button>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="space-y-4">
+                                        <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-primary underline underline-offset-8">Setup Sequence</h4>
+                                        <div className="space-y-2">
+                                            {[
+                                                "Settings > Webhooks",
+                                                "Add New Webhook",
+                                                "Input Generated Payload",
+                                                "Set Type: application/json"
+                                            ].map((step, i) => (
+                                                <div key={i} className="flex items-center gap-4">
+                                                    <div className="h-6 w-6 rounded-lg bg-accent/50 flex items-center justify-center text-[10px] font-black opacity-50">{i + 1}</div>
+                                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest opacity-60">{step}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="p-6 rounded-[2.5rem] bg-accent/20 border border-black/5 dark:border-white/5 flex flex-col justify-center">
+                                        <div className="flex items-center gap-3 mb-2 text-primary">
+                                            <Binary className="h-4 w-4" />
+                                            <span className="text-[9px] font-black uppercase tracking-widest">Integration Fabric</span>
+                                        </div>
+                                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-relaxed opacity-60">
+                                            Enable "Push Events" to maintain a real-time intelligence thread.
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
-                            <h4 className="text-4xl font-black tracking-tighter uppercase leading-[0.9] text-primary-foreground">
-                                Initiate <br /> Brain Access
-                            </h4>
-                            <Link to="/app/chat" className="inline-flex h-14 px-10 rounded-2xl bg-primary-foreground text-primary text-[10px] font-black uppercase tracking-[0.2em] items-center gap-3 hover:gap-5 transition-all shadow-2xl">
-                                System Chat
-                                <ArrowRight className="h-4 w-4" />
-                            </Link>
+                        </IntelligencePanel>
+                    </div>
+
+                    <div className="lg:col-span-4 space-y-8">
+                        <IntelligencePanel
+                            title="Ecosystem"
+                            description="External Fabric"
+                            icon={Layers}
+                            accent="primary"
+                            className="h-full"
+                        >
+                            <div className="flex flex-col gap-3">
+                                {[
+                                    { label: 'Jira', icon: Search, connected: jiraConnected, mapped: !!project?.jira_project_id },
+                                    { label: 'Notion', icon: Cpu, connected: notionConnected, mapped: !!project?.notion_project_id }
+                                ].map((integ, i) => (
+                                    <div key={i} className="group/item flex items-center justify-between p-4 rounded-2xl bg-accent/20 border border-black/5 dark:border-white/5 transition-all hover:bg-accent/40">
+                                        <div className="flex items-center gap-4">
+                                            <div className={cn(
+                                                "h-10 w-10 rounded-xl flex items-center justify-center transition-all",
+                                                integ.connected ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" : "bg-muted/20 text-muted-foreground opacity-40 group-hover/item:opacity-60"
+                                            )}>
+                                                <integ.icon className="h-5 w-5" />
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] font-black uppercase tracking-widest">{integ.label}</span>
+                                                <div className="flex items-center gap-1.5 mt-0.5">
+                                                    <div className={cn(
+                                                        "h-1 w-1 rounded-full",
+                                                        integ.mapped ? "bg-primary shadow-[0_0_8px_rgba(var(--primary),0.8)]" : (integ.connected ? "bg-orange-500 animate-pulse" : "bg-muted opacity-30")
+                                                    )} />
+                                                    <span className={cn(
+                                                        "text-[8px] font-black uppercase tracking-wider",
+                                                        integ.mapped ? "text-primary" : (integ.connected ? "text-orange-500" : "text-muted-foreground opacity-40")
+                                                    )}>
+                                                        {integ.mapped ? 'Mapped' : (integ.connected ? 'Connected' : 'Disconnected')}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {integ.connected && !integ.mapped ? (
+                                            <Link to="/app/settings" className="px-3 py-1.5 rounded-lg bg-orange-500/10 text-orange-500 text-[8px] font-black uppercase tracking-widest hover:bg-orange-500/20 transition-colors border border-orange-500/10">
+                                                Loom
+                                            </Link>
+                                        ) : !integ.connected ? (
+                                            <Link to="/app/settings" className="px-3 py-1.5 rounded-lg bg-white/5 text-[8px] font-black uppercase tracking-widest text-muted-foreground hover:bg-white/10 transition-colors border border-black/5 dark:border-white/5">
+                                                Auth
+                                            </Link>
+                                        ) : (
+                                            <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                                                <Check className="h-3 w-3" />
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </IntelligencePanel>
+                    </div>
+                </div>
+
+                {/* CALL TO ACTION LAYER */}
+                <div className="lg:col-span-12">
+                    <div className="relative p-12 py-16 rounded-[4.5rem] bg-gradient-to-tr from-primary to-accent overflow-hidden group hover:scale-[1.01] transition-all duration-700 shadow-2xl shadow-primary/20 active:scale-[0.99]">
+                        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-12">
+                            <div className="space-y-8 text-center md:text-left">
+                                <div className="flex items-center justify-center md:justify-start gap-4 text-[10px] font-black uppercase tracking-[0.5em] text-primary-foreground/80">
+                                    <Zap className="h-6 w-6 fill-current" />
+                                    Synthesis Core Active
+                                </div>
+                                <h4 className="text-6xl font-black tracking-tighter uppercase leading-[0.8] text-white">
+                                    ACCESS <br /> NEURAL <br /> BRAIN
+                                </h4>
+                            </div>
+
+                            <div className="flex flex-col gap-4 w-full md:w-auto">
+                                <Link to="/app/chat" className="inline-flex h-20 px-16 rounded-[2.5rem] bg-white text-primary text-sm font-black uppercase tracking-[0.3em] items-center justify-center gap-6 hover:gap-8 transition-all shadow-[0_20px_40px_-15px_rgba(255,255,255,0.3)] group/chat">
+                                    SYSTEM CHAT
+                                    <ArrowRight className="h-6 w-6" />
+                                </Link>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <Link to="/app/board" className="flex items-center justify-center h-16 rounded-[1.8rem] bg-white/10 text-white border border-white/20 text-[11px] font-black uppercase tracking-widest hover:bg-white/20 transition-all backdrop-blur-md">
+                                        Tickets Control
+                                    </Link>
+                                    <Link to="/app/architecture" className="flex items-center justify-center h-16 rounded-[1.8rem] bg-white/10 text-white border border-white/20 text-[11px] font-black uppercase tracking-widest hover:bg-white/20 transition-all backdrop-blur-md">
+                                        Visual Graph
+                                    </Link>
+                                </div>
+                            </div>
                         </div>
 
                         {/* Abstract Background flourishes */}
-                        <div className="absolute top-0 right-0 w-full h-full opacity-10 pointer-events-none transition-transform group-hover:scale-110 duration-1000">
-                            <Binary className="absolute -top-10 -right-10 h-64 w-64 rotate-12" />
-                            <Binary className="absolute -bottom-20 -left-10 h-48 w-48 -rotate-12 opacity-50" />
+                        <div className="absolute top-0 right-0 w-full h-full opacity-[0.15] pointer-events-none transition-transform group-hover:scale-110 duration-1000">
+                            <Binary className="absolute -top-10 -right-10 h-96 w-96 rotate-12" />
+                            <Binary className="absolute -bottom-20 -left-10 h-80 w-80 -rotate-12 opacity-50" />
                         </div>
-                        <div className="absolute -right-10 -bottom-10 h-48 w-48 bg-white/20 blur-[80px] rounded-full" />
+                        <div className="absolute -right-20 -bottom-20 h-96 w-96 bg-white/30 blur-[120px] rounded-full group-hover:bg-white/40 transition-colors" />
                     </div>
                 </div>
             </div>
