@@ -11,6 +11,7 @@ interface UserState {
     error: string | null;
     signIn: (email: string, password: string) => Promise<boolean>;
     signUp: (email: string, password: string) => Promise<boolean>;
+    signInWithGoogle: () => Promise<void>;
     signOut: () => Promise<void>;
     checkSession: () => Promise<void>;
     setupAuthListener: () => { unsubscribe: () => void };
@@ -71,6 +72,20 @@ export const useUserStore = create<UserState>((set, get) => ({
 
         if (session?.user) {
             await useSettingsStore.getState().fetchSettings(session.user.id);
+        }
+    },
+
+    signInWithGoogle: async () => {
+        set({ loading: true, error: null });
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo: `${window.location.origin}/app`
+            }
+        });
+        
+        if (error) {
+            set({ loading: false, error: error.message });
         }
     },
 

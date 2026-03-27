@@ -524,6 +524,7 @@ async def get_user_settings(user_id: str, current_user = Depends(get_current_use
             "provider": "",
             "selectedModel": "",
             "apiKey": "",
+            "baseUrl": "",
             "useDefault": True
         }
     
@@ -531,6 +532,7 @@ async def get_user_settings(user_id: str, current_user = Depends(get_current_use
         "provider": config.get("provider", ""),
         "selectedModel": config.get("model", ""),
         "apiKey": "••••••••" if config.get("api_key") else "",
+        "baseUrl": config.get("base_url", ""),
         "useDefault": False
     }
 
@@ -551,6 +553,7 @@ async def update_user_settings(user_id: str, payload: dict, current_user = Depen
         "provider": payload.get("provider"),
         "model": payload.get("selectedModel"),
         "use_default": payload.get("useDefault"),
+        "base_url": payload.get("baseUrl"),
     }
     
     if encrypted_key:
