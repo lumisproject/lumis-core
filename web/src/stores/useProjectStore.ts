@@ -52,7 +52,11 @@ interface ProjectState {
     remoteSha: string | null;
     loading: boolean;
     error: string | null;
+    jiraProjects: { key: string, name: string }[];
+    notionProjects: { id: string, name: string }[];
     fetchProjects: (userId: string) => Promise<void>;
+    fetchJiraProjects: (userId: string) => Promise<void>;
+    fetchNotionProjects: (userId: string) => Promise<void>;
     selectProject: (projectId: string) => void;
     fetchJiraStatus: (userId: string) => Promise<void>;
     fetchNotionStatus: (userId: string) => Promise<void>;
@@ -82,6 +86,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     remoteSha: null,
     loading: false,
     error: null,
+    jiraProjects: [],
+    notionProjects: [],
 
     fetchProjects: async (userId: string) => {
         set({ loading: true });
@@ -134,6 +140,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             .eq('user_id', userId)
             .maybeSingle();
         set({ jiraConnected: !!data });
+        if (!!data) {
+            get().fetchJiraProjects(userId);
+        }
+    },
+
+    fetchJiraProjects: async (userId: string) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/jira/projects/${userId}`);
+            const data = await res.json();
+            set({ jiraProjects: Array.isArray(data) ? data : [] });
+        } catch (e) {
+            console.error("Failed to fetch Jira projects:", e);
+            set({ jiraProjects: [] });
+        }
     },
 
     fetchNotionStatus: async (userId: string) => {
@@ -143,6 +163,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             .eq('user_id', userId)
             .maybeSingle();
         set({ notionConnected: !!data });
+        if (!!data) {
+            get().fetchNotionProjects(userId);
+        }
+    },
+
+    fetchNotionProjects: async (userId: string) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/notion/databases/${userId}`);
+            const data = await res.json();
+            set({ notionProjects: Array.isArray(data) ? data : [] });
+        } catch (e) {
+            console.error("Failed to fetch Notion databases:", e);
+            set({ notionProjects: [] });
+        }
     },
 
     fetchRisks: async (projectId: string) => {

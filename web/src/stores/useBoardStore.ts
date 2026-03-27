@@ -55,6 +55,7 @@ interface BoardState {
   assignTicket: (projectId: string, tool: string, ticketId: string, accountId: string) => Promise<void>;
   updateTicketDescription: (projectId: string, tool: string, ticketId: string, description: string) => Promise<void>;
   addColumn: (projectId: string, tool: string, columnData: Omit<StatusColumn, 'id'>) => Promise<void>;
+  deleteTicket: (projectId: string, tool: string, ticketId: string) => Promise<boolean>;
 }
 
 export const useBoardStore = create<BoardState>((set, get) => ({
@@ -207,6 +208,22 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     } catch (err: any) {
       console.error("Failed to add column", err);
       alert("Failed to add column: " + (err.response?.data?.detail || err.message));
+    }
+  },
+
+  deleteTicket: async (projectId, tool, ticketId) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      await axios.delete(`${API_BASE}/api/projects/${projectId}/board/tickets/${ticketId}?tool=${tool}`, 
+        { headers: { 'Authorization': `Bearer ${session?.access_token}` } }
+      );
+      // Re-fetch board to remove the ticket from the UI
+      get().fetchBoard(projectId, tool as any);
+      return true;
+    } catch (err: any) {
+      console.error("Failed to delete ticket", err);
+      alert("Failed to delete ticket: " + (err.response?.data?.detail || err.message));
+      return false;
     }
   }
 }));

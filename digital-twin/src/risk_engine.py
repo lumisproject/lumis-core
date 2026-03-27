@@ -61,7 +61,7 @@ async def calculate_predictive_risks(project_id, user_config, log_callback=None)
     repo_name = repo_url.split("github.com/")[-1].replace(".git", "") if "github.com" in repo_url else ""
 
     # 2. CLEAR PREVIOUS PREDICTIVE RISKS
-    supabase.table("project_risks").delete().eq("project_id", project_id).in_("risk_type", ["Legacy Conflict", "Predictive Delay", "Knowledge Silo"]).execute()
+    supabase.table("project_risks").delete().eq("project_id", project_id).in_("risk_type", ["Legacy Conflict", "Predictive Delay"]).execute()
 
     risks = []
     # 3. FETCH GRAPH DATA & MAP UNITS
@@ -106,7 +106,7 @@ async def calculate_predictive_risks(project_id, user_config, log_callback=None)
             if src_file == tgt_file or any(imp in target_mod_path for imp in file_imports):
                 G.add_edge(source_id, target_id)
 
-    # 5. IDENTIFY LEGACY CONFLICTS & KNOWLEDGE SILOS
+    # 5. IDENTIFY LEGACY CONFLICTS
     if log_callback: log_callback("🔍 Scanning for legacy bottlenecks and active churn...")
     active_units = [k for k, v in unit_map.items() if v['age_days'] < 30]
     legacy_units = [k for k, v in unit_map.items() if v['age_days'] > 90]
