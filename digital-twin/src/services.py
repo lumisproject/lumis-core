@@ -29,6 +29,24 @@ def get_embedding(text: str):
     """Returns a flat list of floats for a single query (used in retriever.py)"""
     return lc_embedder.embed_query(text)
 
+def custom_chat(system_prompt, user_prompt, api_key, model, temperature, reasoning_enabled, base_url):
+    from langchain_openai import ChatOpenAI
+
+    kwargs = {
+        "base_url": base_url,
+        "model": model,
+        "temperature": temperature,
+        "api_key": api_key or "sk-dummy",
+    }
+
+    if reasoning_enabled:
+        kwargs["model_kwargs"] = {"include_reasoning": True}
+
+    llm = ChatOpenAI(**kwargs)
+    messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+    response = llm.invoke(messages)
+    return response.content
+
 def groq_chat(system_prompt, user_prompt, api_key, model, temperature, reasoning_enabled):
     from langchain_groq import ChatGroq
 
@@ -152,7 +170,8 @@ def get_llm_completion(system_prompt, user_prompt, user_config=None):
             provider = user_config.get("provider")
             model_name = user_config.get("model")
             api_key = user_config.get("api_key")
-            # Only decrypt if it's not one of our default keys
+            base_url = user_config.get("base_url")
+
             if api_key not in [Config.OPENROUTER_API_KEY, Config.GROQ_API_KEY]:
                 api_key = decrypt_value(api_key)
         
@@ -170,6 +189,8 @@ def get_llm_completion(system_prompt, user_prompt, user_config=None):
             content = google_genai(system_prompt, user_prompt, api_key, model_name, temperature, reasoning_enabled)
         elif provider == "groq":
             content = groq_chat(system_prompt, user_prompt, api_key, model_name, temperature, reasoning_enabled)
+        elif provider == "custom":
+            content = custom_chat(system_prompt, user_prompt, api_key, model_name, temperature, reasoning_enabled, base_url)
         else:
             raise ValueError(f"Provider {provider} is not supported yet.")
         
@@ -207,7 +228,8 @@ async def stream_llm_completion(system_prompt, user_prompt, user_config=None):
             provider = user_config.get("provider")
             model_name = user_config.get("model")
             api_key = user_config.get("api_key")
-            # Only decrypt if it's not one of our default keys
+            base_url = user_config.get("base_url")
+
             if api_key not in [Config.OPENROUTER_API_KEY, Config.GROQ_API_KEY]:
                 from src.cryptography import decrypt_value
                 api_key = decrypt_value(api_key)
@@ -292,6 +314,29 @@ async def stream_llm_completion(system_prompt, user_prompt, user_config=None):
             messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
             async for chunk in llm.astream(messages):
                 if chunk.content: yield chunk.content
+        elif provider == "custom":
+            from langchain_openai import ChatOpenAI
+            from langchain_core.messages import SystemMessage, HumanMessage
+            kwargs = {
+                "base_url": base_url,
+                "model": model_name,
+                "temperature": temperature,
+                "api_key": api_key or "sk-dummy",
+                "streaming": True
+            }
+            if reasoning_enabled:
+                kwargs["model_kwargs"] = {"include_reasoning": True}
+            
+            llm = ChatOpenAI(**kwargs)
+            messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+            async for chunk in llm.astream(messages):
+                if chunk.content:
+                    if isinstance(chunk.content, list):
+                        for b in chunk.content:
+                            if getattr(b, "type", "") == "text": yield b.get("text", "")
+                            elif isinstance(b, dict) and "text" in b: yield b["text"]
+                    else:
+                        yield chunk.content
         else:
             yield f"Error: Provider {provider} is not supported yet."
 

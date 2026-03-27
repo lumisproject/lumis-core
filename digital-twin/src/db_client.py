@@ -129,6 +129,7 @@ def get_global_user_config(user_id: str) -> dict:
             "provider": None,
             "api_key": None,
             "model": None,
+            "base_url": None, # NEW: Added base_url
             "use_default": True
         }
     

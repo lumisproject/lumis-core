@@ -87,10 +87,10 @@ const Landing = () => {
                         <img src="/lumis-black.svg" alt="Lumis Logo" className="h-5 w-auto block dark:hidden transition-opacity" />
                         <img src="/lumis-white.svg" alt="Lumis Logo" className="h-5 w-auto hidden dark:block transition-opacity" />
                     </Link>
-                    <div className="flex items-center gap-4">
-                        <Link to="/login" className="hidden text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white sm:block">Log in</Link>
+                    <div className="flex items-center gap-3 md:gap-4">
+                        <Link to="/login" className="text-xs md:text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white">Log in</Link>
                         <ThemeToggle />
-                        <Link to="/signup" className="group relative flex h-8 items-center justify-center rounded-full bg-neutral-900 px-4 text-xs font-semibold text-white transition-all hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 shadow-xl shadow-black/10 dark:shadow-white/10">
+                        <Link to="/signup" className="group relative flex h-8 items-center justify-center rounded-full bg-neutral-900 px-3 md:px-4 text-[10px] md:text-xs font-semibold text-white transition-all hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 shadow-xl shadow-black/10 dark:shadow-white/10">
                             Start Building
                         </Link>
                     </div>
@@ -105,7 +105,7 @@ const Landing = () => {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                        className="text-5xl sm:text-7xl lg:text-[6rem] font-bold tracking-tighter w-full leading-[1.05] dark:text-white text-neutral-950"
+                        className="text-4xl sm:text-7xl lg:text-[6rem] font-bold tracking-tighter w-full leading-[1.05] dark:text-white text-neutral-950 px-4 md:px-0"
                     >
                         Your devs spend 75%<br />
                         <span className="inline-block bg-gradient-to-r from-orange-500 to-yellow-500 bg-clip-text text-transparent italic pb-2 pr-2">of their time not coding,</span><br />
@@ -116,7 +116,7 @@ const Landing = () => {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.8, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                        className="mt-8 max-w-2xl text-lg sm:text-xl font-medium leading-relaxed text-neutral-600 dark:text-neutral-400"
+                        className="mt-6 md:mt-8 max-w-2xl text-base md:text-xl font-medium leading-relaxed text-neutral-600 dark:text-neutral-400 px-6 md:px-0"
                     >
                         Connect your Git history, tasks tickets, and docs into a living intelligence layer. Stop searching, re-reading, and updating. Start building.
                     </motion.p>
@@ -125,7 +125,7 @@ const Landing = () => {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.8, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
-                        className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-6 w-full sm:w-auto z-20"
+                        className="mt-8 md:mt-10 flex flex-col sm:flex-row items-center justify-center gap-6 w-full sm:w-auto z-20 px-6 md:px-0"
                     >
                         <Link to="/signup" className="group flex h-12 w-full sm:w-auto items-center justify-center gap-2 rounded-full bg-neutral-900 px-8 text-sm font-semibold text-white transition-all shadow-xl shadow-neutral-900/20 hover:bg-neutral-800 hover:scale-105 active:scale-95 dark:bg-white dark:text-black dark:hover:bg-neutral-200 dark:shadow-white/10">
                             Ship Faster <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
@@ -142,7 +142,7 @@ const Landing = () => {
                         initial={{ opacity: 0, y: 40 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 1.2, delay: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                        className="mt-20 w-full max-w-5xl relative mx-auto"
+                        className="mt-12 md:mt-20 w-full max-w-5xl relative mx-auto"
                     >
                         <div className="absolute inset-0 bg-gradient-to-t from-[#FAFAFA] dark:from-[#000000] to-transparent z-20 bottom-0 h-48 mt-auto pointer-events-none" />
 
@@ -156,11 +156,11 @@ const Landing = () => {
                                     </div>
                                     <div className="mx-auto text-[10px] font-bold text-neutral-400 tracking-wider">LUMIS NEURAL LAYER</div>
                                 </div>
-                                <div className="w-full h-80 bg-white dark:bg-[#050505] p-6 sm:p-8 font-mono text-sm flex flex-col justify-start items-start overflow-hidden relative">
-                                    <div className="flex items-start">
+                                <div className="w-full h-auto min-h-[20rem] md:h-80 bg-white dark:bg-[#050505] p-6 sm:p-8 font-mono text-sm flex flex-col justify-start items-start overflow-hidden relative">
+                                    <div className="flex items-start w-full">
                                         <span className="text-orange-500 mr-4 font-bold hidden sm:block">❯</span>
-                                        <div>
-                                            <p className="text-neutral-900 dark:text-white font-medium break-all">lumis sync --source origin/main</p>
+                                        <div className="w-full">
+                                            <p className="text-neutral-900 dark:text-white font-medium break-all mb-4 md:mb-0">lumis sync --source origin/main</p>
                                             <div className="mt-4 space-y-3">
                                                 <p className="text-neutral-500 flex items-center gap-2">
                                                     <RefreshCwIcon className="h-3 w-3 animate-spin" /> Analyzing 48 commits...
@@ -281,8 +281,8 @@ const Landing = () => {
                     <div className="w-full max-w-full h-full bg-[radial-gradient(circle_at_center,rgba(249,115,22,0.1)_0,transparent_50%)]" />
                 </div>
 
-                <div className="mx-auto max-w-4xl px-6 text-center relative z-10">
-                    <h2 className="text-5xl sm:text-7xl font-bold tracking-tighter text-neutral-900 dark:text-white mb-6 leading-[1.05]">
+                <div className="mx-auto max-w-4xl px-6 text-center relative z-10 py-10">
+                    <h2 className="text-4xl sm:text-7xl font-bold tracking-tighter text-neutral-900 dark:text-white mb-6 leading-[1.05]">
                         Stop hunting for logic.<br />
                         <span className="bg-gradient-to-r from-orange-500 to-yellow-500 bg-clip-text text-transparent">Start building.</span>
                     </h2>
@@ -319,8 +319,14 @@ const Landing = () => {
                         <img src="/lumis-black.svg" alt="Lumis Logo" className="h-4 w-auto block dark:hidden opacity-80" />
                         <img src="/lumis-white.svg" alt="Lumis Logo" className="h-4 w-auto hidden dark:block opacity-80" />
                     </div>
-                    <div className="text-[11px] font-medium text-neutral-500 dark:text-neutral-600 tracking-wider">
-                        &copy; {new Date().getFullYear()} NovaGate Solutions. All rights reserved.
+                    <div className="flex flex-col items-center gap-6 sm:flex-row">
+                        <div className="text-[11px] font-medium text-neutral-500 dark:text-neutral-600 tracking-wider">
+                            &copy; {new Date().getFullYear()} NovaGate Solutions. All rights reserved.
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <Link to="/privacy" className="text-[10px] font-bold uppercase tracking-widest text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors">Privacy Policy</Link>
+                            <Link to="/terms" className="text-[10px] font-bold uppercase tracking-widest text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors">Terms of Service</Link>
+                        </div>
                     </div>
                 </div>
             </footer>
