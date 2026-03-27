@@ -5,9 +5,9 @@ import {
   Loader2,
   AlertCircle,
   Search,
-  Database,
   RefreshCw,
-  Plus // Added Plus for the add column button
+  Plus,
+  Cpu
 } from 'lucide-react';
 import { KanbanColumn } from '../components/board/KanbanColumn';
 import { TicketModal } from '../components/board/TicketModal';
@@ -101,15 +101,15 @@ const Board = () => {
     <div className="flex flex-col h-full bg-background text-foreground overflow-hidden">
       <header className="flex items-center justify-between px-8 py-6 border-b border-border/40 backdrop-blur-md sticky top-0 z-20">
         <div className="flex items-center gap-4">
-          <div className="flex flex-col">
-            <h1 className="text-2xl font-semibold tracking-tight">Project Board</h1>
+          <div className="flex flex-col space-y-2">
+            <h1 className="text-3xl font-black tracking-tighter uppercase leading-none">Project Board</h1>
             <div className="flex items-center gap-4 mt-1">
-              <span className="text-sm text-muted-foreground flex items-center gap-1">
-                {project?.repo_name || 'Active Project'} <ChevronRight className="h-3 w-3" /> {activeTool.toUpperCase()} Integration
+              <span className="text-xs text-muted-foreground flex items-center gap-1 font-bold uppercase tracking-widest bg-white/5 px-2 py-0.5 rounded border border-black/5 dark:border-white/5">
+                {project?.repo_name || 'Active Project'} <ChevronRight className="h-3 w-3" /> {activeTool.toUpperCase()}
               </span>
               <span className="text-[10px] font-bold text-yellow-500/80 uppercase tracking-[0.2em] flex items-center gap-1.5 border-l border-border/20 pl-4">
                 <RefreshCw className="h-2.5 w-2.5" />
-                Refresh to Update
+                SYNC ACTIVE
               </span>
             </div>
           </div>
@@ -125,15 +125,16 @@ const Board = () => {
           >
             <Search className="h-3 w-3" /> Jira
           </button>
-          <button
-            onClick={() => setActiveTool('notion')}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all",
-              activeTool === 'notion' ? "bg-card text-emerald-500 shadow-sm border border-border" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <Database className="h-3 w-3" /> Notion
-          </button>
+          <div className="relative group/soon">
+            <button
+              disabled
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all text-muted-foreground opacity-30 cursor-not-allowed grayscale"
+            >
+              <Cpu className="h-3 w-3 shrink-0" />
+              Notion
+            </button>
+            <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/4 px-1 py-0.5 bg-yellow-500 text-[6px] font-black text-black rounded-full shadow-lg shadow-yellow-500/20">SOON</div>
+          </div>
         </div>
       </header>
 

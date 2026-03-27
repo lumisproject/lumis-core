@@ -282,74 +282,53 @@ class LumisAgent:
                 except Exception as e:
                     self.logger.error(f"Failed to persist chat history to database: {e}")
 
-    def analyze_fulfillment(self, issue: Dict, code: str) -> Dict:
-        """
-        Standalone background AI job to compare code diffs against Jira task requirements.
-        This is triggered by webhooks and uses the centralized LLM services.
-        """
+    def analyze_fulfillment(self, issue: Dict, code: str, previous_context: str = "") -> Dict:
         summary = issue.get("fields", {}).get("summary", "No Summary")
         description = issue.get("fields", {}).get("description", "No Description")
         
-        system_prompt = """
-        You are a pragmatic, flexible, and experienced Technical Lead. Your job is to evaluate if a developer's code commit satisfies their active Jira task.
+        context_block = f"\nPREVIOUS LUMIS UPDATES ON THIS TICKET:\n{previous_context}" if previous_context else ""
+
+        system_prompt = f"""
+        You are a STRICT Technical Lead evaluating if a developer's latest code commit fully completes their active task.
 
         EVALUATION RULES:
-        1. Focus on Intent: Be flexible. If the code implements the core feature or resolves the main issue described in the task, consider it complete. Do not demand pixel-perfect adherence to every minor sub-bullet point unless it is critical.
-        2. Benefit of the Doubt: If the code looks like a reasonable and functional implementation of the feature, assume it works as intended.
+        1. STRICT COMPLETION: You must verify the code against ALL core requirements in the task description. If the task asks for "A and B" (e.g., add and subtract) and the code only has "A", you MUST mark it as "PARTIAL". Do NOT give the benefit of the doubt.
+        2. Context Awareness: This is just a push. Read the "PREVIOUS LUMIS UPDATES" to see what was already done in past commits.
+        3. Determine if the COMBINATION of previous updates and this new commit completes the ENTIRE task.
 
         STATUS DEFINITIONS:
-        - "COMPLETE": The core functionality of the task is implemented. (This will move the ticket to Done).
-        - "PARTIAL": The code is clearly just a minor "Work In Progress" update or only tackles a small fraction of the task.
-        - "NONE": The code is completely unrelated to the task.
-
-        FOLLOW-UP TASKS CREATION (STRICT):
-        - DO NOT create follow-up tasks for incomplete requirements of the current task. 
-        - If the code only partially completes the task, simply mark it "PARTIAL", list the missing requirements in your summary, and leave the follow_up_tasks array EMPTY. 
-        - ONLY create follow-up tasks for entirely new, out-of-scope bugs, major security flaws, or technical debt discovered in the code.
+        - "COMPLETE": Every single requirement in the description is fully implemented.
+        - "PARTIAL": Some requirements are met, but others are missing.
+        - "NONE": Unrelated code.
 
         JSON OUTPUT FORMAT (STRICT):
-        Return a JSON object with EXACTLY the following structure:
-        {
-        "fulfillment_status": "COMPLETE" | "PARTIAL" | "NONE",
-        "summary": "A friendly 2-3 sentence summary of what was achieved.",
-        "identified_risks": [
-            {
-            "risk_type": "INCOMPLETE_FEATURE" | "SECURITY_FLAW" | "BUG",
-            "severity": "High" | "Medium" | "Low",
-            "description": "Brief explanation of what is missing or broken.",
-            "affected_units": ["filename.py", "function_name"]
-            }
-        ],
-        "follow_up_tasks": [
-            {
-            "title": "Short title of new issue",
-            "description": "Description of the out-of-scope issue found"
-            }
-        ]
-        }
-        - If the task is fully complete and has no risks, leave "identified_risks" and "follow_up_tasks" as empty arrays [].
+        {{
+          "fulfillment_status": "COMPLETE" | "PARTIAL" | "NONE",
+          "summary": "A concise 2 sentence summary stating exactly what was done and what is still missing."
+        }}
         """
         
         prompt = f"""
-        JIRA TASK SUMMARY: {summary}
-        JIRA TASK DESCRIPTION: {description}
+        TASK SUMMARY: {summary}
+        TASK DESCRIPTION: {description}{context_block}
         CODE CHANGES (DIFF): {code}
-        
-        Analyze the commit and respond STRICTLY in the JSON format defined in your instructions. Do not change the JSON keys.
         """
         
         try:
+            from src.services import get_llm_completion
+            import json
+            import re
             user_config = {**(self.user_config or {}), "feature_mode": "chat"}
             response_text = get_llm_completion(system_prompt, prompt, user_config=user_config)
-            clean_json = response_text.strip().replace('```json', '').replace('```', '')
-            start_idx = clean_json.find('{')
-            end_idx = clean_json.rfind('}')
-            if start_idx != -1 and end_idx != -1:
-                return json.loads(clean_json[start_idx:end_idx + 1])
-            return json.loads(clean_json)
+            
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group(0))
+            return {"fulfillment_status": "PARTIAL", "summary": "Code synced but JSON parsing failed."}
+            
         except Exception as e:
-            print(f"AI Engine Error: {e}")
-            return {"fulfillment_status": "PARTIAL", "summary": f"AI analysis failed: {str(e)}", "identified_risks": [], "follow_up_tasks": []}
+            self.logger.error(f"AI Engine Error: {e}")
+            return {"fulfillment_status": "PARTIAL", "summary": "AI analysis failed."}
 
     def match_task_to_commit(self, commit_message: str, issues: List[Dict]) -> Optional[Dict]:
         """Uses AI to determine if a commit message matches one of the active Jira tasks."""
@@ -519,3 +498,44 @@ class LumisAgent:
         except Exception as e:
             self.logger.error(f"Architectural reviewer error: {e}")
             return {"identified_risks": []}
+    
+    def evaluate_rogue_commits(self, messages: str, code: str) -> dict:
+        """Determines if unlinked commits are substantial enough to warrant a tracking ticket."""
+        system_prompt = """
+        You are a Technical Lead reviewing unlinked commits.
+        Decide if this code represents a substantial unit of work that NEEDS a tracking ticket, or if it's just trivial noise.
+        
+        TRIVIAL NOISE (needs_ticket = false):
+        - Fixing typos, white space, formatting
+        - Removing unused imports or dead code
+        - Tiny refactoring (renaming a variable)
+        - Updating a readme
+        
+        SUBSTANTIAL WORK (needs_ticket = true):
+        - Adding a new function or class
+        - Fixing a logic bug
+        - Modifying architecture
+        
+        JSON OUTPUT FORMAT (STRICT):
+        {
+            "needs_ticket": true | false,
+            "title": "A short, descriptive Jira ticket title (only if needs_ticket is true)",
+            "summary": "A 1-sentence summary of what the code does."
+        }
+        """
+        prompt = f"COMMIT MESSAGES:\n{messages}\n\nCODE DIFF:\n{code}"
+        
+        try:
+            from src.services import get_llm_completion
+            user_config = {**(self.user_config or {}), "feature_mode": "chat"}
+            response_text = get_llm_completion(system_prompt, prompt, user_config=user_config)
+            
+            import re
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                import json
+                return json.loads(json_match.group(0))
+            return {"needs_ticket": True, "title": "Unlinked Commits", "summary": "Code pushed without a tracking ticket."}
+        except Exception as e:
+            self.logger.error(f"AI Rogue Evaluation Error: {e}")
+            return {"needs_ticket": True, "title": "Unlinked Commits", "summary": "Error evaluating commits."}

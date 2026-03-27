@@ -1,4 +1,4 @@
-import re
+import urllib.parse
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -39,52 +39,118 @@ def add_comment(cloud_id: str, issue_key: str, comment: str, access_token: str):
     payload = {"body": {"type": "doc", "version": 1, "content": [{"type": "paragraph", "content": [{"type": "text", "text": comment}]}]}}
     jira_session.post(url, headers=jira_headers(access_token), json=payload).raise_for_status()
 
-def transition_issue(cloud_id: str, issue_key: str, access_token: str):
-    """Universally finds the 'Done' transition regardless of Jira language or custom names."""
-    url = f"https://api.atlassian.com/ex/jira/{cloud_id}/rest/api/3/issue/{issue_key}/transitions"
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Accept": "application/json",
-        "Content-Type": "application/json"
-    }
+def transition_issue(cloud_id: str, issue_key: str, access_token: str, depth=0, target="review"):
+    """Smart Transition: Aims for 'review' if complete, or 'progress' if partial."""
+    if depth > 3: 
+        logger.warning(f"🛑 Max transition depth reached for {issue_key}.")
+        return
+
+    url = f"{Config.JIRA_API_BASE}/ex/jira/{cloud_id}/rest/api/3/issue/{issue_key}/transitions"
+    headers = jira_headers(access_token)
     
-    # 1. Fetch available transitions
     response = jira_session.get(url, headers=headers)
     if response.status_code != 200:
-        logger.error(f"Failed to fetch transitions: {response.text}")
         return
 
     transitions = response.json().get("transitions", [])
-    
-    # 2. Look for the universal 'done' category key
-    transition_id = None
-    target_name = None
-    for t in transitions:
-        # Jira exposes the category key universally (e.g., 'new', 'indeterminate', 'done')
-        category_key = t.get("to", {}).get("statusCategory", {}).get("key", "")
+    if not transitions:
+        return
         
-        if category_key == "done":
-            transition_id = t["id"]
-            target_name = t["to"]["name"] # Capture the translated name for logging
-            break
+    review_transition = None
+    progress_transition = None
+    done_transition = None
+    
+    for t in transitions:
+        dest_name = t["to"]["name"].lower()
+        cat_key = t.get("to", {}).get("statusCategory", {}).get("key", "")
+        
+        # FIXED THE 'PR' BUG! Replaced "pr" with "pull request"
+        if any(kw in dest_name for kw in ["review", "qa", "test", "pull request", "merge", "validate", "check"]):
+            review_transition = t
+        elif cat_key == "done":
+            done_transition = t
+        elif cat_key == "indeterminate" or "progress" in dest_name:
+            progress_transition = t
 
-    # 3. Fallback: Your idea! (If Jira is acting weird, pick the last one)
-    if not transition_id and transitions:
-        transition_id = transitions[-1]["id"]
-        target_name = transitions[-1]["to"]["name"]
-        logger.warning(f"No 'done' category found. Falling back to the last option: {target_name}")
-
-    if not transition_id:
-        logger.error(f"❌ No transitions available to move {issue_key}.")
+    # 🎯 IF THE USER JUST WANTS IT IN PROGRESS (For Partial/Issues)
+    if target == "progress":
+        if progress_transition:
+            payload = {"transition": {"id": progress_transition["id"]}}
+            res = jira_session.post(url, headers=headers, json=payload)
+            if res.status_code == 204:
+                logger.info(f"🎯 Moved {issue_key} to In Progress")
         return
 
-    # 4. Execute the move
-    payload = {"transition": {"id": transition_id}}
-    res = jira_session.post(url, headers=headers, json=payload)
-    if res.status_code == 204:
-        logger.info(f"🚀 Successfully moved {issue_key} to '{target_name}' (Universal Match)")
-    else:
-        logger.error(f"Failed to transition: {res.text}")
+    # 🎯 IF THE USER WANTS IT IN REVIEW (For Complete)
+    if review_transition:
+        payload = {"transition": {"id": review_transition["id"]}}
+        res = jira_session.post(url, headers=headers, json=payload)
+        if res.status_code == 204:
+            logger.info(f"🎯 SUCCESS! Force-moved {issue_key} to '{review_transition['to']['name']}'")
+        return
+        
+    # Step into In Progress to unlock Review
+    if progress_transition:
+        logger.info(f"👟 Stepping {issue_key} through '{progress_transition['to']['name']}' to try and unlock Review...")
+        payload = {"transition": {"id": progress_transition["id"]}}
+        res = jira_session.post(url, headers=headers, json=payload)
+        if res.status_code == 204:
+            import time
+            time.sleep(2.0)
+            transition_issue(cloud_id, issue_key, access_token, depth + 1, target="review")
+        return
+
+    # Fallback to Done
+    if done_transition:
+        payload = {"transition": {"id": done_transition["id"]}}
+        jira_session.post(url, headers=headers, json=payload)
+        
+    # X-RAY LOG: This will print EXACTLY what columns Jira is allowing us to move to
+    available_destinations = [t['to']['name'] for t in transitions]
+    logger.info(f"🚦 PATHWAYS OPEN FOR {issue_key}: {available_destinations}")
+        
+    review_transition = None
+    progress_transition = None
+    done_transition = None
+    
+    for t in transitions:
+        dest_name = t["to"]["name"].lower()
+        cat_key = t.get("to", {}).get("statusCategory", {}).get("key", "")
+        
+        # Priority 1: Review/QA Target
+        if any(kw in dest_name for kw in ["review", "qa", "test", "pr", "merge", "validate", "check"]):
+            review_transition = t
+        # Priority 2: Done Target
+        elif cat_key == "done":
+            done_transition = t
+        # Priority 3: Stepping Stone (In Progress)
+        elif cat_key == "indeterminate" or "progress" in dest_name:
+            # Prevent stepping into In Progress if it's already in progress
+            progress_transition = t
+
+    # EXECUTE MOVES
+    if review_transition:
+        payload = {"transition": {"id": review_transition["id"]}}
+        res = jira_session.post(url, headers=headers, json=payload)
+        if res.status_code == 204:
+            logger.info(f"🎯 SUCCESS! Force-moved {issue_key} to '{review_transition['to']['name']}'")
+        return
+        
+    if progress_transition:
+        logger.info(f"👟 Stepping {issue_key} through '{progress_transition['to']['name']}' to try and unlock Review...")
+        payload = {"transition": {"id": progress_transition["id"]}}
+        res = jira_session.post(url, headers=headers, json=payload)
+        if res.status_code == 204:
+            time.sleep(2.0) # WAIT 2 SECONDS FOR JIRA'S DATABASE TO SYNC
+            transition_issue(cloud_id, issue_key, access_token, depth + 1)
+        return
+
+    if done_transition:
+        payload = {"transition": {"id": done_transition["id"]}}
+        res = jira_session.post(url, headers=headers, json=payload)
+        if res.status_code == 204:
+            logger.info(f"✅ Moved {issue_key} to '{done_transition['to']['name']}' (No Review column was available)")
+        return
 
 def create_issue(cloud_id: str, project_key: str, summary: str, description: str, access_token: str):
     url = f"{Config.JIRA_API_BASE}/ex/jira/{cloud_id}/rest/api/3/issue"
@@ -108,41 +174,29 @@ def get_projects(cloud_id: str, access_token: str):
         return response.json()
     return []
 
-# --- RESTORED ORIGINAL FUNCTION ---
 def get_active_issues(cloud_id: str, access_token: str, project_key: str = None):
-    url = f"https://api.atlassian.com/ex/jira/{cloud_id}/rest/api/3/search/jql"
+    """Strictly fetches tickets that are NOT Done to save LLM tokens."""
     
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Accept": "application/json",
-        "Content-Type": "application/json"
-    }
+    jql = f'project="{project_key}" AND statusCategory != Done ORDER BY updated DESC' if project_key else 'statusCategory != Done ORDER BY updated DESC'
+    encoded_jql = urllib.parse.quote(jql)
     
-    jql = "statusCategory != Done"
-    if project_key:
-        jql = f"project = {project_key} AND " + jql
-    jql += " ORDER BY updated DESC"
-    
-    payload = {
-        "jql": jql,
-        "maxResults": 15,
-        "fields": ["summary", "description", "status"]
-    }
+    url = f"{Config.JIRA_API_BASE}/ex/jira/{cloud_id}/rest/api/3/search/jql?jql={encoded_jql}&maxResults=100&fields=summary,description,status"
+    headers = jira_headers(access_token)
 
     try:
-        response = jira_session.post(url, headers=headers, json=payload)
-        
+        response = jira_session.get(url, headers=headers)
         if response.status_code != 200:
             logger.error(f"Jira API Error {response.status_code}: {response.text}")
             return []
             
-        return response.json().get("issues", [])
+        issues = response.json().get("issues", [])
+        logger.info(f"API fetched {len(issues)} active tickets (To Do / In Progress).")
+        return issues
     except Exception as e:
         logger.error(f"Search API Error: {e}")
         return []
 
 
-# --- Q4: ZERO-LLM ADF TO MARKDOWN PARSER ---
 def adf_to_markdown(adf_node):
     """Recursively converts Jira's Atlassian Document Format (ADF) to standard Markdown."""
     if not adf_node or not isinstance(adf_node, dict): return ""
@@ -208,9 +262,25 @@ def get_project_statuses(cloud_id: str, project_key: str, access_token: str):
                     "category_key": cat_key
                 })
                 
-    # Sort the columns to enforce the standard Jira flow: To Do -> In Progress -> Done
-    sort_order = {"new": 1, "indeterminate": 2, "done": 3}
-    columns_data.sort(key=lambda x: sort_order.get(x["category_key"], 4))
+    # --- NEW SMART SORTING LOGIC ---
+    def sort_columns(col):
+        # Base category weights: To Do (100) -> In Progress (200) -> Done (300)
+        base_weight = {"new": 100, "indeterminate": 200, "done": 300}.get(col["category_key"], 400)
+        
+        title_lower = col["title"].lower()
+        sub_weight = 50 # Default middle placement for unknown columns
+        
+        # Sub-sort specifically for the blue 'indeterminate' columns
+        if col["category_key"] == "indeterminate":
+            if any(kw in title_lower for kw in ["progress", "doing", "active", "dev", "build"]):
+                sub_weight = 10  # Pull to the left
+            elif any(kw in title_lower for kw in ["review", "qa", "test", "pr", "merge", "validate"]):
+                sub_weight = 90  # Push to the right
+                
+        return base_weight + sub_weight
+
+    # Execute the sort
+    columns_data.sort(key=sort_columns)
     
     # Clean up the temporary sort key before returning to the frontend
     for col in columns_data:
@@ -366,5 +436,12 @@ def update_issue_description(cloud_id: str, issue_key: str, description: str, ac
     }
     
     res = jira_session.put(url, headers=jira_headers(access_token), json=payload)
+    res.raise_for_status()
+    return True
+
+def delete_issue(cloud_id: str, issue_key: str, access_token: str):
+    """Deletes an issue entirely from Jira."""
+    url = f"{Config.JIRA_API_BASE}/ex/jira/{cloud_id}/rest/api/3/issue/{issue_key}"
+    res = jira_session.delete(url, headers=jira_headers(access_token))
     res.raise_for_status()
     return True

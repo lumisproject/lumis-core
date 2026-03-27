@@ -125,8 +125,8 @@ const InputField = ({ label, icon: Icon, value, onChange, placeholder, type = "t
 const Settings = () => {
     const { user } = useUserStore();
     const {
-        project, jiraConnected, notionConnected, fetchJiraStatus, fetchNotionStatus, disconnectJira, disconnectNotion,
-        updateJiraMapping, updateNotionMapping
+        project, jiraConnected, fetchJiraStatus, fetchNotionStatus, disconnectJira,
+        updateJiraMapping, jiraProjects
     } = useProjectStore();
     const {
         useDefault, setUseDefault,
@@ -139,10 +139,6 @@ const Settings = () => {
     const [saving, setSaving] = useState(false);
     const [success, setSuccess] = useState(false);
 
-    const [availableJiraProjects, setAvailableJiraProjects] = useState<{ key: string, name: string }[]>([]);
-    const [loadingJira, setLoadingJira] = useState(false);
-    const [availableNotionDBs, setAvailableNotionDBs] = useState<{ id: string, name: string }[]>([]);
-    const [loadingNotion, setLoadingNotion] = useState(false);
     const [showBillingSuccess, setShowBillingSuccess] = useState(false);
 
     const location = useLocation();
@@ -214,31 +210,7 @@ const Settings = () => {
         loadSettings();
     }, [user]);
 
-    useEffect(() => {
-        const fetchJira = async () => {
-            if (jiraConnected && user?.id) {
-                setLoadingJira(true);
-                try {
-                    const res = await fetch(`${API_BASE}/api/jira/projects/${user.id}`);
-                    if (res.ok) setAvailableJiraProjects(await res.json());
-                } catch (e) { console.error(e); } finally { setLoadingJira(false); }
-            }
-        };
-        fetchJira();
-    }, [jiraConnected, user]);
-
-    useEffect(() => {
-        const fetchNotion = async () => {
-            if (notionConnected && user?.id) {
-                setLoadingNotion(true);
-                try {
-                    const res = await fetch(`${API_BASE}/api/notion/databases/${user.id}`);
-                    if (res.ok) setAvailableNotionDBs(await res.json());
-                } catch (e) { console.error(e); } finally { setLoadingNotion(false); }
-            }
-        };
-        fetchNotion();
-    }, [notionConnected, user]);
+    // Integration data (Jira projects/Notion DBs) is now managed by useProjectStore
 
     const handleSave = async () => {
         if (!user) return;
@@ -463,8 +435,8 @@ const Settings = () => {
                                     icon={Search}
                                     value={project?.jira_project_id || 'none'}
                                     onChange={(val: string) => project?.id && updateJiraMapping(project.id, val === 'none' ? '' : val)}
-                                    options={[{ key: 'none', name: 'None / Not Linked' }, ...availableJiraProjects]}
-                                    loading={loadingJira}
+                                    options={[{ key: 'none', name: 'None / Not Linked' }, ...jiraProjects]}
+                                    loading={!jiraProjects.length && jiraConnected}
                                 />
                                 <button
                                     onClick={() => user?.id && disconnectJira(user.id)}
@@ -485,51 +457,29 @@ const Settings = () => {
                         )}
                     </div>
 
-                    {/* NOTION */}
-                    <div className="space-y-4 p-6 rounded-3xl border border-black/5 bg-accent/10 dark:border-white/5 relative overflow-hidden group">
-                        {!project && (
-                            <div className="absolute inset-0 z-20 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center rounded-3xl">
-                                <AlertTriangle className="h-6 w-6 text-orange-500 mb-2" />
-                                <div className="text-[10px] font-black uppercase tracking-widest">No Active Instance</div>
-                                <p className="text-[9px] text-muted-foreground mt-1">Select a project in the Command Center to map integrations.</p>
+                    {/* NOTION - UNDER CONSTRUCTION */}
+                    <div className="space-y-4 p-6 rounded-3xl border border-black/5 bg-accent/5 dark:border-white/5 relative overflow-hidden group grayscale opacity-60 pointer-events-none">
+                        <div className="absolute inset-0 z-30 bg-background/40 backdrop-blur-[2px] flex flex-col items-center justify-center p-6 text-center">
+                            <div className="px-4 py-1.5 bg-yellow-500 text-black text-[9px] font-black uppercase tracking-[0.2em] rounded-full mb-2 shadow-xl shadow-yellow-500/20">
+                                Construction Protocol Active
                             </div>
-                        )}
+                            <p className="text-[8px] text-muted-foreground font-bold uppercase tracking-widest leading-relaxed">
+                                Notion integration is being synthesized in the laboratory.
+                            </p>
+                        </div>
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <BookOpen className="h-4 w-4 text-emerald-500" />
                                 <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                                    Notion Board {project?.notion_project_id && <CheckCircle2 className="inline h-3 w-3 ml-1 text-primary" />}
+                                    Notion Board
                                 </span>
                             </div>
-                            <div className={cn("h-2 w-2 rounded-full", notionConnected ? "bg-primary animate-pulse shadow-[0_0_10px_rgba(var(--primary),0.5)]" : "bg-muted")} />
+                            <div className="h-2 w-2 rounded-full bg-muted opacity-30" />
                         </div>
-
-                        {notionConnected ? (
-                            <div className="space-y-4">
-                                <ModernSelect
-                                    label="Target Database"
-                                    icon={Search}
-                                    value={project?.notion_project_id || 'none'}
-                                    onChange={(val: string) => project?.id && updateNotionMapping(project.id, val === 'none' ? '' : val)}
-                                    options={[{ id: 'none', name: 'None / Not Linked' }, ...availableNotionDBs]}
-                                    loading={loadingNotion}
-                                />
-                                <button
-                                    onClick={() => user?.id && disconnectNotion(user.id)}
-                                    className="text-[10px] font-bold uppercase tracking-widest text-destructive hover:underline"
-                                >
-                                    Disconnect Node
-                                </button>
-                            </div>
-                        ) : (
-                            <button
-                                onClick={() => window.location.href = `${API_BASE}/auth/notion/connect?state=${user?.id}`}
-                                className="w-full flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-500/10 text-emerald-500 text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500/20 transition-all border border-emerald-500/20"
-                            >
-                                <Plug className="h-4 w-4" />
-                                Link Notion Node
-                            </button>
-                        )}
+                        <button className="w-full flex h-12 items-center justify-center gap-2 rounded-2xl bg-muted/10 text-muted-foreground text-[10px] font-black uppercase tracking-widest border border-border/20">
+                            <Plug className="h-4 w-4" />
+                            Locked
+                        </button>
                     </div>
 
                 </div>

@@ -3,10 +3,13 @@ import type { Ticket, Comment } from '../../stores/useBoardStore';
 import { useBoardStore } from '../../stores/useBoardStore';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { 
-  X, MessageSquare, Send, Bot, User, Sparkles, Trash2, Loader2, ChevronDown 
+  X, MessageSquare, Send, Bot, User, Sparkles, Trash2, Loader2, ChevronDown, AlertTriangle 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../../lib/utils';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 
 interface TicketModalProps {
   ticket: Ticket;
@@ -65,36 +68,33 @@ const CommentItem = ({ comment, onDelete }: { comment: Comment, onDelete: (id: s
             {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
           </button>
         </div>
-        <p className="text-sm leading-relaxed text-foreground/80 whitespace-pre-wrap">
-          {comment.text}
-        </p>
+        <div className="text-sm leading-relaxed text-foreground/80 prose prose-invert prose-p:leading-relaxed prose-pre:bg-secondary/50 prose-pre:border prose-border/10 max-w-none">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+            {comment.text}
+          </ReactMarkdown>
+        </div>
       </div>
     </div>
   );
 };
 
 export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose }) => {
-  const { 
-    addComment, 
-    deleteComment, 
-    teamMembers, 
-    fetchTeamMembers, 
-    assignTicket, 
-    updateTicketDescription 
-  } = useBoardStore();
+  const { addComment, deleteComment, deleteTicket, teamMembers, fetchTeamMembers, assignTicket, updateTicketDescription } = useBoardStore();
   const { project } = useProjectStore();
   
   const [commentText, setCommentText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   // Description Edit State
   const [isEditingDesc, setIsEditingDesc] = useState(false);
   const [editDescText, setEditDescText] = useState(ticket.description || '');
   const [isSavingDesc, setIsSavingDesc] = useState(false);
 
-  // Sync edit box if ticket data changes from background fetch
+  // Ticket Delete State
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [isDeletingTicket, setIsDeletingTicket] = useState(false);
+
   useEffect(() => {
     if (!isEditingDesc) {
       setEditDescText(ticket.description || '');
@@ -120,10 +120,10 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose }) => 
     await deleteComment(project.id, 'jira', ticket.id, commentId);
   };
 
-  const handleAssigneeChange = async (accountId: string) => {
+  const handleAssigneeChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     if (!project?.id) return;
     setIsAssigning(true);
-    await assignTicket(project.id, 'jira', ticket.key, accountId);
+    await assignTicket(project.id, 'jira', ticket.key, e.target.value);
     setIsAssigning(false);
   };
 
@@ -133,6 +133,16 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose }) => 
     await updateTicketDescription(project.id, 'jira', ticket.id, editDescText);
     setIsEditingDesc(false);
     setIsSavingDesc(false);
+  };
+
+  const handleDeleteTicket = async () => {
+    if (!project?.id) return;
+    setIsDeletingTicket(true);
+    const success = await deleteTicket(project.id, 'jira', ticket.id);
+    setIsDeletingTicket(false);
+    if (success) {
+      onClose();
+    }
   };
 
   return (
@@ -152,18 +162,61 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose }) => 
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
         className="relative w-full max-w-4xl max-h-[90vh] bg-card border border-border shadow-2xl rounded-2xl flex flex-col overflow-hidden"
       >
+        {/* Header */}
         <div className="flex items-center justify-between px-8 py-6 border-b border-border/50">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-3">
               <div className="px-2 py-0.5 bg-secondary text-xs font-bold text-muted-foreground rounded border border-border shadow-sm tracking-wide">
                 {ticket.key}
               </div>
+              
+              {/* Delete Confirm State Inline */}
+              <AnimatePresence>
+                {isConfirmingDelete && (
+                  <motion.div 
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className="flex items-center gap-2 bg-destructive/10 text-destructive px-3 py-1 rounded-lg border border-destructive/20"
+                  >
+                    <AlertTriangle className="h-3 w-3" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Delete this issue permanently?</span>
+                    <button 
+                      onClick={handleDeleteTicket}
+                      disabled={isDeletingTicket}
+                      className="ml-2 px-2 py-0.5 bg-destructive text-white rounded text-[10px] font-bold uppercase tracking-widest hover:bg-destructive/80 transition-colors"
+                    >
+                      {isDeletingTicket ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirm"}
+                    </button>
+                    <button 
+                      onClick={() => setIsConfirmingDelete(false)}
+                      disabled={isDeletingTicket}
+                      className="px-2 py-0.5 bg-background/50 rounded text-[10px] font-bold uppercase tracking-widest hover:bg-background transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
             </div>
             <h2 className="text-2xl font-bold tracking-tight mt-2">{ticket.title}</h2>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-secondary rounded-full transition-colors self-start">
-            <X className="h-5 w-5" />
-          </button>
+          
+          <div className="flex items-center gap-2 self-start">
+            {!isConfirmingDelete && (
+              <button 
+                onClick={() => setIsConfirmingDelete(true)}
+                className="p-2 hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-full transition-colors"
+                title="Delete Issue"
+              >
+                <Trash2 className="h-5 w-5" />
+              </button>
+            )}
+            <button onClick={onClose} className="p-2 hover:bg-secondary rounded-full transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -222,9 +275,15 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose }) => 
                       onClick={() => setIsEditingDesc(true)}
                       className="prose prose-invert max-w-none group cursor-pointer p-4 -mx-4 rounded-xl hover:bg-secondary/30 transition-colors border border-transparent hover:border-border/50"
                     >
-                      <p className="text-foreground/90 leading-relaxed text-lg whitespace-pre-wrap">
-                        {ticket.description || <span className="text-muted-foreground italic">No description provided. Click here to add one.</span>}
-                      </p>
+                      <div className="text-foreground/90 leading-relaxed text-lg prose prose-invert max-w-none">
+                        {ticket.description ? (
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                            {ticket.description}
+                          </ReactMarkdown>
+                        ) : (
+                          <span className="text-muted-foreground italic">No description provided. Click here to add one.</span>
+                        )}
+                      </div>
                     </div>
                   )}
                 </section>
@@ -240,7 +299,7 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose }) => 
                   </div>
                   
                   <div className="space-y-4">
-                    {ticket.comments.map((comment: Comment) => (
+                    {[...ticket.comments].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((comment: Comment) => (
                       <CommentItem key={comment.id} comment={comment} onDelete={handleDeleteComment} />
                     ))}
                     {ticket.comments.length === 0 && (
@@ -253,91 +312,38 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose }) => 
               </div>
 
               <div className="space-y-8">
-                <div className="relative">
-                  <h4 className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest mb-3 flex items-center justify-between">
-                    Assignee 
-                    {isAssigning && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
+                <div>
+                  <h4 className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest mb-3 flex items-center gap-2">
+                    Assignee {isAssigning && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
                   </h4>
                   
-                  {/* Custom Assignee Dropdown */}
-                  <div className="relative">
-                    <button
-                      onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                      className={cn(
-                        "w-full flex items-center justify-between px-3 py-2.5 bg-secondary/30 border border-border/50 rounded-xl hover:border-primary/50 transition-all",
-                        isDropdownOpen && "border-primary/50 ring-2 ring-primary/10"
-                      )}
+                  <div className="relative group cursor-pointer border border-border/50 hover:border-primary/50 transition-colors rounded-xl overflow-hidden">
+                    <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <select 
+                      disabled={isAssigning}
+                      onChange={handleAssigneeChange}
+                      value={teamMembers.find(m => m.name === ticket.assignee.name)?.accountId || ''}
+                      className="w-full appearance-none bg-transparent py-3 pl-12 pr-10 text-sm font-semibold focus:outline-none cursor-pointer z-10 relative"
                     >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <img 
-                          src={ticket.assignee.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${ticket.assignee.name}`} 
-                          className="h-7 w-7 rounded-full border border-border shadow-sm shrink-0"
-                          alt="" 
-                        />
-                        <span className="text-sm font-semibold truncate text-foreground">
-                          {ticket.assignee.name || "Unassigned"}
-                        </span>
-                      </div>
-                      <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform duration-200", isDropdownOpen && "rotate-180")} />
-                    </button>
-
-                    <AnimatePresence>
-                      {isDropdownOpen && (
-                        <>
-                          <div 
-                            className="fixed inset-0 z-10" 
-                            onClick={() => setIsDropdownOpen(false)} 
-                          />
-                          <motion.div
-                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                            className="absolute top-full left-0 right-0 mt-2 bg-card border border-border shadow-2xl rounded-2xl overflow-hidden z-20"
-                          >
-                            <div className="p-2 max-h-[300px] overflow-y-auto custom-scrollbar">
-                              <button
-                                onClick={() => {
-                                  handleAssigneeChange('');
-                                  setIsDropdownOpen(false);
-                                }}
-                                className="w-full flex items-center gap-3 p-2 hover:bg-secondary rounded-xl transition-colors text-left"
-                              >
-                                <div className="h-7 w-7 rounded-full bg-secondary flex items-center justify-center border border-border">
-                                  <User className="h-4 w-4 text-muted-foreground" />
-                                </div>
-                                <span className="text-sm font-medium text-muted-foreground">Unassigned</span>
-                              </button>
-                              
-                              <div className="h-px bg-border/50 my-1 mx-2" />
-
-                              {teamMembers.map(member => (
-                                <button
-                                  key={member.accountId}
-                                  onClick={() => {
-                                    handleAssigneeChange(member.accountId);
-                                    setIsDropdownOpen(false);
-                                  }}
-                                  className={cn(
-                                    "w-full flex items-center gap-3 p-2 hover:bg-secondary rounded-xl transition-colors text-left",
-                                    ticket.assignee.name === member.name && "bg-primary/5 border border-primary/10"
-                                  )}
-                                >
-                                  <img 
-                                    src={member.avatar} 
-                                    className="h-7 w-7 rounded-full border border-border"
-                                    alt="" 
-                                  />
-                                  <span className="text-sm font-semibold truncate text-foreground">
-                                    {member.name}
-                                  </span>
-                                </button>
-                              ))}
-                            </div>
-                          </motion.div>
-                        </>
-                      )}
-                    </AnimatePresence>
+                      <option value="" className="bg-card">Unassigned</option>
+                      {teamMembers.map(member => (
+                        <option key={member.accountId} value={member.accountId} className="bg-card">
+                          {member.name}
+                        </option>
+                      ))}
+                    </select>
+                    
+                    <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none z-0">
+                      <img 
+                        src={ticket.assignee.avatar} 
+                        className="h-6 w-6 rounded-full border border-border shadow-sm"
+                        alt={ticket.assignee.name} 
+                      />
+                    </div>
                   </div>
+
                 </div>
               </div>
             </div>

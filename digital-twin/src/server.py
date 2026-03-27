@@ -921,6 +921,31 @@ async def update_ticket_assignee(project_id: str, ticket_id: str, payload: dict,
         import logging
         logging.getLogger("LumisAPI").error(f"Failed to assign ticket: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/projects/{project_id}/board/tickets/{ticket_id}")
+async def delete_board_ticket(project_id: str, ticket_id: str, tool: str = "jira"):
+    """Deletes a ticket from the connected project management tool."""
+    try:
+        res = supabase.table("projects").select("user_id, jira_project_id").eq("id", project_id).limit(1).execute()
+        if not res.data: raise HTTPException(status_code=404, detail="Project not found")
+        
+        project = res.data[0]
+        if tool == "jira" and project.get("jira_project_id"):
+            from src.jira_auth import get_valid_token
+            access_token = get_valid_token(project["user_id"])
+            if not access_token: raise HTTPException(status_code=401, detail="Jira authentication missing.")
+                
+            from src.jira_client import get_accessible_resources, delete_issue
+            cloud_id = get_accessible_resources(access_token)[0]["id"]
+            
+            delete_issue(cloud_id, ticket_id, access_token)
+            
+            return {"status": "success"}
+        raise HTTPException(status_code=400, detail="Tool not supported.")
+    except Exception as e:
+        import logging
+        logging.getLogger("LumisAPI").error(f"Failed to delete ticket: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     
 @app.get("/api/projects/{project_id}/check-remote")
 async def check_remote_sync(project_id: str):
