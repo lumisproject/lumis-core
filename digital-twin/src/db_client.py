@@ -97,7 +97,12 @@ def save_edges(project_id, edges_list):
 
 def save_risk_alerts(project_id, risks):
     if not risks: return
-    supabase.table("project_risks").delete().eq("project_id", project_id).eq("risk_type", "Legacy Conflict").execute()
+    # Clear all predictive risk types for this project before saving new ones
+    supabase.table("project_risks") \
+        .delete() \
+        .eq("project_id", project_id) \
+        .in_("risk_type", ["Legacy Conflict", "Predictive Delay"]) \
+        .execute()
     supabase.table("project_risks").insert(risks).execute()
 
 def get_global_user_config(user_id: str) -> dict:

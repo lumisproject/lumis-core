@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  ShieldAlert, AlertTriangle, Bug, FileWarning, Clock, UserX, 
+  ShieldAlert, AlertTriangle, Bug, FileWarning, Clock, 
   GitMerge, RefreshCw, Activity, FileCode
 } from 'lucide-react';
 import { useProjectStore } from '@/stores/useProjectStore';
@@ -17,7 +17,6 @@ const severityConfig = {
 const getRiskIcon = (riskType: string, title: string) => {
   const type = (riskType || title).toLowerCase();
   if (type.includes('delay')) return Clock;
-  if (type.includes('silo')) return UserX;
   if (type.includes('legacy') || type.includes('conflict')) return GitMerge;
   if (type.includes('bug')) return Bug;
   if (type.includes('code')) return FileWarning;

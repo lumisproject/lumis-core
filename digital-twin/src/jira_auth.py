@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("LumisAPI")
 
 jira_auth_router = APIRouter()
-SCOPES = ["read:jira-work", "write:jira-work", "offline_access"]
+SCOPES = ["read:jira-work", "write:jira-work", "read:jira-user", "offline_access"]
 
 def build_auth_url(user_id: str):
     params = {

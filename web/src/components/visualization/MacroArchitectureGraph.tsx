@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
+import { AlertTriangle, Clock, GitMerge, FileCode, CheckCircle2 } from 'lucide-react';
 
 interface Node {
   id: string;
@@ -37,6 +38,7 @@ const MacroArchitectureGraph: React.FC<MacroArchitectureGraphProps> = ({ data })
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [hoverNode, setHoverNode] = useState<Node | null>(null);
+  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
 
   // Pre-process data
   const processedData = useMemo(() => {
@@ -231,6 +233,14 @@ const MacroArchitectureGraph: React.FC<MacroArchitectureGraphProps> = ({ data })
              containerRef.current.style.cursor = node ? 'pointer' : 'default';
           }
         }}
+        onNodeClick={(node) => {
+            setSelectedNode(node as Node);
+            if (fgRef.current) {
+                fgRef.current.centerAt((node as any).x, (node as any).y, 500);
+                fgRef.current.zoom(2.2, 500);
+            }
+        }}
+        onBackgroundClick={() => setSelectedNode(null)}
         onNodeDragEnd={(node) => {
            (node as Node).fx = (node as any).x;
            (node as Node).fy = (node as any).y;
@@ -258,6 +268,58 @@ const MacroArchitectureGraph: React.FC<MacroArchitectureGraphProps> = ({ data })
           </div>
         </div>
       </div>
+
+      {selectedNode && (
+          <div className="absolute top-6 left-6 z-10 w-80 bg-black/80 backdrop-blur-xl p-5 rounded-[2rem] border border-white/5 shadow-2xl animate-in fade-in slide-in-from-left-4">
+              <div className="flex justify-between items-start mb-4">
+                  <h3 className="text-xs font-black text-white uppercase tracking-widest break-all pr-4">{selectedNode.label}</h3>
+                  <button className="text-gray-500 hover:text-white transition-colors p-1" onClick={() => setSelectedNode(null)}>✕</button>
+              </div>
+              <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-[10px] font-mono text-gray-400 bg-white/5 p-2 rounded-xl border border-white/5 break-all">
+                      <FileCode className="h-3 w-3 shrink-0" />
+                      {selectedNode.fullPath || selectedNode.id}
+                  </div>
+                  
+                  {selectedNode.group === 'file' ? (
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-2xl">
+                          <div className="flex items-center gap-2 text-emerald-400 font-bold mb-2">
+                             <CheckCircle2 className="h-4 w-4" /> Healthy File
+                          </div>
+                          <div className="text-gray-400 text-xs leading-relaxed">Contains <span className="text-emerald-400 font-black">{selectedNode.unit_count || 0}</span> logic units. Structured cleanly within acceptable bounds.</div>
+                          {selectedNode.risk_unit_count ? (
+                              <div className="text-orange-400 text-[9px] font-black uppercase tracking-widest mt-4 pt-4 border-t border-orange-500/20">
+                                  {selectedNode.risk_unit_count} logic units contained have minor risks.
+                              </div>
+                          ) : null}
+                      </div>
+                  ) : selectedNode.risk_score > 70 ? (
+                      <div className="bg-rose-500/10 border border-rose-500/20 p-5 rounded-2xl">
+                          <div className="text-rose-400 font-bold mb-3 flex flex-col gap-2">
+                              <span className="flex items-center gap-2 font-black uppercase tracking-widest text-[11px]"><AlertTriangle className="h-4 w-4 shrink-0" /> Critical Risk</span>
+                              <span className="text-[9px] w-fit uppercase font-black tracking-widest bg-rose-500/20 px-2 py-0.5 rounded-md">Score: {Math.round(selectedNode.risk_score)}</span>
+                          </div>
+                          <div className="text-gray-400 text-xs leading-relaxed mb-5">This unit has been identified as a critical risk factor. High complexity or tight coupling threatens stability.</div>
+                          <button className="w-full py-3 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors shadow-xl shadow-rose-500/20 active:scale-95">Ask AI to Refactor</button>
+                      </div>
+                  ) : selectedNode.legacy_flag ? (
+                      <div className="bg-amber-400/10 border border-amber-400/20 p-5 rounded-2xl">
+                          <div className="flex items-center gap-2 text-amber-400 font-bold mb-2 font-black uppercase tracking-widest text-[11px]">
+                             <Clock className="h-4 w-4" /> Legacy Code
+                          </div>
+                          <div className="text-gray-400 text-xs leading-relaxed">This unit hasn't been modified recently and relies on older patterns. Consider modernizing during your next sprint.</div>
+                      </div>
+                  ) : (
+                      <div className="bg-sky-400/10 border border-sky-400/20 p-5 rounded-2xl">
+                          <div className="flex items-center gap-2 text-sky-400 font-bold mb-2 font-black uppercase tracking-widest text-[11px]">
+                              <GitMerge className="h-4 w-4" /> Logic Unit
+                          </div>
+                          <div className="text-gray-400 text-xs leading-relaxed">This node is functioning within standard complexity thresholds, no immediate action required.</div>
+                      </div>
+                  )}
+              </div>
+          </div>
+      )}
     </div>
   );
 };

@@ -663,6 +663,290 @@ async def update_notion_mapping(
     supabase.table("projects").update({"notion_project_id": notion_db_id}).eq("id", project_id).execute()
     return {"status": "success", "notion_project_id": notion_db_id}
 
+@app.get("/api/projects/{project_id}/board")
+async def get_project_board(project_id: str, tool: str = "jira", current_user = Depends(get_current_user)):
+    """Fetches the synchronized Kanban board data."""
+    from src.jira_client import get_project_statuses, get_board_issues
+    from src.jira_auth import get_valid_token
+    
+    try:
+        # 1. Get project info
+        res = supabase.table("projects").select("user_id, jira_project_id").eq("id", project_id).limit(1).execute()
+        if not res.data: raise HTTPException(status_code=404, detail="Project not found")
+        
+        project = res.data[0]
+        if str(project["user_id"]) != str(current_user.id):
+            raise HTTPException(status_code=403, detail="Forbidden")
+        
+        # Currently, we only support Jira as requested
+        if tool == "jira" and project.get("jira_project_id"):
+            access_token = get_valid_token(project["user_id"])
+            if not access_token:
+                raise HTTPException(status_code=401, detail="Jira authentication expired or missing.")
+                
+            from src.jira_client import get_accessible_resources
+            resources = get_accessible_resources(access_token)
+            cloud_id = resources[0]["id"]
+            
+            # Fetch Dynamic Columns & Tickets
+            columns = get_project_statuses(cloud_id, project["jira_project_id"], access_token)
+            tickets = get_board_issues(cloud_id, project["jira_project_id"], access_token)
+            
+            return {"columns": columns, "tickets": tickets}
+            
+        return {"columns": [], "tickets": []}
+    except Exception as e:
+        logger.error(f"Board fetch error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/api/projects/{project_id}/board/tickets/{ticket_id}")
+async def update_ticket_status(project_id: str, ticket_id: str, payload: dict, tool: str = "jira", current_user = Depends(get_current_user)):
+    """Moves a ticket. If Jira rejects it, this throws a 400 error to snap the UI back."""
+    from src.jira_client import transition_issue_to_status
+    from src.jira_auth import get_valid_token
+    
+    target_status_id = payload.get("status")
+    try:
+        res = supabase.table("projects").select("user_id").eq("id", project_id).limit(1).execute()
+        if not res.data: raise HTTPException(status_code=404, detail="Project not found")
+            
+        user_id = res.data[0]["user_id"]
+        if str(user_id) != str(current_user.id):
+            raise HTTPException(status_code=403, detail="Forbidden")
+            
+        if tool == "jira":
+            access_token = get_valid_token(user_id)
+            from src.jira_client import get_accessible_resources
+            cloud_id = get_accessible_resources(access_token)[0]["id"]
+            
+            try:
+                # This will raise an exception if the Jira admin blocked this specific transition
+                transition_issue_to_status(cloud_id, ticket_id, target_status_id, access_token)
+            except Exception as transition_error:
+                raise HTTPException(status_code=400, detail=str(transition_error))
+                
+        return {"status": "success"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ticket move error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+@app.post("/api/projects/{project_id}/board/tickets")
+async def create_board_ticket(project_id: str, payload: dict, tool: str = "jira"):
+    """Creates a new ticket in the connected project management tool."""
+    try:
+        res = supabase.table("projects").select("user_id, jira_project_id").eq("id", project_id).limit(1).execute()
+        if not res.data: raise HTTPException(status_code=404, detail="Project not found")
+        
+        project = res.data[0]
+        user_id = project["user_id"]
+        
+        if tool == "jira" and project.get("jira_project_id"):
+            from src.jira_auth import get_valid_token
+            access_token = get_valid_token(user_id)
+            if not access_token:
+                raise HTTPException(status_code=401, detail="Jira authentication expired or missing.")
+                
+            from src.jira_client import get_accessible_resources, create_issue, transition_issue_to_status
+            cloud_id = get_accessible_resources(access_token)[0]["id"]
+            project_key = project["jira_project_id"]
+            
+            summary = payload.get("title", "New Task")
+            description = payload.get("description", "")
+            target_status_id = payload.get("status")
+            assignee_id = payload.get("assigneeId") # NEW: Get assignee from frontend
+            
+            # 1. Create the issue in Jira
+            new_issue = create_issue(cloud_id, project_key, summary, description, access_token)
+            
+            # 2. Move to column if needed
+            if target_status_id:
+                try:
+                    transition_issue_to_status(cloud_id, new_issue["id"], target_status_id, access_token)
+                except Exception as e:
+                    logger.warning(f"Created ticket but couldn't move to target column: {e}")
+                    
+            # 3. Assign to user if selected
+            if assignee_id:
+                try:
+                    from src.jira_client import assign_issue
+                    assign_issue(cloud_id, new_issue["key"], assignee_id, access_token)
+                except Exception as e:
+                    logger.warning(f"Created ticket but couldn't assign user: {e}")
+            
+            return {"status": "success", "ticket_id": new_issue["id"], "ticket_key": new_issue["key"]}
+        else:
+            raise HTTPException(status_code=400, detail="Tool not supported or project not mapped.")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ticket creation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/projects/{project_id}/board/tickets/{ticket_id}/description")
+async def update_ticket_description(project_id: str, ticket_id: str, payload: dict, tool: str = "jira"):
+    """Updates the description of a ticket."""
+    try:
+        res = supabase.table("projects").select("user_id, jira_project_id").eq("id", project_id).limit(1).execute()
+        if not res.data: raise HTTPException(status_code=404, detail="Project not found")
+        
+        project = res.data[0]
+        if tool == "jira" and project.get("jira_project_id"):
+            from src.jira_auth import get_valid_token
+            access_token = get_valid_token(project["user_id"])
+            if not access_token: raise HTTPException(status_code=401, detail="Jira authentication missing.")
+                
+            from src.jira_client import get_accessible_resources, update_issue_description
+            cloud_id = get_accessible_resources(access_token)[0]["id"]
+            
+            description = payload.get("description", "")
+            update_issue_description(cloud_id, ticket_id, description, access_token)
+            
+            return {"status": "success"}
+        raise HTTPException(status_code=400, detail="Tool not supported.")
+    except Exception as e:
+        logger.error(f"Failed to update description: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/projects/{project_id}/board/tickets/{ticket_id}/comments")
+async def add_ticket_comment(project_id: str, ticket_id: str, payload: dict, tool: str = "jira"):
+    """Adds a new comment to a ticket."""
+    try:
+        res = supabase.table("projects").select("user_id, jira_project_id").eq("id", project_id).limit(1).execute()
+        if not res.data: raise HTTPException(status_code=404, detail="Project not found")
+        
+        project = res.data[0]
+        user_id = project["user_id"]
+        
+        if tool == "jira" and project.get("jira_project_id"):
+            from src.jira_auth import get_valid_token
+            access_token = get_valid_token(user_id)
+            if not access_token: raise HTTPException(status_code=401, detail="Jira authentication missing.")
+                
+            from src.jira_client import get_accessible_resources, add_comment
+            cloud_id = get_accessible_resources(access_token)[0]["id"]
+            
+            text = payload.get("text", "")
+            if not text: raise HTTPException(status_code=400, detail="Comment text cannot be empty")
+            
+            add_comment(cloud_id, ticket_id, text, access_token)
+            
+            return {"status": "success"}
+        else:
+            raise HTTPException(status_code=400, detail="Tool not supported or project not mapped.")
+    except Exception as e:
+        logger.error(f"Comment creation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/projects/{project_id}/board/tickets/{ticket_id}/comments/{comment_id}")
+async def delete_ticket_comment(project_id: str, ticket_id: str, comment_id: str, tool: str = "jira"):
+    """Deletes a comment from a ticket."""
+    try:
+        res = supabase.table("projects").select("user_id, jira_project_id").eq("id", project_id).limit(1).execute()
+        if not res.data: raise HTTPException(status_code=404, detail="Project not found")
+        
+        project = res.data[0]
+        user_id = project["user_id"]
+        
+        if tool == "jira" and project.get("jira_project_id"):
+            from src.jira_auth import get_valid_token
+            access_token = get_valid_token(user_id)
+            if not access_token: raise HTTPException(status_code=401, detail="Jira authentication missing.")
+                
+            from src.jira_client import get_accessible_resources, delete_comment
+            cloud_id = get_accessible_resources(access_token)[0]["id"]
+            
+            delete_comment(cloud_id, ticket_id, comment_id, access_token)
+            
+            return {"status": "success"}
+        else:
+            raise HTTPException(status_code=400, detail="Tool not supported or project not mapped.")
+    except Exception as e:
+        import logging
+        logging.getLogger("LumisAPI").error(f"Comment deletion error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/projects/{project_id}/board/users")
+async def get_team_members(project_id: str, tool: str = "jira"):
+    """Fetches the team members available for assignment."""
+    try:
+        res = supabase.table("projects").select("user_id, jira_project_id").eq("id", project_id).limit(1).execute()
+        if not res.data: raise HTTPException(status_code=404, detail="Project not found")
+        
+        project = res.data[0]
+        if tool == "jira" and project.get("jira_project_id"):
+            from src.jira_auth import get_valid_token
+            access_token = get_valid_token(project["user_id"])
+            if not access_token: raise HTTPException(status_code=401, detail="Jira authentication missing.")
+                
+            from src.jira_client import get_accessible_resources, get_assignable_users
+            cloud_id = get_accessible_resources(access_token)[0]["id"]
+            
+            users = get_assignable_users(cloud_id, project["jira_project_id"], access_token)
+            return {"users": users}
+        return {"users": []}
+    except Exception as e:
+        import logging
+        logging.getLogger("LumisAPI").error(f"Failed to fetch team members: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/projects/{project_id}/board/tickets/{ticket_id}/assignee")
+async def update_ticket_assignee(project_id: str, ticket_id: str, payload: dict, tool: str = "jira"):
+    """Updates the assignee of a ticket."""
+    try:
+        res = supabase.table("projects").select("user_id, jira_project_id").eq("id", project_id).limit(1).execute()
+        if not res.data: raise HTTPException(status_code=404, detail="Project not found")
+        
+        project = res.data[0]
+        if tool == "jira" and project.get("jira_project_id"):
+            from src.jira_auth import get_valid_token
+            access_token = get_valid_token(project["user_id"])
+            if not access_token: raise HTTPException(status_code=401, detail="Jira authentication missing.")
+                
+            from src.jira_client import get_accessible_resources, assign_issue
+            cloud_id = get_accessible_resources(access_token)[0]["id"]
+            
+            account_id = payload.get("accountId") # Can be empty string to unassign
+            assign_issue(cloud_id, ticket_id, account_id, access_token)
+            
+            return {"status": "success"}
+        raise HTTPException(status_code=400, detail="Tool not supported.")
+    except Exception as e:
+        import logging
+        logging.getLogger("LumisAPI").error(f"Failed to assign ticket: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/projects/{project_id}/board/tickets/{ticket_id}")
+async def delete_board_ticket(project_id: str, ticket_id: str, tool: str = "jira"):
+    """Deletes a ticket from the connected project management tool."""
+    try:
+        res = supabase.table("projects").select("user_id, jira_project_id").eq("id", project_id).limit(1).execute()
+        if not res.data: raise HTTPException(status_code=404, detail="Project not found")
+        
+        project = res.data[0]
+        if tool == "jira" and project.get("jira_project_id"):
+            from src.jira_auth import get_valid_token
+            access_token = get_valid_token(project["user_id"])
+            if not access_token: raise HTTPException(status_code=401, detail="Jira authentication missing.")
+                
+            from src.jira_client import get_accessible_resources, delete_issue
+            cloud_id = get_accessible_resources(access_token)[0]["id"]
+            
+            delete_issue(cloud_id, ticket_id, access_token)
+            
+            return {"status": "success"}
+        raise HTTPException(status_code=400, detail="Tool not supported.")
+    except Exception as e:
+        import logging
+        logging.getLogger("LumisAPI").error(f"Failed to delete ticket: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
 @app.get("/api/projects/{project_id}/check-remote")
 async def check_remote_sync(project_id: str):
     

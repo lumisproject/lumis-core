@@ -125,8 +125,8 @@ const InputField = ({ label, icon: Icon, value, onChange, placeholder, type = "t
 const Settings = () => {
     const { user } = useUserStore();
     const {
-        project, jiraConnected, notionConnected, fetchJiraStatus, fetchNotionStatus, disconnectJira, disconnectNotion,
-        updateJiraMapping, updateNotionMapping
+        project, jiraConnected, fetchJiraStatus, fetchNotionStatus, disconnectJira,
+        updateJiraMapping, jiraProjects
     } = useProjectStore();
     const {
         useDefault, setUseDefault,
@@ -139,10 +139,6 @@ const Settings = () => {
     const [saving, setSaving] = useState(false);
     const [success, setSuccess] = useState(false);
 
-    const [availableJiraProjects, setAvailableJiraProjects] = useState<{ key: string, name: string }[]>([]);
-    const [loadingJira, setLoadingJira] = useState(false);
-    const [availableNotionDBs, setAvailableNotionDBs] = useState<{ id: string, name: string }[]>([]);
-    const [loadingNotion, setLoadingNotion] = useState(false);
     const [showBillingSuccess, setShowBillingSuccess] = useState(false);
 
     const location = useLocation();
@@ -178,6 +174,8 @@ const Settings = () => {
         }
     }, [user, project?.id]);
 
+
+
     // NEW: Fetch User Settings on mount
     useEffect(() => {
         const loadSettings = async () => {
@@ -212,31 +210,7 @@ const Settings = () => {
         loadSettings();
     }, [user]);
 
-    useEffect(() => {
-        const fetchJira = async () => {
-            if (jiraConnected && user?.id) {
-                setLoadingJira(true);
-                try {
-                    const res = await fetch(`${API_BASE}/api/jira/projects/${user.id}`);
-                    if (res.ok) setAvailableJiraProjects(await res.json());
-                } catch (e) { console.error(e); } finally { setLoadingJira(false); }
-            }
-        };
-        fetchJira();
-    }, [jiraConnected, user]);
-
-    useEffect(() => {
-        const fetchNotion = async () => {
-            if (notionConnected && user?.id) {
-                setLoadingNotion(true);
-                try {
-                    const res = await fetch(`${API_BASE}/api/notion/databases/${user.id}`);
-                    if (res.ok) setAvailableNotionDBs(await res.json());
-                } catch (e) { console.error(e); } finally { setLoadingNotion(false); }
-            }
-        };
-        fetchNotion();
-    }, [notionConnected, user]);
+    // Integration data (Jira projects/Notion DBs) is now managed by useProjectStore
 
     const handleSave = async () => {
         if (!user) return;
@@ -329,7 +303,7 @@ const Settings = () => {
                         "flex h-12 items-center gap-2 rounded-2xl px-10 text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 disabled:opacity-50 w-fit shadow-2xl",
                         success
                             ? "bg-green-500 text-white shadow-green-500/20"
-                            : "bg-primary text-primary-foreground shadow-primary/20"
+                            : "bg-gradient-to-tr from-orange-600 to-orange-400 text-white shadow-xl shadow-orange-600/30"
                     )}
                 >
                     {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : success ? <CheckCircle2 className="h-4 w-4" /> : <Save className="h-4 w-4" />}
@@ -461,8 +435,8 @@ const Settings = () => {
                                     icon={Search}
                                     value={project?.jira_project_id || 'none'}
                                     onChange={(val: string) => project?.id && updateJiraMapping(project.id, val === 'none' ? '' : val)}
-                                    options={[{ key: 'none', name: 'None / Not Linked' }, ...availableJiraProjects]}
-                                    loading={loadingJira}
+                                    options={[{ key: 'none', name: 'None / Not Linked' }, ...jiraProjects]}
+                                    loading={!jiraProjects.length && jiraConnected}
                                 />
                                 <button
                                     onClick={() => user?.id && disconnectJira(user.id)}
@@ -470,6 +444,7 @@ const Settings = () => {
                                 >
                                     Disconnect Node
                                 </button>
+
                             </div>
                         ) : (
                             <button
@@ -482,31 +457,29 @@ const Settings = () => {
                         )}
                     </div>
 
-                    {/* NOTION */}
-                    <div className="space-y-4 p-6 rounded-3xl border border-black/5 bg-accent/10 dark:border-white/5 relative overflow-hidden group">
-                        <div className="absolute top-3 right-[-35px] rotate-45 bg-amber-500 text-white text-[8px] font-black uppercase tracking-widest py-1 px-10 shadow-xl z-10 border border-white/20">
-                            Soon
+                    {/* NOTION - UNDER CONSTRUCTION */}
+                    <div className="space-y-4 p-6 rounded-3xl border border-black/5 bg-accent/5 dark:border-white/5 relative overflow-hidden group grayscale opacity-60 pointer-events-none">
+                        <div className="absolute inset-0 z-30 bg-background/40 backdrop-blur-[2px] flex flex-col items-center justify-center p-6 text-center">
+                            <div className="px-4 py-1.5 bg-yellow-500 text-black text-[9px] font-black uppercase tracking-[0.2em] rounded-full mb-2 shadow-xl shadow-yellow-500/20">
+                                Construction Protocol Active
+                            </div>
+                            <p className="text-[8px] text-muted-foreground font-bold uppercase tracking-widest leading-relaxed">
+                                Notion integration is being synthesized in the laboratory.
+                            </p>
                         </div>
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                                <BookOpen className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-xs font-black uppercase tracking-widest text-muted-foreground/60">
-                                    Notion board
+                                <BookOpen className="h-4 w-4 text-emerald-500" />
+                                <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                                    Notion Board
                                 </span>
                             </div>
                             <div className="h-2 w-2 rounded-full bg-muted opacity-30" />
                         </div>
-
-                        <div className="space-y-4 opacity-50 grayscale-[0.5]">
-                            <button
-                                disabled
-                                className="w-full flex h-12 items-center justify-center gap-2 rounded-2xl bg-black/10 text-foreground text-[10px] font-black uppercase tracking-widest transition-all border border-black/5 dark:border-white/5 cursor-not-allowed"
-                            >
-                                <Lock className="h-4 w-4" />
-                                Under Construction
-                            </button>
-                            <p className="text-[10px] text-center font-bold text-amber-500 uppercase tracking-widest animate-pulse">Available in next protocol update</p>
-                        </div>
+                        <button className="w-full flex h-12 items-center justify-center gap-2 rounded-2xl bg-muted/10 text-muted-foreground text-[10px] font-black uppercase tracking-widest border border-border/20">
+                            <Plug className="h-4 w-4" />
+                            Locked
+                        </button>
                     </div>
 
                 </div>
@@ -533,6 +506,7 @@ const Settings = () => {
                     </Link>
                 </div>
             </SettingSection>
+
         </div>
     );
 };
