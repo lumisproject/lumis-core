@@ -10,6 +10,7 @@ interface SettingsState {
     jiraProjectKey: string;
     notionDatabaseId: string;
     theme: 'light' | 'dark' | 'system';
+    baseUrl: string;
 
     setUseDefault: (val: boolean) => void;
     setTheme: (val: 'light' | 'dark' | 'system') => void;
@@ -18,6 +19,7 @@ interface SettingsState {
     setSelectedModel: (val: string) => void;
     setJiraProjectKey: (val: string) => void;
     setNotionDatabaseId: (val: string) => void;
+    setBaseUrl: (val: string) => void;
 
     fetchSettings: (userId: string) => Promise<void>;
 }
@@ -32,6 +34,7 @@ export const useSettingsStore = create<SettingsState>()(
             jiraProjectKey: '',
             notionDatabaseId: '',
             theme: 'light', // default to light mode
+            baseUrl: '',
 
             setUseDefault: (val) => set({ useDefault: val }),
             setTheme: (val) => set({ theme: val }),
@@ -40,6 +43,7 @@ export const useSettingsStore = create<SettingsState>()(
             setSelectedModel: (val) => set({ selectedModel: val }),
             setJiraProjectKey: (val) => set({ jiraProjectKey: val }),
             setNotionDatabaseId: (val) => set({ notionDatabaseId: val }),
+            setBaseUrl: (val) => set({ baseUrl: val }),
 
             fetchSettings: async (userId) => {
                 if (!userId) return;
@@ -67,6 +71,7 @@ export const useSettingsStore = create<SettingsState>()(
                         provider: isDirty ? current.provider : (config.provider ?? 'openai'),
                         apiKey: isDirty ? current.apiKey : (config.api_key ? '••••••••••••••••' : ''),
                         selectedModel: isDirty ? current.selectedModel : (config.model ?? ''),
+                        baseUrl: isDirty ? current.baseUrl : (config.base_url ?? ''),
                         jiraProjectKey: data.jira_project_key ?? current.jiraProjectKey,
                         notionDatabaseId: data.notion_database_id ?? current.notionDatabaseId,
                     });

@@ -99,10 +99,10 @@ const Board = () => {
 
   return (
     <div className="flex flex-col h-full bg-background text-foreground overflow-hidden">
-      <header className="flex items-center justify-between px-8 py-6 border-b border-border/40 backdrop-blur-md sticky top-0 z-20">
+      <header className="flex flex-col md:flex-row md:items-center justify-between px-4 md:px-8 py-4 md:py-6 border-b border-border/40 backdrop-blur-md sticky top-0 z-20 gap-4 md:gap-0">
         <div className="flex items-center gap-4">
-          <div className="flex flex-col space-y-2">
-            <h1 className="text-3xl font-black tracking-tighter uppercase leading-none">Project Board</h1>
+          <div className="flex flex-col space-y-1 md:space-y-2">
+            <h1 className="text-xl md:text-3xl font-black tracking-tighter uppercase leading-none">Project Board</h1>
             <div className="flex items-center gap-4 mt-1">
               <span className="text-xs text-muted-foreground flex items-center gap-1 font-bold uppercase tracking-widest bg-white/5 px-2 py-0.5 rounded border border-black/5 dark:border-white/5">
                 {project?.repo_name || 'Active Project'} <ChevronRight className="h-3 w-3" /> {activeTool.toUpperCase()}
@@ -138,7 +138,7 @@ const Board = () => {
         </div>
       </header>
 
-      <div className="flex items-center justify-between px-8 py-3 bg-card/30 border-b border-border/20">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 md:px-8 py-3 bg-card/30 border-b border-border/20 gap-3 sm:gap-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/50 rounded-lg border border-border/20">
             <LayoutGrid className="h-4 w-4 text-primary" />
@@ -159,7 +159,7 @@ const Board = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto px-8 py-6 scrollbar-hide">
+      <div className="flex-1 overflow-auto px-4 md:px-8 py-6 scrollbar-hide relative">
         {!isToolMapped ? (
           <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-70">
             <AlertCircle className="h-12 w-12 text-muted-foreground" />

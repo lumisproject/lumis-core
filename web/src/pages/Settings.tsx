@@ -134,7 +134,8 @@ const Settings = () => {
         provider, setProvider,
         apiKey, setApiKey,
         selectedModel, setSelectedModel,
-        theme, setTheme
+        theme, setTheme,
+        baseUrl, setBaseUrl
     } = useSettingsStore();
 
     const [saving, setSaving] = useState(false);
@@ -194,6 +195,7 @@ const Settings = () => {
                     setUseDefault(data.useDefault);
                     setProvider(data.provider);
                     setSelectedModel(data.selectedModel);
+                    setBaseUrl(data.baseUrl || "");
 
                     // If the backend says we are using defaults, force the local API key to be empty
                     if (data.useDefault) {
@@ -219,8 +221,9 @@ const Settings = () => {
             const payload = {
                 provider: provider,
                 selectedModel: selectedModel,
-                useDefault: useDefault,
-                apiKey: apiKey // If it's masked (••••), the backend handles preserving the old one
+                useDefault: useDefault, // FIX: Use the actual state, not a hardcoded false!
+                apiKey: apiKey, // If it's masked (••••), the backend handles preserving the old one
+                baseUrl: baseUrl
             };
 
             const res = await fetch(`${API_BASE}/api/settings/${user.id}`, {
@@ -246,7 +249,7 @@ const Settings = () => {
         }
     };
 
-    const providers = ["groq", "openrouter", "openai", "anthropic"];
+    const providers = ["groq", "openrouter", "openai", "anthropic", "custom"];
 
     return (
         <div className="pb-20 max-w-5xl mx-auto p-8 relative">
@@ -347,12 +350,22 @@ const Settings = () => {
                                                 : "border-black/5 bg-accent/30 text-muted-foreground hover:bg-accent/50 dark:border-white/5"
                                         )}
                                     >
-                                        {p}
+                                        {p === 'custom' ? 'Custom Provider' : p}
                                     </button>
                                 ))}
                             </div>
                         </div>
                         <InputField disabled={useDefault} label="Target Model ID" icon={Cpu} value={selectedModel} onChange={setSelectedModel} placeholder="e.g. gpt-4o" />
+                        {provider === 'custom' && (
+                            <InputField 
+                                disabled={useDefault} 
+                                label="Provider Base URL" 
+                                icon={Plug} 
+                                value={baseUrl} 
+                                onChange={setBaseUrl} 
+                                placeholder="https://api.yourprovider.com/v1" 
+                            />
+                        )}
                     </div>
                     <InputField disabled={useDefault} label="Credential Protocol (API Key)" icon={Lock} value={apiKey} onChange={setApiKey} placeholder="sk-..." type="password" hide={true} />
                 </div>

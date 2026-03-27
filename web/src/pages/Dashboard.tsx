@@ -39,7 +39,7 @@ const IntelligencePanel = ({ children, className, title, icon: Icon, description
             animate={{ opacity: 1, y: 0 }}
             whileHover={{ y: -6, scale: 1.01 }}
             className={cn(
-                "group relative p-8 rounded-[3.5rem] border bg-card/30 backdrop-blur-3xl transition-all duration-500 overflow-hidden",
+                "group relative p-6 md:p-8 rounded-[2rem] md:rounded-[3.5rem] border bg-card/30 backdrop-blur-3xl transition-all duration-500 overflow-hidden",
                 accents[accent as keyof typeof accents],
                 className
             )}
@@ -115,11 +115,11 @@ const VelocityAlert = ({ risk }: { risk: any }) => {
         <motion.div
             initial={{ opacity: 0, scale: 0.95, y: -20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="group relative overflow-hidden rounded-[3rem] bg-gradient-to-r from-rose-500/10 via-rose-500/5 to-transparent border border-rose-500/20 shadow-2xl shadow-rose-500/10 p-8"
+            className="group relative overflow-hidden rounded-[2rem] md:rounded-[3rem] bg-gradient-to-r from-rose-500/10 via-rose-500/5 to-transparent border border-rose-500/20 shadow-2xl shadow-rose-500/10 p-6 md:p-8"
         >
-            <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
-                <div className="flex items-center gap-6">
-                    <div className="relative h-16 w-16 flex items-center justify-center rounded-[2rem] bg-rose-500 text-white shadow-xl shadow-rose-500/30 overflow-hidden">
+            <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 md:gap-8">
+                <div className="flex items-center gap-4 md:gap-6">
+                    <div className="relative h-12 w-12 md:h-16 md:w-16 flex items-center justify-center rounded-[1.2rem] md:rounded-[2rem] bg-rose-500 text-white shadow-xl shadow-rose-500/30 overflow-hidden shrink-0">
                         <motion.div 
                             animate={{ rotate: 360 }}
                             transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
@@ -128,9 +128,9 @@ const VelocityAlert = ({ risk }: { risk: any }) => {
                         <Clock className="h-8 w-8 relative z-10" />
                     </div>
                     <div>
-                        <div className="flex items-center gap-3 mb-1">
-                            <h3 className="text-xl font-black uppercase tracking-tighter text-rose-500 leading-tight">Velocity Collapse Detected</h3>
-                            <span className="px-3 py-1 bg-rose-500 text-white text-[9px] font-black uppercase tracking-widest rounded-full animate-pulse shadow-lg shadow-rose-500/20">Critical Alert</span>
+                        <div className="flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-3 mb-1">
+                            <h3 className="text-lg md:text-xl font-black uppercase tracking-tighter text-rose-500 leading-tight">Velocity Collapse Detected</h3>
+                            <span className="px-3 py-1 bg-rose-500 text-white text-[8px] md:text-[9px] font-black uppercase tracking-widest rounded-full animate-pulse shadow-lg shadow-rose-500/20">Critical Alert</span>
                         </div>
                         <p className="text-sm font-bold text-foreground opacity-80 max-w-2xl leading-relaxed">
                             {risk.description}
@@ -195,7 +195,7 @@ const Dashboard = () => {
     }
 
     return (
-        <div className="relative min-h-screen pt-4 px-8 lg:px-12 space-y-10 pb-32">
+        <div className="relative min-h-screen pt-4 px-4 md:px-8 lg:px-12 space-y-6 md:space-y-10 pb-32">
             {/* Immersive Background Flourish */}
             <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
                 <div className="absolute -top-[20%] -right-[10%] w-[60%] h-[60%] bg-primary/5 blur-[150px] rounded-full animate-pulse" />
@@ -210,9 +210,9 @@ const Dashboard = () => {
                         <Zap className="h-4 w-4" />
                         Lumis AI - version 1.0
                     </div>
-                    <h1 className="text-5xl font-black tracking-tighter uppercase leading-none">LUMIS Dashboard</h1>
-                    <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                        Active Instance: <span className="text-foreground font-black uppercase tracking-widest bg-accent px-2 py-0.5 rounded-md border border-black/5 dark:border-white/5">{getRepoName()}</span>
+                    <h1 className="text-3xl md:text-5xl font-black tracking-tighter uppercase leading-none">LUMIS Dashboard</h1>
+                    <p className="text-xs md:text-sm font-medium text-muted-foreground flex flex-wrap items-center gap-2">
+                        Active Instance: <span className="text-foreground font-black uppercase tracking-widest bg-accent px-2 py-0.5 rounded-md border border-black/5 dark:border-white/5 truncate max-w-[200px] md:max-w-none">{getRepoName()}</span>
                     </p>
                 </div>
 
@@ -228,7 +228,7 @@ const Dashboard = () => {
                         onClick={() => !isLimitReached && navigate('/app/new-project')}
                         disabled={isLimitReached}
                         className={cn(
-                            "h-14 px-8 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all flex items-center gap-2 shadow-2xl",
+                            "h-12 md:h-14 w-full md:w-auto px-8 rounded-xl md:rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all flex items-center justify-center gap-2 shadow-2xl",
                             isLimitReached
                                 ? "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
                                 : "bg-primary text-primary-foreground shadow-primary/20 hover:scale-[1.02] active:scale-[0.98]"
@@ -298,13 +298,13 @@ const Dashboard = () => {
                                     href={project?.repo_url} 
                                     target="_blank" 
                                     rel="noopener noreferrer"
-                                    className="h-20 w-20 rounded-[2.2rem] bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white shadow-2xl transition-all hover:scale-110 flex-shrink-0 hover:shadow-primary/40 group/logo cursor-pointer"
+                                    className="h-16 w-16 md:h-20 md:w-20 rounded-[1.8rem] md:rounded-[2.2rem] bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white shadow-2xl transition-all hover:scale-110 flex-shrink-0 hover:shadow-primary/40 group/logo cursor-pointer"
                                 >
-                                    <Github className="h-10 w-10 transition-transform group-hover/logo:scale-110" />
+                                    <Github className="h-8 w-8 md:h-10 md:w-10 transition-transform group-hover/logo:scale-110" />
                                 </a>
                                 <div className="min-w-0 flex-1">
-                                    <div className="text-3xl font-black tracking-tighter uppercase leading-none break-all">{getRepoName()}</div>
-                                    <div className="flex items-center gap-2 text-[9px] font-bold text-muted-foreground uppercase tracking-widest opacity-60 mt-2">
+                                    <div className="text-xl md:text-3xl font-black tracking-tighter uppercase leading-none break-all">{getRepoName()}</div>
+                                    <div className="flex items-center gap-2 text-[9px] font-bold text-muted-foreground uppercase tracking-widest opacity-60 mt-1 md:mt-2">
                                         <div className="h-1 w-1 rounded-full bg-emerald-500 animate-pulse" />
                                         Linked Branch: Main
                                     </div>
@@ -390,15 +390,15 @@ const Dashboard = () => {
                                         <span className={cn("text-[9px] font-black uppercase tracking-[0.3em]", copied ? "opacity-60" : "text-primary")}>
                                             {copied ? 'Link Copied' : 'Secure Transfer Link'}
                                         </span>
-                                        <span className="text-[13px] font-black uppercase tracking-widest">
+                                        <span className="text-[11px] md:text-[13px] font-black uppercase tracking-widest truncate max-w-[200px] md:max-w-none">
                                             {copied ? 'Intelligence Payload In Clipboard' : 'Transfer Integration URI'}
                                         </span>
                                     </div>
                                     <div className={cn(
-                                        "h-12 w-12 rounded-2xl flex items-center justify-center transition-all",
+                                        "h-10 w-10 md:h-12 md:w-12 rounded-xl flex items-center justify-center transition-all flex-shrink-0",
                                         copied ? "bg-white/20" : "bg-primary/10 text-primary shadow-inner"
                                     )}>
-                                        {copied ? <Check className="h-6 w-6" /> : <Copy className="h-5 w-5" />}
+                                        {copied ? <Check className="h-5 w-5 md:h-6 md:w-6" /> : <Copy className="h-4 w-4 md:h-5 md:w-5" />}
                                     </div>
                                 </button>
 
@@ -510,21 +510,21 @@ const Dashboard = () => {
                                     <Zap className="h-6 w-6 fill-current" />
                                     Synthesis Core Active
                                 </div>
-                                <h4 className="text-6xl font-black tracking-tighter uppercase leading-[0.8] text-white">
+                                <h4 className="text-4xl md:text-6xl font-black tracking-tighter uppercase leading-[0.8] text-white">
                                     ACCESS <br /> NEURAL <br /> BRAIN
                                 </h4>
                             </div>
 
                             <div className="flex flex-col gap-4 w-full md:w-auto">
-                                <Link to="/app/chat" className="inline-flex h-20 px-16 rounded-[2.5rem] bg-white text-primary text-sm font-black uppercase tracking-[0.3em] items-center justify-center gap-6 hover:gap-8 transition-all shadow-[0_20px_40px_-15px_rgba(255,255,255,0.3)] group/chat">
+                                <Link to="/app/chat" className="inline-flex h-16 md:h-20 px-8 md:px-16 rounded-[1.5rem] md:rounded-[2.5rem] bg-white text-primary text-xs md:text-sm font-black uppercase tracking-[0.3em] items-center justify-center gap-4 md:gap-6 hover:gap-8 transition-all shadow-[0_20px_40px_-15px_rgba(255,255,255,0.3)] group/chat">
                                     SYSTEM CHAT
-                                    <ArrowRight className="h-6 w-6" />
+                                    <ArrowRight className="h-5 w-5 md:h-6 md:w-6" />
                                 </Link>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <Link to="/app/board" className="flex items-center justify-center h-16 rounded-[1.8rem] bg-white/10 text-white border border-white/20 text-[11px] font-black uppercase tracking-widest hover:bg-white/20 transition-all backdrop-blur-md">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <Link to="/app/board" className="flex items-center justify-center h-14 md:h-16 rounded-[1.2rem] md:rounded-[1.8rem] bg-white/10 text-white border border-white/20 text-[10px] md:text-[11px] font-black uppercase tracking-widest hover:bg-white/20 transition-all backdrop-blur-md">
                                         Tickets Control
                                     </Link>
-                                    <Link to="/app/architecture" className="flex items-center justify-center h-16 rounded-[1.8rem] bg-white/10 text-white border border-white/20 text-[11px] font-black uppercase tracking-widest hover:bg-white/20 transition-all backdrop-blur-md">
+                                    <Link to="/app/architecture" className="flex items-center justify-center h-14 md:h-16 rounded-[1.2rem] md:rounded-[1.8rem] bg-white/10 text-white border border-white/20 text-[10px] md:text-[11px] font-black uppercase tracking-widest hover:bg-white/20 transition-all backdrop-blur-md">
                                         Visual Graph
                                     </Link>
                                 </div>

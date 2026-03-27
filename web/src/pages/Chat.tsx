@@ -58,10 +58,23 @@ const Chat = () => {
 
     return (
         <div className="flex h-full w-full overflow-hidden bg-background relative">
+            {/* Overlay for mobile history drawer - Removed backdrop per user request */}
+            <AnimatePresence>
+                {showHistory && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setShowHistory(false)}
+                        className="fixed inset-0 z-40 lg:hidden"
+                    />
+                )}
+            </AnimatePresence>
+
             {/* Sidebar - Chat History */}
             <div className={cn(
-                "relative z-30 flex flex-col bg-card/30 backdrop-blur-xl transition-all duration-300 ease-in-out h-full",
-                showHistory ? "w-72 border-r border-black/5 dark:border-white/5 opacity-100" : "w-0 opacity-0 -translate-x-full overflow-hidden"
+                "fixed lg:relative z-50 lg:z-30 flex flex-col bg-card/30 backdrop-blur-xl transition-all duration-300 ease-in-out h-full",
+                showHistory ? "w-72 border-r border-black/5 dark:border-white/5 opacity-100" : "w-0 opacity-0 lg:-translate-x-full overflow-hidden"
             )}>
                 {/* Sidebar Header */}
                 <div className="p-4 flex items-center justify-between border-b border-black/5 dark:border-white/5">
@@ -265,16 +278,16 @@ const Chat = () => {
 
 
                 {/* Floating Top Header */}
-                <div className="relative z-10 w-full p-4 md:p-6 pointer-events-none">
-                    <div className="inline-flex items-center gap-3 rounded-2xl bg-card/60 border border-black/5 dark:border-white/5 p-2 px-3 shadow-sm backdrop-blur-xl pointer-events-auto">
+                <div className="relative z-10 w-full p-4 md:p-6 pointer-events-none mt-2 md:mt-0 hidden md:block">
+                    <div className="inline-flex items-center gap-3 rounded-2xl bg-card/60 border border-black/5 dark:border-white/5 p-2 px-3 shadow-sm backdrop-blur-xl pointer-events-auto max-w-full">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 border border-primary/20 text-primary shadow-inner">
                             <Brain className="h-4 w-4" />
                         </div>
-                        <div className="flex flex-col pr-2">
+                        <div className="flex flex-col pr-2 overflow-hidden">
                             <div className="flex items-center gap-2">
-                                <h1 className="text-[11px] font-black tracking-widest uppercase">The Brain</h1>
+                                <h1 className="text-[11px] font-black tracking-widest uppercase truncate">The Brain</h1>
                                 {isConfigComplete ? (
-                                    <div className="flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-green-500">
+                                    <div className="flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-green-500 shrink-0">
                                         <span className="relative flex h-1 w-1">
                                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75"></span>
                                             <span className="relative inline-flex rounded-full h-1 w-1 bg-green-500"></span>
@@ -282,7 +295,7 @@ const Chat = () => {
                                         Online
                                     </div>
                                 ) : (
-                                    <div className="flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-orange-500">
+                                    <div className="flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-orange-500 shrink-0">
                                         <span className="relative flex h-1 w-1">
                                             <span className="relative inline-flex rounded-full h-1 w-1 bg-orange-500"></span>
                                         </span>
@@ -293,9 +306,10 @@ const Chat = () => {
                         </div>
 
                         {(jiraConnected && !project?.jira_project_id) || (notionConnected && !project?.notion_project_id) ? (
-                            <Link to="/app/settings" className="ml-4 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[8px] font-black uppercase tracking-widest hover:bg-orange-500/20 transition-all">
+                            <Link to="/app/settings" className="ml-2 md:ml-4 flex items-center gap-2 px-2 md:px-3 py-1.5 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[7px] md:text-[8px] font-black uppercase tracking-widest hover:bg-orange-500/20 transition-all shrink-0">
                                 <AlertTriangle className="h-3 w-3" />
-                                No Project Managment tool is detected
+                                <span className="hidden sm:inline">No tool detected</span>
+                                <span className="sm:hidden">Setup</span>
                             </Link>
                         ) : null}
                     </div>
@@ -316,8 +330,8 @@ const Chat = () => {
                                     </div>
                                 </div>
 
-                                <div className="space-y-3">
-                                    <h2 className="text-3xl font-black tracking-tight">How can I assist your engineering today?</h2>
+                                <div className="space-y-3 px-6">
+                                    <h2 className="text-2xl md:text-3xl font-black tracking-tight">How can I assist your engineering today?</h2>
                                     <p className="max-w-lg mx-auto text-sm font-medium text-muted-foreground leading-relaxed">
                                         Analyze codebases, detect architectural risks, or build robust features. Lumis has full context of your intelligence layer.
                                     </p>
@@ -401,50 +415,52 @@ const Chat = () => {
                                 className="w-full resize-none bg-transparent px-4 py-3 text-[13px] focus:outline-none min-h-[48px] max-h-[160px] disabled:opacity-0"
                                 rows={1}
                             />
-                            <div className="flex items-center justify-between border-t border-black/5 px-2 pb-1.5 pt-2 dark:border-white/5">
-                                <div className="flex items-center gap-1">
-                                    <Link to="/app/settings" className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-transparent hover:border-black/5 dark:hover:border-white/5 hover:bg-black/5 dark:hover:bg-white/5 text-[10px] font-bold uppercase tracking-[0.05em] text-muted-foreground hover:text-foreground transition-all cursor-pointer">
+                             <div className="flex flex-wrap items-center gap-1 justify-between w-full border-t border-black/5 px-2 pb-1.5 pt-2 dark:border-white/5">
+                                <div className="flex flex-wrap items-center gap-1">
+                                    <Link to="/app/settings" className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-transparent hover:border-black/5 dark:hover:border-white/5 hover:bg-black/5 dark:hover:bg-white/5 text-[9px] md:text-[10px] font-bold uppercase tracking-[0.05em] text-muted-foreground hover:text-foreground transition-all cursor-pointer">
                                         <Sparkles className={cn("h-3 w-3", !isConfigComplete ? "text-orange-500" : "text-primary")} />
-                                        <span className={cn("font-bold", !isConfigComplete && "text-orange-500 italic")}>
+                                        <span className={cn("font-bold truncate max-w-[100px] md:max-w-none", !isConfigComplete && "text-orange-500 italic")}>
                                             {!isConfigComplete
-                                                ? "Setup LLM (API Key / Provider)"
-                                                : (useDefault ? 'Lumis (Default)' : (selectedModel || 'Active Engine'))
+                                                ? "Setup Engine"
+                                                : (useDefault ? 'Lumis' : (selectedModel || 'Active Engine'))
                                             }
                                         </span>
                                     </Link>
-                                    <div className="h-4 w-px bg-black/5 dark:bg-white/5 mx-2" />
+                                    <div className="h-4 w-px bg-black/5 dark:bg-white/5 mx-1 md:mx-2" />
                                     <button
                                         onClick={() => tier !== 'free' && setChatMode(chatMode === 'multi-turn' ? 'single-turn' : 'multi-turn')}
                                         disabled={!isConfigComplete || tier === 'free'}
                                         className={cn(
-                                            "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-colors",
+                                            "flex items-center gap-1 rounded-lg px-2 md:px-3 py-1.5 text-[9px] md:text-[10px] font-bold uppercase tracking-widest transition-colors",
                                             chatMode === 'single-turn' ? "bg-primary/10 text-primary border border-primary/20" : "text-muted-foreground hover:bg-accent border border-transparent",
-                                            !isConfigComplete && "opacity-0",
+                                            !isConfigComplete && "hidden",
                                             tier === 'free' && "cursor-not-allowed opacity-50"
                                         )}
                                     >
-                                        <Command className="h-3 w-3" />
-                                        {chatMode === 'single-turn' ? "Memory: ON" : "Memory: OFF"}
+                                        <Command className="h-2.5 w-2.5 md:h-3 md:w-3" />
+                                        <span className="hidden sm:inline">{chatMode === 'single-turn' ? "Memory: ON" : "Memory: OFF"}</span>
+                                        <span className="sm:hidden">Mem</span>
                                         {tier === 'free' && <Lock className="ml-1 h-2 w-2" />}
                                     </button>
                                     <button
                                         onClick={() => tier !== 'free' && setReasoningEnabled(!reasoningEnabled)}
                                         disabled={!isConfigComplete || tier === 'free'}
                                         className={cn(
-                                            "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-colors ml-1",
+                                            "flex items-center gap-1 rounded-lg px-2 md:px-3 py-1.5 text-[9px] md:text-[10px] font-bold uppercase tracking-widest transition-colors",
                                             reasoningEnabled ? "bg-primary/10 text-primary border border-primary/20" : "text-muted-foreground hover:bg-accent border border-transparent",
-                                            !isConfigComplete && "opacity-0",
+                                            !isConfigComplete && "hidden",
                                             tier === 'free' && "cursor-not-allowed opacity-50"
                                         )}
                                     >
-                                        <Zap className={cn("h-3 w-3", reasoningEnabled && "fill-current")} />
-                                        Reasoning
+                                        <Zap className={cn("h-2.5 w-2.5 md:h-3 md:w-3", reasoningEnabled && "fill-current")} />
+                                        <span className="hidden sm:inline">Reasoning</span>
+                                        <span className="sm:hidden">Reason</span>
                                         {tier === 'free' && <Lock className="ml-1 h-2 w-2" />}
                                     </button>
-                                    {tier === 'free' && (
-                                        <Link to="/app/billing" className="group/upgrade relative ml-2">
-                                            <div className="flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-primary hover:bg-primary/20 transition-all border border-primary/20 shadow-sm shadow-primary/10">
-                                                <Zap className="h-2.5 w-2.5 animate-pulse" />
+                                    {tier === 'free' && !isConfigComplete && (
+                                        <Link to="/app/billing" className="group/upgrade relative ml-1">
+                                            <div className="flex items-center gap-1 rounded-lg bg-primary/10 px-2 md:px-3 py-1.5 text-[8px] md:text-[9px] font-black uppercase tracking-widest text-primary hover:bg-primary/20 transition-all border border-primary/20 shadow-sm shadow-primary/10">
+                                                <Zap className="h-2 w-2 animate-pulse" />
                                                 Upgrade
                                             </div>
                                         </Link>
