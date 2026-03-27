@@ -183,3 +183,62 @@ def create_task(database_id: str, summary: str, description: str, access_token: 
     except Exception as e:
         logger.error(f"❌ Failed to create Notion task: {e}")
         return None
+
+def get_database_schema(database_id: str, access_token: str):
+    """Fetches the actual column names and types configured by the user."""
+    url = f"https://api.notion.com/v1/databases/{database_id}"
+    response = notion_session.get(url, headers=notion_headers(access_token))
+    response.raise_for_status()
+    properties = response.json().get("properties", {})
+    
+    schema = {"title_prop": None, "status_prop": None, "assignee_prop": None, "status_options": []}
+    
+    for prop_name, prop_data in properties.items():
+        if prop_data["type"] == "title":
+            schema["title_prop"] = prop_name
+        elif prop_data["type"] in ["status", "select"]:
+            # Prioritize 'status' type, fallback to 'select' if they use dropdowns
+            if not schema["status_prop"] or prop_data["type"] == "status":
+                schema["status_prop"] = prop_name
+                options_key = "status" if prop_data["type"] == "status" else "select"
+                schema["status_options"] = prop_data[options_key].get("options", [])
+        elif prop_data["type"] == "people":
+            schema["assignee_prop"] = prop_name
+            
+    return schema
+
+def get_notion_board_data(database_id: str, access_token: str):
+    """Maps a Notion Database into Lumis Kanban Columns and Tickets."""
+    schema = get_database_schema(database_id, access_token)
+    
+    # 1. Create columns from the status/select options
+    columns = []
+    for opt in schema.get("status_options", []):
+        columns.append({
+            "id": opt["name"],  # Notion uses names as IDs for statuses generally
+            "title": opt["name"],
+            "color": opt.get("color", "default")
+        })
+
+    # 2. Fetch active tasks
+    raw_tasks = get_active_tasks(database_id, access_token)
+    tickets = []
+    
+    for task in raw_tasks:
+        props = task["raw_properties"]
+        
+        # Extract dynamic status
+        status_val = "Unknown"
+        if schema["status_prop"] and schema["status_prop"] in props:
+            status_obj = props[schema["status_prop"]].get(props[schema["status_prop"]]["type"])
+            if status_obj:
+                status_val = status_obj.get("name", "Unknown")
+
+        tickets.append({
+            "id": task["id"],
+            "title": task["summary"],
+            "status": status_val,
+            "url": task["url"]
+        })
+        
+    return {"columns": columns, "tickets": tickets}

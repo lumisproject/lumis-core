@@ -668,17 +668,20 @@ async def get_project_board(project_id: str, tool: str = "jira", current_user = 
     """Fetches the synchronized Kanban board data."""
     from src.jira_client import get_project_statuses, get_board_issues
     from src.jira_auth import get_valid_token
+    # Import Notion auth and client functions
+    from src.notion_auth import get_valid_notion_token
+    from src.notion_client import get_notion_board_data
     
     try:
-        # 1. Get project info
-        res = supabase.table("projects").select("user_id, jira_project_id").eq("id", project_id).limit(1).execute()
+        # 1. Get project info (ADDED notion_project_id to the select statement)
+        res = supabase.table("projects").select("user_id, jira_project_id, notion_project_id").eq("id", project_id).limit(1).execute()
         if not res.data: raise HTTPException(status_code=404, detail="Project not found")
         
         project = res.data[0]
         if str(project["user_id"]) != str(current_user.id):
             raise HTTPException(status_code=403, detail="Forbidden")
         
-        # Currently, we only support Jira as requested
+        # --- JIRA INTEGRATION ---
         if tool == "jira" and project.get("jira_project_id"):
             access_token = get_valid_token(project["user_id"])
             if not access_token:
@@ -694,11 +697,20 @@ async def get_project_board(project_id: str, tool: str = "jira", current_user = 
             
             return {"columns": columns, "tickets": tickets}
             
+        # --- NOTION INTEGRATION ---
+        elif tool == "notion" and project.get("notion_project_id"):
+            access_token = get_valid_notion_token(project["user_id"])
+            if not access_token:
+                raise HTTPException(status_code=401, detail="Notion authentication expired or missing.")
+                
+            # Fetch Dynamic Columns & Tickets using your new function
+            board_data = get_notion_board_data(project["notion_project_id"], access_token)
+            return board_data
+            
         return {"columns": [], "tickets": []}
     except Exception as e:
         logger.error(f"Board fetch error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.patch("/api/projects/{project_id}/board/tickets/{ticket_id}")
 async def update_ticket_status(project_id: str, ticket_id: str, payload: dict, tool: str = "jira", current_user = Depends(get_current_user)):
