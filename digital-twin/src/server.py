@@ -1203,6 +1203,11 @@ async def get_architecture_graph(project_id: str):
         logging.getLogger("LumisAPI").error(f"Failed to generate architecture graph: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate graph data")
 
+@app.get("/api/projects/{project_id}/is-empty")
+async def check_db_empty(project_id: str):
+    res = supabase.table("memory_units").select("id", count="exact").eq("project_id", project_id).execute()
+    return {"empty": (res.count == 0)}
+
 @app.get("/api/status")
 async def health_check():
     return {"status": "ok", "service": "Lumis Project Stateless"}

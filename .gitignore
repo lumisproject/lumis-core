@@ -5,3 +5,4 @@ digital-twin/src/__pycache__/
 digital-twin/src/tempCodeRunnerFile.py
 .claude/*
 CLAUDE.md
+web/.env

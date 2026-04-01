@@ -51,6 +51,7 @@ interface ProjectState {
     projectStats: ProjectStats | null;
     isUpToDate: boolean;
     remoteSha: string | null;
+    isEmpty: boolean;
     loading: boolean;
     error: string | null;
     jiraProjects: { key: string, name: string }[];
@@ -63,6 +64,7 @@ interface ProjectState {
     fetchNotionStatus: (userId: string) => Promise<void>;
     fetchRisks: (projectId: string) => Promise<void>;
     fetchProjectStats: (projectId: string) => Promise<void>;
+    checkIsEmpty: (projectId: string) => Promise<void>;
     startIngestion: (userId: string, repoUrl: string) => Promise<string | null>;
     pollIngestionStatus: (projectId: string) => Promise<IngestionStatus | null>;
     disconnectJira: (userId: string) => Promise<void>;
@@ -85,6 +87,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     projectStats: null as ProjectStats | null,
     isUpToDate: true,
     remoteSha: null,
+    isEmpty: false,
     loading: false,
     error: null,
     jiraProjects: [],
@@ -113,7 +116,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             await Promise.all([
                 get().fetchRisks(active.id),
                 get().fetchProjectStats(active.id),
-                get().checkProjectSync(active.id)
+                get().checkProjectSync(active.id),
+                get().checkIsEmpty(active.id)
             ]);
         }
 
@@ -129,6 +133,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             fetchRisks(next.id);
             fetchProjectStats(next.id);
             get().checkProjectSync(next.id);
+            get().checkIsEmpty(next.id);
         }
 
         set({ project: next });
@@ -224,6 +229,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             }
         } catch {
             set({ projectStats: null });
+        }
+    },
+
+    checkIsEmpty: async (projectId: string) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/projects/${projectId}/is-empty`);
+            if (!res.ok) throw new Error("Check empty failed");
+            const data = await res.json();
+            set({ isEmpty: data.empty });
+        } catch (e) {
+            console.error("Failed to check if project is empty:", e);
         }
     },
 
