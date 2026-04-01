@@ -126,7 +126,8 @@ const Settings = () => {
     const { user } = useUserStore();
     const {
         project, jiraConnected, fetchJiraStatus, fetchNotionStatus, disconnectJira,
-        updateJiraMapping, jiraProjects
+        updateJiraMapping, jiraProjects,
+        notionConnected, notionProjects, disconnectNotion, updateNotionMapping // <-- ADDED NOTION METHODS
     } = useProjectStore();
     const {
         useDefault, setUseDefault,
@@ -176,10 +177,6 @@ const Settings = () => {
         }
     }, [user?.id, project?.id, fetchJiraStatus, fetchNotionStatus]);
 
-
-
-    const [hasLoaded, setHasLoaded] = useState(false);
-
     // NEW: Fetch User Settings on mount
     useEffect(() => {
         const loadSettings = async () => {
@@ -221,8 +218,6 @@ const Settings = () => {
         };
         loadSettings();
     }, [user?.id, hasLoaded]);
-
-    // Integration data (Jira projects/Notion DBs) is now managed by useProjectStore
 
     const handleSave = async () => {
         if (!user) return;
@@ -433,7 +428,7 @@ const Settings = () => {
                 description="Synchronize project-specific backlogs and documentation. Mappings are unique to each neural instance."
             >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* JIRA */}
+                    {/* JIRA INTEGRATION */}
                     <div className="space-y-4 p-6 rounded-3xl border border-black/5 bg-accent/10 dark:border-white/5 relative">
                         {!project && (
                             <div className="absolute inset-0 z-20 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center rounded-3xl">
@@ -468,7 +463,6 @@ const Settings = () => {
                                 >
                                     Disconnect Node
                                 </button>
-
                             </div>
                         ) : (
                             <button
@@ -481,31 +475,52 @@ const Settings = () => {
                         )}
                     </div>
 
-                    {/* NOTION - UNDER CONSTRUCTION */}
-                    <div className="space-y-4 p-6 rounded-3xl border border-black/5 bg-accent/5 dark:border-white/5 relative overflow-hidden group grayscale opacity-60 pointer-events-none">
-                        <div className="absolute inset-0 z-30 bg-background/40 backdrop-blur-[2px] flex flex-col items-center justify-center p-6 text-center">
-                            <div className="px-4 py-1.5 bg-yellow-500 text-black text-[9px] font-black uppercase tracking-[0.2em] rounded-full mb-2 shadow-xl shadow-yellow-500/20">
-                                Construction Protocol Active
+                    {/* FULLY FUNCTIONAL NOTION INTEGRATION */}
+                    <div className="space-y-4 p-6 rounded-3xl border border-black/5 bg-accent/10 dark:border-white/5 relative">
+                        {!project && (
+                            <div className="absolute inset-0 z-20 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center rounded-3xl">
+                                <AlertTriangle className="h-6 w-6 text-orange-500 mb-2" />
+                                <div className="text-[10px] font-black uppercase tracking-widest">No Active Instance</div>
+                                <p className="text-[9px] text-muted-foreground mt-1">Select a project in the Command Center to map integrations.</p>
                             </div>
-                            <p className="text-[8px] text-muted-foreground font-bold uppercase tracking-widest leading-relaxed">
-                                Notion integration is being synthesized in the laboratory.
-                            </p>
-                        </div>
+                        )}
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <BookOpen className="h-4 w-4 text-emerald-500" />
                                 <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                                    Notion Board
+                                    Notion Board {project?.notion_project_id && <CheckCircle2 className="inline h-3 w-3 ml-1 text-primary" />}
                                 </span>
                             </div>
-                            <div className="h-2 w-2 rounded-full bg-muted opacity-30" />
+                            <div className={cn("h-2 w-2 rounded-full", notionConnected ? "bg-primary animate-pulse shadow-[0_0_10px_rgba(var(--primary),0.5)]" : "bg-muted")} />
                         </div>
-                        <button className="w-full flex h-12 items-center justify-center gap-2 rounded-2xl bg-muted/10 text-muted-foreground text-[10px] font-black uppercase tracking-widest border border-border/20">
-                            <Plug className="h-4 w-4" />
-                            Locked
-                        </button>
-                    </div>
 
+                        {notionConnected ? (
+                            <div className="space-y-4">
+                                <ModernSelect
+                                    label="Target Database"
+                                    icon={Search}
+                                    value={project?.notion_project_id || 'none'}
+                                    onChange={(val: string) => project?.id && updateNotionMapping(project.id, val === 'none' ? '' : val)}
+                                    options={[{ id: 'none', name: 'None / Not Linked' }, ...(notionProjects || [])]}
+                                    loading={!(notionProjects?.length) && notionConnected}
+                                />
+                                <button
+                                    onClick={() => user?.id && disconnectNotion(user.id)}
+                                    className="text-[10px] font-bold uppercase tracking-widest text-destructive hover:underline"
+                                >
+                                    Disconnect Node
+                                </button>
+                            </div>
+                        ) : (
+                            <button
+                                onClick={() => window.location.href = `${API_BASE}/auth/notion/connect?state=${user?.id}`}
+                                className="w-full flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-500/10 text-emerald-500 text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500/20 transition-all border border-emerald-500/20"
+                            >
+                                <Plug className="h-4 w-4" />
+                                Link Notion Node
+                            </button>
+                        )}
+                    </div>
                 </div>
             </SettingSection>
 
