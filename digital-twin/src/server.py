@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 import logging
 import redis
 from typing import Dict, Optional
@@ -20,7 +21,17 @@ from src.billing_middleware import verify_chat_limit, get_user_tier_and_usage
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("LumisAPI")
 
-app = FastAPI(title="Lumis Brain API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Preload heavy modules
+    from src.services import lc_embedder
+    logger.info("✨ Neural Gateway: Preloading embedding model...")
+    # Warmup
+    lc_embedder.embed_query("warmup")
+    logger.info("✨ Neural Gateway: Model ready.")
+    yield
+
+app = FastAPI(title="Lumis Brain API", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
