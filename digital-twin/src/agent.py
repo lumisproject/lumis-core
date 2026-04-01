@@ -12,7 +12,7 @@ from src.query_processor import QueryProcessor
 from src.db_client import supabase
 
 class LumisAgent:
-    def __init__(self, project_id: str, max_steps: int = 5, user_config: Dict = None, mode: str = "single-turn", session_id: str = None):
+    def __init__(self, project_id: str, max_steps: int = 3, user_config: Dict = None, mode: str = "single-turn", session_id: str = None):
         self.project_id = project_id
         self.session_id = session_id
         self.user_config = user_config or {}

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from src.db_client import supabase, get_current_user
 from src.config import Config
 from src.billing_middleware import get_user_tier_and_usage
+from src.limiter import limiter
 
 logger = logging.getLogger("LumisAPI")
 
@@ -54,7 +55,8 @@ async def get_billing_usage(tier_data: dict = Depends(get_user_tier_and_usage)):
     return {**tier_data, "limits": sanitized_limits}
 
 @stripe_router.post("/create-checkout-session")
-async def create_checkout_session(payload: dict, current_user=Depends(get_current_user)):
+@limiter.limit("3/minute")
+async def create_checkout_session(payload: dict, request: Request, current_user=Depends(get_current_user)):
     tier = payload.get("tier")
     interval = payload.get("interval", "monthly")
     
@@ -88,7 +90,8 @@ async def create_checkout_session(payload: dict, current_user=Depends(get_curren
         raise HTTPException(status_code=500, detail=str(e))
 
 @stripe_router.post("/create-portal-session")
-async def create_portal_session(current_user=Depends(get_current_user)):
+@limiter.limit("3/minute")
+async def create_portal_session(request: Request, current_user=Depends(get_current_user)):
     try:
         db_sub = supabase.table("user_subscriptions").select("stripe_customer_id").eq("user_id", str(current_user.id)).single().execute()
         customer_id = db_sub.data.get("stripe_customer_id") if db_sub and db_sub.data else None

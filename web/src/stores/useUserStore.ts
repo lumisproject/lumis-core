@@ -69,10 +69,6 @@ export const useUserStore = create<UserState>((set, get) => ({
         set({ loading: true });
         const { data: { session } } = await supabase.auth.getSession();
         set({ user: session?.user ?? null, session, loading: false });
-
-        if (session?.user) {
-            await useSettingsStore.getState().fetchSettings(session.user.id);
-        }
     },
 
     signInWithGoogle: async () => {
@@ -90,11 +86,8 @@ export const useUserStore = create<UserState>((set, get) => ({
     },
 
     setupAuthListener: () => {
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
             set({ user: session?.user ?? null, session });
-            if (session?.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
-                useSettingsStore.getState().fetchSettings(session.user.id);
-            }
         });
 
         return {

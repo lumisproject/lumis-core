@@ -49,3 +49,6 @@ class Config:
     STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
     STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
     FRONTEND_URL = os.getenv("FRONTEND_URL", frontend_url)
+
+    # Redis settings
+    REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
