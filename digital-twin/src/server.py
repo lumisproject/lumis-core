@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 import logging
 import redis
 from typing import Dict, Optional
@@ -20,7 +21,17 @@ from src.billing_middleware import verify_chat_limit, get_user_tier_and_usage
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("LumisAPI")
 
-app = FastAPI(title="Lumis Brain API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Preload heavy modules
+    from src.services import lc_embedder
+    logger.info("✨ Neural Gateway: Preloading embedding model...")
+    # Warmup
+    lc_embedder.embed_query("warmup")
+    logger.info("✨ Neural Gateway: Model ready.")
+    yield
+
+app = FastAPI(title="Lumis Brain API", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -727,17 +738,20 @@ async def get_project_board(project_id: str, tool: str = "jira", current_user = 
     """Fetches the synchronized Kanban board data."""
     from src.jira_client import get_project_statuses, get_board_issues
     from src.jira_auth import get_valid_token
+    # Import Notion auth and client functions
+    from src.notion_auth import get_valid_notion_token
+    from src.notion_client import get_notion_board_data
     
     try:
-        # 1. Get project info
-        res = supabase.table("projects").select("user_id, jira_project_id").eq("id", project_id).limit(1).execute()
+        # 1. Get project info (ADDED notion_project_id to the select statement)
+        res = supabase.table("projects").select("user_id, jira_project_id, notion_project_id").eq("id", project_id).limit(1).execute()
         if not res.data: raise HTTPException(status_code=404, detail="Project not found")
         
         project = res.data[0]
         if str(project["user_id"]) != str(current_user.id):
             raise HTTPException(status_code=403, detail="Forbidden")
         
-        # Currently, we only support Jira as requested
+        # --- JIRA INTEGRATION ---
         if tool == "jira" and project.get("jira_project_id"):
             access_token = get_valid_token(project["user_id"])
             if not access_token:
@@ -753,11 +767,20 @@ async def get_project_board(project_id: str, tool: str = "jira", current_user = 
             
             return {"columns": columns, "tickets": tickets}
             
+        # --- NOTION INTEGRATION ---
+        elif tool == "notion" and project.get("notion_project_id"):
+            access_token = get_valid_notion_token(project["user_id"])
+            if not access_token:
+                raise HTTPException(status_code=401, detail="Notion authentication expired or missing.")
+                
+            # Fetch Dynamic Columns & Tickets using your new function
+            board_data = get_notion_board_data(project["notion_project_id"], access_token)
+            return board_data
+            
         return {"columns": [], "tickets": []}
     except Exception as e:
         logger.error(f"Board fetch error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.patch("/api/projects/{project_id}/board/tickets/{ticket_id}")
 async def update_ticket_status(project_id: str, ticket_id: str, payload: dict, tool: str = "jira", current_user = Depends(get_current_user)):
@@ -1179,6 +1202,11 @@ async def get_architecture_graph(project_id: str):
         import logging
         logging.getLogger("LumisAPI").error(f"Failed to generate architecture graph: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate graph data")
+
+@app.get("/api/projects/{project_id}/is-empty")
+async def check_db_empty(project_id: str):
+    res = supabase.table("memory_units").select("id", count="exact").eq("project_id", project_id).execute()
+    return {"empty": (res.count == 0)}
 
 @app.get("/api/status")
 async def health_check():

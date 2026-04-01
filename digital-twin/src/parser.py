@@ -13,7 +13,8 @@ IGNORE_EXT = (
 
 SKIP_DIRS = {
     '.git', '.github', 'node_modules', 'venv', '.venv', 'env', '__pycache__', 
-    'dist', 'build', '.idea', '.vscode', 'coverage', 'tmp', 'temp', 'vendor'
+    'dist', 'build', '.idea', '.vscode', 'coverage', 'tmp', 'temp', 'vendor',
+    'package'
 }
 
 @dataclass

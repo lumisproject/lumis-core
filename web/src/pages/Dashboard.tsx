@@ -145,9 +145,44 @@ const VelocityAlert = ({ risk }: { risk: any }) => {
     );
 };
 
+const EmptyProjectAlert = () => {
+    return (
+        <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: -20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="group relative overflow-hidden rounded-[2rem] md:rounded-[3rem] bg-gradient-to-r from-rose-500/10 via-rose-500/5 to-transparent border border-rose-500/20 shadow-2xl shadow-rose-500/10 p-6 md:p-8"
+        >
+            <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 md:gap-8">
+                <div className="flex items-center gap-4 md:gap-6">
+                    <div className="relative h-12 w-12 md:h-16 md:w-16 flex items-center justify-center rounded-[1.2rem] md:rounded-[2rem] bg-rose-500 text-white shadow-xl shadow-rose-500/30 overflow-hidden shrink-0">
+                        <motion.div 
+                            animate={{ rotate: 360 }}
+                            transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
+                            className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/30 to-white/0" 
+                        />
+                        <ShieldAlert className="h-8 w-8 relative z-10" />
+                    </div>
+                    <div>
+                        <div className="flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-3 mb-1">
+                            <h3 className="text-lg md:text-xl font-black uppercase tracking-tighter text-rose-500 leading-tight">Project Too Large</h3>
+                            <span className="px-3 py-1 bg-rose-500 text-white text-[8px] md:text-[9px] font-black uppercase tracking-widest rounded-full animate-pulse shadow-lg shadow-rose-500/20">Indexing Skip</span>
+                        </div>
+                        <p className="text-sm font-bold text-foreground opacity-80 max-w-2xl leading-relaxed">
+                            This project is incredibly huge and was not indexed.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            {/* Background animated pulse */}
+            <div className="absolute -right-20 -top-20 h-64 w-64 bg-rose-500/10 blur-[80px] rounded-full animate-pulse" />
+        </motion.div>
+    );
+};
+
 const Dashboard = () => {
     const { user } = useUserStore();
-    const { project, risks, loading: projectLoading, jiraConnected, projects, syncProject, jiraProjects } = useProjectStore();
+    const { project, risks, loading: projectLoading, jiraConnected, projects, syncProject, jiraProjects, isEmpty } = useProjectStore();
     const [syncing, setSyncing] = useState(false);
     const { tier } = useBillingStore();
     const navigate = useNavigate();
@@ -252,6 +287,10 @@ const Dashboard = () => {
 
             {velocityRisk && project && (
                 <VelocityAlert risk={velocityRisk} />
+            )}
+
+            {isEmpty && project && (
+                <EmptyProjectAlert />
             )}
 
             {!useProjectStore.getState().isUpToDate && project && (

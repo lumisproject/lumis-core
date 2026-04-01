@@ -139,8 +139,22 @@ class LumisAgent:
              insights.append(f"Implementation Hint:\n{processed_query.pseudocode_hints}")
              
         insight_text = "\n\n".join(insights)
-        return f"{history_text}{query_context}\n\n{insight_text}\n\nPROGRESS:\n{progress}\n\nNEXT JSON (Respond strictly with the requested JSON schema and NO native tool calls):"
-    
+        return f"""
+        {history_text}
+        {query_context}
+
+        {insight_text}
+
+        PROGRESS:
+        {progress}
+
+        ---
+        RE-STATED SYSTEM RULES:
+        1. Only use the provided tools.
+        2. Respond ONLY with a valid JSON object.
+        3. Do NOT include markdown formatting or extra text.
+        ---
+        NEXT JSON:"""    
     def _parse_response(self, text: str, fallback_query: str = "") -> Dict[str, Any]:
         if not text: 
             return self._create_fallback(fallback_query, "Empty response from LLM")
