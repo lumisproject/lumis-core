@@ -33,7 +33,6 @@ export const useUserStore = create<UserState>((set, get) => ({
             return false;
         }
         set({ user: data.user, session: data.session, loading: false });
-
         try { useChatStore.getState().clearMessages(); } catch { }
         return true;
     },
@@ -46,7 +45,6 @@ export const useUserStore = create<UserState>((set, get) => ({
             return false;
         }
         set({ user: data.user, session: data.session, loading: false });
-
         try { useChatStore.getState().clearMessages(); } catch { }
         return true;
     },
@@ -75,12 +73,17 @@ export const useUserStore = create<UserState>((set, get) => ({
         }
     },
 
+    // --- UPDATED GOOGLE SIGN IN ---
     signInWithGoogle: async () => {
         set({ loading: true, error: null });
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: `${window.location.origin}/app`
+                redirectTo: `${window.location.origin}/app`,
+                queryParams: {
+                    access_type: 'offline',
+                    prompt: 'consent',
+                }
             }
         });
         
@@ -89,11 +92,19 @@ export const useUserStore = create<UserState>((set, get) => ({
         }
     },
 
+    // --- UPDATED AUTH LISTENER ---
     setupAuthListener: () => {
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            set({ user: session?.user ?? null, session });
-            if (session?.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
-                useSettingsStore.getState().fetchSettings(session.user.id);
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            const user = session?.user ?? null;
+            set({ user, session });
+
+            if (user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+                // The database trigger has already created the settings row.
+                // Fetch the settings so the UI is immediately ready.
+                await useSettingsStore.getState().fetchSettings(user.id);
+                
+                // Optional: You can access user.user_metadata.full_name or 
+                // user.user_metadata.avatar_url here to display in the UI later.
             }
         });
 
