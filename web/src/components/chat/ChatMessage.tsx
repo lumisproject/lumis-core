@@ -3,7 +3,6 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
-import rehypeRaw from 'rehype-raw';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Brain, ChevronDown, ChevronUp, Code2, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -182,7 +181,6 @@ const ChatMessage = ({ role, content, isThinking, thoughts }: ChatMessageProps) 
                                 <div className="relative z-10 flex flex-wrap items-end">
                                     <ReactMarkdown
                                         remarkPlugins={[remarkGfm]}
-                                        rehypePlugins={[rehypeRaw]}
                                         components={{
                                         code({ node, inline, className, children, ...props }: any) {
                                             const match = /language-(\w+)/.exec(className || '');

@@ -5,6 +5,9 @@ from typing import Dict, Optional
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from src.limiter import limiter
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from src.db_client import supabase, get_current_user
 from src.config import Config
@@ -18,6 +21,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("LumisAPI")
 
 app = FastAPI(title="Lumis Brain API")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Allow Frontend access
 app.add_middleware(
@@ -130,14 +135,60 @@ def update_progress(project_id, task, message):
 # --- ENDPOINTS ---
 
 @app.post("/api/webhook/{user_id}/{project_id}")
+@limiter.limit("10/minute")
 async def github_webhook(user_id: str, project_id: str, request: Request, background_tasks: BackgroundTasks):
     from src.worker import run_ingestion_pipeline_task
     from src.tasks_checking import check_taskes
     from src.db_client import get_global_user_config
     from src.agent import LumisAgent
+    import hmac
+    import hashlib
+    import json
 
     try:
-        payload = await request.json()
+        raw_body = await request.body()
+        
+        proj_row = (
+            supabase.table("projects")
+            .select("user_id, jira_project_id, notion_project_id, webhook_secret")
+            .eq("id", project_id)
+            .limit(1)
+            .execute()
+        )
+        
+        if not proj_row or not proj_row.data:
+            logger.warning(f"Webhook received for unknown project: {project_id}")
+            raise HTTPException(status_code=404, detail="Project not found")
+            
+        proj_data = proj_row.data[0] if isinstance(proj_row.data, list) else proj_row.data
+        
+        # Security: Ensure URL user_id matches project owner
+        if str(proj_data.get("user_id")) != user_id:
+            logger.warning(f"Webhook user mismatch: expected {proj_data.get('user_id')}, got {user_id}")
+            raise HTTPException(status_code=403, detail="Forbidden: User ID mismatch")
+
+        project_secret = proj_data.get("webhook_secret")
+
+        # 3. VERIFY SIGNATURE (if secret is configured)
+        if project_secret:
+            x_hub_signature = request.headers.get("x-hub-signature-256")
+            if not x_hub_signature:
+                logger.warning(f"Missing signature for project {project_id}")
+                raise HTTPException(status_code=401, detail="Missing X-Hub-Signature-256 header")
+            
+            mac = hmac.new(project_secret.encode('utf-8'), msg=raw_body, digestmod=hashlib.sha256)
+            expected_signature = "sha256=" + mac.hexdigest()
+            
+            if not hmac.compare_digest(expected_signature, x_hub_signature):
+                logger.warning(f"Webhook signature mismatch for project {project_id}")
+                raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
+        # 4. Parse JSON after verification
+        try:
+            payload = json.loads(raw_body)
+        except json.JSONDecodeError:
+            logger.error("Failed to parse GitHub webhook payload as JSON")
+            raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
         if "zen" in payload:
             logger.info("GitHub Zen ping received. Connection verified.")
@@ -149,24 +200,12 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
             logger.info(f"Webhook Ignored: {reason}")
             return {"status": "ignored", "reason": reason}
 
+        # 5. Extract logic configs
         global_config = get_global_user_config(user_id)
         global_config["user_id"] = user_id
-
-        proj_row = (
-            supabase.table("projects")
-            .select("jira_project_id, notion_project_id")
-            .eq("id", project_id)
-            .limit(1)
-            .execute()
-        )
         
-        jira_proj = None
-        notion_proj = None
-
-        if proj_row and proj_row.data:
-            proj_data = proj_row.data[0] if isinstance(proj_row.data, list) else proj_row.data
-            jira_proj = proj_data.get("jira_project_id")
-            notion_proj = proj_data.get("notion_project_id")
+        jira_proj = proj_data.get("jira_project_id")
+        notion_proj = proj_data.get("notion_project_id")
 
         new_sha = payload.get("after")
         repo_url = payload.get("repository", {}).get("clone_url")
@@ -222,7 +261,8 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
         return {"status": "error", "message": str(e)}
 
 @app.post("/api/chat")
-async def chat_endpoint(req: ChatRequest, tier_data: dict = Depends(verify_chat_limit)):
+@limiter.limit("10/minute")
+async def chat_endpoint(req: ChatRequest, request: Request, tier_data: dict = Depends(verify_chat_limit)):
     from src.billing_middleware import increment_query_usage
     from src.db_client import get_global_user_config
     from src.agent import LumisAgent
@@ -289,20 +329,21 @@ async def chat_endpoint(req: ChatRequest, tier_data: dict = Depends(verify_chat_
         raise HTTPException(status_code=500, detail=str(e))
     
 @app.post("/api/ingest")
-async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, tier_data: dict = Depends(get_user_tier_and_usage)):
+@limiter.limit("3/minute")
+async def start_ingest(req: IngestRequest, request: Request, background_tasks: BackgroundTasks, tier_data: dict = Depends(get_user_tier_and_usage)):
     from src.worker import run_ingestion_pipeline_task
     from src.tasks_checking import check_taskes
     from src.db_client import get_global_user_config
     from src.agent import LumisAgent
     import json
+    import secrets
 
     try:
         if str(req.user_id) != str(tier_data["user_id"]):
             raise HTTPException(status_code=403, detail="Forbidden: User ID mismatch")
-
         existing = (
             supabase.table("projects")
-            .select("id, last_commit, jira_project_id, notion_project_id") 
+            .select("id, last_commit, jira_project_id, notion_project_id, webhook_secret") 
             .eq("repo_url", req.repo_url)
             .eq("user_id", req.user_id)
             .limit(1)
@@ -368,6 +409,12 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, ti
             jira_proj = project_data.get('jira_project_id')
             notion_proj = project_data.get('notion_project_id')
             last_commit = project_data.get('last_commit')
+            webhook_secret = project_data.get('webhook_secret')
+
+            # Ensure secret exists for existing projects
+            if not webhook_secret:
+                webhook_secret = secrets.token_hex(16)
+                supabase.table("projects").update({"webhook_secret": webhook_secret}).eq("id", project_id).execute()
             
             commits = []
             for c in all_commits:
@@ -382,12 +429,15 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, ti
             commits = [all_commits[0]] if all_commits else [] 
             latest_commit_sha = commits[0]["sha"] if commits else None
             
+            new_webhook_secret = secrets.token_hex(16)
+
             insert_payload = {
                 "user_id": req.user_id,
                 "repo_url": req.repo_url,
                 "jira_project_id": None,
                 "notion_project_id": None,
-                "last_commit": latest_commit_sha
+                "last_commit": latest_commit_sha,
+                "webhook_secret": new_webhook_secret
             }
             res = supabase.table("projects").insert(insert_payload).execute()
             if not res or not res.data:
@@ -415,12 +465,14 @@ async def start_ingest(req: IngestRequest, background_tasks: BackgroundTasks, ti
             agent=agent
         )
 
-        return {"project_id": project_id, "status": "started"}
+        return {"project_id": project_id, "status": "started", "webhook_secret": webhook_secret if is_existing_project else new_webhook_secret}
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Ingest start failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
 
 @app.get("/api/ingest/status/{project_id}")
 async def get_ingest_status(project_id: str):
@@ -433,7 +485,8 @@ async def get_ingest_status(project_id: str):
 
 # --- NEW: CHAT HISTORY ENDPOINTS ---
 @app.get("/api/chat/sessions/{project_id}")
-async def get_chat_sessions(project_id: str, current_user = Depends(get_current_user)):
+@limiter.limit("20/minute")
+async def get_chat_sessions(project_id: str, request: Request, current_user = Depends(get_current_user)):
     """Fetches the history list for the left sidebar."""
     res = supabase.table("chat_sessions").select("id, title, updated_at").eq("project_id", project_id).eq("user_id", str(current_user.id)).order("updated_at", desc=True).execute()
     return res.data if res.data else []
@@ -511,7 +564,8 @@ async def get_user_jira_projects(user_id: str):
     return [{"key": p["key"], "name": p["name"]} for p in projects]
 
 @app.get("/api/settings/{user_id}")
-async def get_user_settings(user_id: str, current_user = Depends(get_current_user)):
+@limiter.limit("5/minute")
+async def get_user_settings(user_id: str, request: Request, current_user = Depends(get_current_user)):
     from src.db_client import get_global_user_config
 
     if str(current_user.id) != user_id:
@@ -537,7 +591,8 @@ async def get_user_settings(user_id: str, current_user = Depends(get_current_use
     }
 
 @app.post("/api/settings/{user_id}")
-async def update_user_settings(user_id: str, payload: dict, current_user = Depends(get_current_user)):
+@limiter.limit("5/minute")
+async def update_user_settings(user_id: str, payload: dict, request: Request, current_user = Depends(get_current_user)):
     from src.cryptography import encrypt_value
     from src.db_client import get_global_user_config
 
@@ -574,7 +629,8 @@ async def update_user_settings(user_id: str, payload: dict, current_user = Depen
         raise HTTPException(status_code=500, detail="Failed to save settings")
 
 @app.delete("/api/projects/{user_id}/{project_id}")
-async def delete_project(user_id: str, project_id: str):
+@limiter.limit("3/minute")
+async def delete_project(user_id: str, request: Request, project_id: str):
     try:
         res = (
             supabase.table("projects")
@@ -1005,7 +1061,8 @@ async def check_remote_sync(project_id: str):
         return {"up_to_date": True, "error": str(e), "status": "error"}
 
 @app.post("/api/projects/{project_id}/analyze-risks")
-async def trigger_risk_analysis(project_id: str):
+@limiter.limit("3/minute")
+async def trigger_risk_analysis(project_id: str, request: Request):
     from src.worker import run_risk_analysis_task
     from src.db_client import get_global_user_config
 

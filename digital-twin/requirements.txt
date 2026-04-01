@@ -23,6 +23,7 @@ networkx
 
 # API & Server
 fastapi
+slowapi
 uvicorn
 pydantic
 python-multipart

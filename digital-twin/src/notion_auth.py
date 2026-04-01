@@ -1,10 +1,10 @@
-import time
 import requests
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import RedirectResponse
 from src.config import Config
 from src.db_client import supabase
 import logging
+from src.limiter import limiter
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("LumisAPI")
@@ -63,10 +63,12 @@ def get_valid_notion_token(user_id: str):
         return None
 
 @notion_auth_router.get("/auth/notion/connect")
-def connect_notion(state: str):
+@limiter.limit("5/minute")
+def connect_notion(state: str, request: Request):
     return RedirectResponse(build_notion_auth_url(state))
 
 @notion_auth_router.get("/auth/notion/callback")
+@limiter.limit("10/minute")
 def notion_callback(request: Request):
     code = request.query_params.get("code")
     state = request.query_params.get("state")  # This is the user_id

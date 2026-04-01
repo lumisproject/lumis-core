@@ -432,13 +432,13 @@ const Chat = () => {
                                         disabled={!isConfigComplete || tier === 'free'}
                                         className={cn(
                                             "flex items-center gap-1 rounded-lg px-2 md:px-3 py-1.5 text-[9px] md:text-[10px] font-bold uppercase tracking-widest transition-colors",
-                                            chatMode === 'single-turn' ? "bg-primary/10 text-primary border border-primary/20" : "text-muted-foreground hover:bg-accent border border-transparent",
+                                            chatMode === 'multi-turn' ? "bg-primary/10 text-primary border border-primary/20" : "text-muted-foreground hover:bg-accent border border-transparent",
                                             !isConfigComplete && "hidden",
                                             tier === 'free' && "cursor-not-allowed opacity-50"
                                         )}
                                     >
                                         <Command className="h-2.5 w-2.5 md:h-3 md:w-3" />
-                                        <span className="hidden sm:inline">{chatMode === 'single-turn' ? "Memory: ON" : "Memory: OFF"}</span>
+                                        <span className="hidden sm:inline">{chatMode === 'multi-turn' ? "Memory: ON" : "Memory: OFF"}</span>
                                         <span className="sm:hidden">Mem</span>
                                         {tier === 'free' && <Lock className="ml-1 h-2 w-2" />}
                                     </button>

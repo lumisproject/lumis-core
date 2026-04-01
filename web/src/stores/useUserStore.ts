@@ -67,10 +67,6 @@ export const useUserStore = create<UserState>((set, get) => ({
         set({ loading: true });
         const { data: { session } } = await supabase.auth.getSession();
         set({ user: session?.user ?? null, session, loading: false });
-
-        if (session?.user) {
-            await useSettingsStore.getState().fetchSettings(session.user.id);
-        }
     },
 
     // --- UPDATED GOOGLE SIGN IN ---

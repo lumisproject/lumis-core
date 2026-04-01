@@ -86,6 +86,7 @@ CREATE TABLE public.projects (
   sync_state jsonb DEFAULT '{"logs": [], "step": "Ready", "status": "idle"}'::jsonb,
   jira_project_id text,
   notion_project_id text,
+  webhook_secret text,
   CONSTRAINT projects_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.usage_stats (

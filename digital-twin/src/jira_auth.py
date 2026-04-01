@@ -1,5 +1,7 @@
 import time
 import requests
+import secrets
+from src.limiter import limiter
 from urllib.parse import urlencode
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import RedirectResponse
@@ -14,12 +16,20 @@ jira_auth_router = APIRouter()
 SCOPES = ["read:jira-work", "write:jira-work", "read:jira-user", "offline_access"]
 
 def build_auth_url(user_id: str):
+    import redis
+    redis_client = redis.Redis.from_url(Config.REDIS_URL, decode_responses=True)
+    
+    # Generate a random 32-char token
+    nonce = secrets.token_hex(16)
+    
+    # Store nonce -> user_id in Redis for 10 minutes
+    redis_client.setex(f"oauth_state:{nonce}", 600, user_id)
     params = {
         "audience": "api.atlassian.com", 
         "client_id": Config.JIRA_CLIENT_ID,
         "scope": " ".join(SCOPES), 
         "redirect_uri": Config.JIRA_REDIRECT_URI,
-        "state": user_id, 
+        "state": nonce,
         "response_type": "code", 
         "prompt": "consent"
     }
@@ -111,16 +121,32 @@ def get_valid_token(user_id: str):
         return None
 
 @jira_auth_router.get("/auth/jira/connect")
-def connect_jira(state: str):
+@limiter.limit("5/minute")
+def connect_jira(state: str, request: Request):
     return RedirectResponse(build_auth_url(state))
 
 @jira_auth_router.get("/auth/jira/callback")
+@limiter.limit("10/minute")
 def jira_callback(request: Request):
-    code, state = request.query_params.get("code"), request.query_params.get("state")
-    if not code or not state: return {"error": "Missing code or state"}
+    import redis
+    redis_client = redis.Redis.from_url(Config.REDIS_URL, decode_responses=True)
+
+    code = request.query_params.get("code")
+    state = request.query_params.get("state")
+    
+    if not code or not state: 
+        return RedirectResponse(f"{Config.JIRA_REDIRECT}?error=Missing code or state")
+        
+
+    user_id = redis_client.get(f"oauth_state:{state}")
+    if not user_id:
+        logger.warning(f"Invalid or expired OAuth state received: {state}")
+        return RedirectResponse(f"{Config.JIRA_REDIRECT}?error=Session expired. Please try again.")
+    
+    # Delete it so it can't be reused
+    redis_client.delete(f"oauth_state:{state}")
     try:
-        exchange_code_for_token(code, state)
-        # Redirects back to frontend Settings page
+        exchange_code_for_token(code, user_id)
         return RedirectResponse(f"{Config.JIRA_REDIRECT}?message=Jira connected successfully")
     except Exception as e:
         logger.error(f"Callback error: {e}")

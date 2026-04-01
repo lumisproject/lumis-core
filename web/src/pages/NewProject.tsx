@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 const NewProject = () => {
     const [repoUrl, setRepoUrl] = useState('');
     const [loading, setLoading] = useState(false);
-    const { startIngestion, projects, fetchProjects } = useProjectStore();
+    const { startIngestion, projects, fetchProjects, selectProject } = useProjectStore();
     const { tier, fetchBilling } = useBillingStore();
     const { user } = useUserStore();
     const { useDefault, provider, selectedModel, apiKey } = useSettingsStore();
@@ -41,6 +41,7 @@ const NewProject = () => {
             await fetchBilling();
             if (projectId) {
                 await fetchProjects(user.id);
+                selectProject(projectId);
                 navigate(`/app`); 
             }
         } catch (error) {

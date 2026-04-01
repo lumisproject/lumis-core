@@ -135,7 +135,8 @@ const Settings = () => {
         apiKey, setApiKey,
         selectedModel, setSelectedModel,
         theme, setTheme,
-        baseUrl, setBaseUrl
+        baseUrl, setBaseUrl,
+        resetDirty, _isDirty
     } = useSettingsStore();
 
     const [saving, setSaving] = useState(false);
@@ -174,12 +175,12 @@ const Settings = () => {
             fetchJiraStatus(user.id);
             fetchNotionStatus(user.id);
         }
-    }, [user, project?.id]);
+    }, [user?.id, project?.id, fetchJiraStatus, fetchNotionStatus]);
 
     // NEW: Fetch User Settings on mount
     useEffect(() => {
         const loadSettings = async () => {
-            if (!user?.id) return;
+            if (!user?.id || hasLoaded || _isDirty) return;
             try {
                 // Must pass auth token because the backend endpoint uses Depends(get_current_user)
                 const { data: { session } } = await supabase.auth.getSession();
@@ -192,6 +193,12 @@ const Settings = () => {
 
                 if (res.ok) {
                     const data = await res.json();
+                    
+                    // Only update if the user hasn't already started typing (isDirty check)
+                    // We check if the current store values are different from defaults or empty
+                    // but the easiest is to check if we've already interacted.
+                    // For now, let's just ensure it only runs ONCE ever per mount.
+                    
                     setUseDefault(data.useDefault);
                     setProvider(data.provider);
                     setSelectedModel(data.selectedModel);
@@ -203,13 +210,14 @@ const Settings = () => {
                     } else {
                         setApiKey(data.apiKey);
                     }
+                    setHasLoaded(true);
                 }
             } catch (e) {
                 console.error("Failed to load settings", e);
             }
         };
         loadSettings();
-    }, [user]);
+    }, [user?.id, hasLoaded]);
 
     const handleSave = async () => {
         if (!user) return;
@@ -240,6 +248,7 @@ const Settings = () => {
                 throw new Error(errorData.detail || 'Failed to save settings');
             }
 
+            resetDirty();
             setSuccess(true);
             setTimeout(() => setSuccess(false), 3000);
         } catch (e) {

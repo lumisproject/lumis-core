@@ -155,6 +155,16 @@ const Dashboard = () => {
     const isLimitReached = tier === 'free' && projects.length >= 1;
     const webhookUrl = project ? `${import.meta.env.VITE_API_URL}/api/webhook/${user?.id}/${project?.id}` : '';
     const [copied, setCopied] = useState(false);
+
+    const [copiedSecret, setCopiedSecret] = useState(false);
+
+    const handleCopySecret = () => {
+        if (project?.webhook_secret) {
+            navigator.clipboard.writeText(project.webhook_secret);
+            setCopiedSecret(true);
+            setTimeout(() => setCopiedSecret(false), 2000);
+        }
+    };
     
     // Find velocity risk if it exists
     const velocityRisk = risks.find(r => r.riskType === 'Predictive Delay');
@@ -402,6 +412,32 @@ const Dashboard = () => {
                                     </div>
                                 </button>
 
+                                {/* --- NEW: Webhook Secret Button --- */}
+                                <button
+                                    onClick={handleCopySecret}
+                                    className={cn(
+                                        "w-full h-16 mt-3 rounded-[2rem] border flex items-center justify-between px-10 transition-all duration-500 active:scale-[0.98]",
+                                        copiedSecret
+                                            ? "bg-emerald-500 border-emerald-500 text-white shadow-xl shadow-emerald-500/20"
+                                            : "bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/5 text-foreground hover:bg-accent/50"
+                                    )}
+                                >
+                                    <div className="flex flex-col items-start">
+                                        <span className={cn("text-[8px] font-black uppercase tracking-[0.2em]", copiedSecret ? "opacity-60" : "text-primary")}>
+                                            {copiedSecret ? 'Secret Copied' : 'Webhook Secret'}
+                                        </span>
+                                        <span className="text-[10px] md:text-[11px] font-mono font-bold tracking-widest truncate max-w-[200px] md:max-w-none opacity-80">
+                                            {project?.webhook_secret ? '••••••••••••••••' : 'Generating...'}
+                                        </span>
+                                    </div>
+                                    <div className={cn(
+                                        "h-8 w-8 md:h-10 md:w-10 rounded-xl flex items-center justify-center transition-all flex-shrink-0",
+                                        copiedSecret ? "bg-white/20" : "bg-primary/10 text-primary shadow-inner"
+                                    )}>
+                                        {copiedSecret ? <Check className="h-4 w-4" /> : <Copy className="h-3 w-3" />}
+                                    </div>
+                                </button>
+
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <div className="space-y-4">
                                         <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-primary underline underline-offset-8">Setup Sequence</h4>
@@ -409,8 +445,9 @@ const Dashboard = () => {
                                             {[
                                                 "Settings > Webhooks",
                                                 "Add New Webhook",
-                                                "Input Generated Payload",
-                                                "Set Type: application/json"
+                                                "Paste Transfer URI",
+                                                "Set Type: JSON",
+                                                "Paste Webhook Secret"
                                             ].map((step, i) => (
                                                 <div key={i} className="flex items-center gap-4">
                                                     <div className="h-6 w-6 rounded-lg bg-accent/50 flex items-center justify-center text-[10px] font-black opacity-50">{i + 1}</div>

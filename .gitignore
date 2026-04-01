@@ -3,3 +3,5 @@ digital-twin/temp_repos/
 digital-twin/.env
 digital-twin/src/__pycache__/
 digital-twin/src/tempCodeRunnerFile.py
+.claude/*
+CLAUDE.md

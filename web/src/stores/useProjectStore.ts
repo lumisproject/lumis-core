@@ -20,6 +20,7 @@ interface Project {
     user_id: string;
     jira_project_id?: string;
     notion_project_id?: string;
+    webhook_secret?: string;
     sync_state?: {
         status: string;
         step: string;
