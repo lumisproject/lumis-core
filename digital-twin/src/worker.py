@@ -9,12 +9,24 @@ celery_app = Celery("lumis_tasks", broker=REDIS_URL, backend=REDIS_URL)
 
 logger = logging.getLogger("LumisWorker")
 
+# Preload heavy modules
+from src.ingestor import ingest_repo
+from src.server import update_progress
+from src.risk_engine import calculate_predictive_risks
+from src.code_reviewer import process_impact_review
+from src.agent import LumisAgent
+from src.services import lc_embedder
+
+# Warmup the model
+logger.info("Warming up embedding model...")
+lc_embedder.embed_query("warmup")
+
+
 @celery_app.task(name="run_ingestion_pipeline")
 def run_ingestion_pipeline_task(repo_url: str, project_id: str, user_config: dict):
     """Offloads the heavy Git cloning and embedding to a background worker."""
     logger.info(f"Worker picking up ingestion for {project_id}")
-    from src.ingestor import ingest_repo
-    from src.server import update_progress
+
     
     def progress_cb(t, m):
         update_progress(project_id, t, m)
@@ -30,10 +42,7 @@ def run_ingestion_pipeline_task(repo_url: str, project_id: str, user_config: dic
 @celery_app.task(name="run_risk_analysis")
 def run_risk_analysis_task(project_id: str, user_config: dict):
     """Offloads AST parsing and Graph-RAG risk checks."""
-    from src.risk_engine import calculate_predictive_risks
-    from src.code_reviewer import process_impact_review
-    from src.server import update_progress
-    from src.agent import LumisAgent
+
     
     def progress_cb(t, m):
         update_progress(project_id, t, m)

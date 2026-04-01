@@ -4,8 +4,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    backend_url = "https://unsparing-kaley-unmodest.ngrok-free.dev"
-    frontend_url = "https://unsparing-kaley-unmodest.ngrok-free.dev"
+    backend_url = "http://localhost:5000"
+    frontend_url = "http://localhost:8080"
     # Default LLM settings
     DEFAULT_LLM_PROVIDER = os.getenv("DEFAULT_LLM_PROVIDER", "openrouter")
     DEFAULT_LLM_MODEL = os.getenv("MODEL", "stepfun/step-3.5-flash:free")
