@@ -9,14 +9,18 @@ import {
     Loader2,
     Send,
     ArrowLeft,
+    Settings,
+    Cpu,
+    Database,
+    ShieldCheck,
+    Lock,
+    Save,
     Layers,
     Sparkles,
     Calendar,
     ArrowUpRight,
     Zap,
-    X,
-    Lock,
-    Settings
+    X
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useSettingsStore } from '@/stores/useSettingsStore';
@@ -264,29 +268,78 @@ export default function EmailDrafts() {
                 <motion.div 
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="max-w-2xl w-full p-12 md:p-20 rounded-[4rem] bg-card/40 backdrop-blur-3xl border border-black/5 dark:border-white/5 shadow-2xl text-center space-y-10 relative overflow-hidden"
+                    className="max-w-3xl w-full p-6 sm:p-10 md:p-16 rounded-[2.5rem] sm:rounded-[4rem] bg-card/40 backdrop-blur-3xl border border-black/5 dark:border-white/5 shadow-2xl text-left space-y-8 md:space-y-12 relative overflow-hidden"
                 >
                     <div className="absolute top-0 right-0 p-10 opacity-5">
-                        <Lock className="h-64 w-64 -mr-20 -mt-20" />
+                        <Zap className="h-64 w-64 -mr-20 -mt-20" />
                     </div>
 
-                    <div className="mx-auto h-24 w-24 rounded-[2rem] bg-orange-500/10 flex items-center justify-center border border-orange-500/20 shadow-inner">
-                        <Lock className="h-10 w-10 text-orange-500" />
-                    </div>
-
-                    <div className="space-y-4 relative z-10">
-                        <h2 className="text-4xl md:text-5xl font-black tracking-tighter uppercase leading-none">
-                            Activate <br /> <span className="text-orange-500">Email Intake</span>
+                    <div className="space-y-4 relative z-10 border-b border-black/5 dark:border-white/5 pb-8 mb-4 md:mb-8">
+                        <h2 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter uppercase leading-none">
+                            Setup <span className="text-orange-500">Email Intake</span>
                         </h2>
-                        <p className="text-sm font-medium text-muted-foreground leading-relaxed max-w-sm mx-auto opacity-70">
-                            Your communication bridge is not yet active. Provide your inbox credentials in the settings protocol to enable automatic email synthesis.
-                        </p>
+                        <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest opacity-40">Follow these steps to activate</p>
                     </div>
 
-                    <div className="pt-6 relative z-10">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 relative z-10">
+                        {/* STEP 1 */}
+                        <div className="space-y-6">
+                            <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-xl bg-orange-500/10 flex items-center justify-center border border-orange-500/20">
+                                    <span className="text-xs font-black text-orange-500">01</span>
+                                </div>
+                                <h3 className="text-sm font-black uppercase tracking-widest">Configure Integrations</h3>
+                            </div>
+                            <div className="space-y-4">
+                                <ul className="space-y-3">
+                                    {[
+                                        { icon: Settings, text: "Go to Settings panel" },
+                                        { icon: Cpu, text: "Enable AI Engine if not yet" },
+                                        { icon: Database, text: "Map current Project to Jira or Notion" }
+                                    ].map((step, i) => (
+                                        <li key={i} className="flex items-start gap-3 animate-in fade-in slide-in-from-left-2" style={{ animationDelay: `${i * 100}ms` }}>
+                                            <step.icon className="h-3.5 w-3.5 text-orange-500 mt-0.5" />
+                                            <span className="text-[11px] font-bold text-foreground/80 leading-tight">{step.text}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </div>
+
+                        {/* STEP 2 */}
+                        <div className="space-y-6">
+                            <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
+                                    <span className="text-xs font-black text-primary">02</span>
+                                </div>
+                                <h3 className="text-sm font-black uppercase tracking-widest">Gmail Access Node</h3>
+                            </div>
+                            <div className="space-y-4">
+
+                                <ul className="space-y-3">
+                                    {[
+                                        { icon: ShieldCheck, text: "Enable 2-Step Verification (ON)" },
+                                        { icon: Lock, text: "Search/Click 'App Passwords'" },
+                                        { icon: Settings, text: "Create new 'Lumis Intake' password" },
+                                        { icon: Save, text: "Copy the 16-character code" }
+                                    ].map((step, i) => (
+                                        <li key={i} className="flex items-start gap-3 animate-in fade-in slide-in-from-right-2" style={{ animationDelay: `${(i + 4) * 100}ms` }}>
+                                            <step.icon className="h-3.5 w-3.5 text-primary mt-0.5" />
+                                            <span className="text-[11px] font-bold text-foreground/80 leading-tight">{step.text}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="pt-6 relative z-10 flex flex-col xl:flex-row items-center justify-between gap-8 border-t border-black/5 dark:border-white/5 pt-10">
+                        <p className="text-[9px] font-medium text-rose-500 italic opacity-80 max-w-[340px] text-center xl:text-left leading-relaxed">
+                            We use OAuth 2.0, the same secure standard that apps like Slack, Zoom, and Google Calendar use to access your email. Lumis never sees or stores your actual Gmail password. We only receive a temporary token that grants us permission to read your inbox and send emails on your behalf. This connection is encrypted end-to-end and can be revoked instantly from your Google Account settings at any time.
+                        </p>
                         <Link 
                             to="/app/settings#intake"
-                            className="inline-flex items-center gap-3 px-12 py-5 rounded-2xl bg-primary text-primary-foreground text-xs font-black uppercase tracking-widest hover:scale-110 active:scale-95 transition-all shadow-2xl shadow-primary/40 group relative overflow-hidden"
+                            className="inline-flex items-center gap-3 px-10 py-4 rounded-xl bg-primary text-primary-foreground text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-primary/20 group relative overflow-hidden whitespace-nowrap w-full sm:w-auto justify-center"
                         >
                             <motion.div 
                                 initial={{ x: '-100%' }}
@@ -294,8 +347,8 @@ export default function EmailDrafts() {
                                 transition={{ duration: 0.6, ease: "easeInOut" }}
                                 className="absolute inset-0 z-0 bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none"
                             />
-                            <Settings className="h-4 w-4 transition-transform group-hover:rotate-90 relative z-10" />
-                            <span className="relative z-10">Initialize Protocol</span>
+                            <Settings className="h-3.5 w-3.5 transition-transform group-hover:rotate-90 relative z-10" />
+                            <span className="relative z-10">Initialize Integrations</span>
                         </Link>
                     </div>
                 </motion.div>
@@ -434,7 +487,7 @@ export default function EmailDrafts() {
                                             key={idx}
                                             onClick={() => setSelectedDraft(draft)}
                                             whileHover={{ y: -8, scale: 1.01 }}
-                                            className="group relative flex flex-col items-start p-8 md:p-10 rounded-[2.5rem] bg-card/30 backdrop-blur-xl border border-black/5 dark:border-white/5 hover:border-orange-500/20 transition-all text-left overflow-hidden min-h-[340px] md:min-h-[380px] shadow-xl hover:shadow-orange-500/5"
+                                            className="group relative flex flex-col items-start p-6 sm:p-8 md:p-10 rounded-[2rem] sm:rounded-[2.5rem] bg-card/30 backdrop-blur-xl border border-black/5 dark:border-white/5 hover:border-orange-500/20 transition-all text-left overflow-hidden min-h-[300px] sm:min-h-[340px] md:min-h-[380px] shadow-xl hover:shadow-orange-500/5"
                                         >
                                             <div className="absolute top-0 right-0 p-8 opacity-0 group-hover:opacity-100 transition-all group-hover:translate-x-[-4px] group-hover:translate-y-[4px]">
                                                 <ArrowUpRight className="h-6 w-6 text-orange-500" />
@@ -511,7 +564,7 @@ export default function EmailDrafts() {
                                             <Sparkles className="h-4 w-4" />
                                             Original Context Synthesis
                                         </div>
-                                        <div className="relative p-12 rounded-[2.5rem] bg-orange-500/[0.03] border border-orange-500/10 italic shadow-inner">
+                                        <div className="relative p-6 sm:p-12 rounded-[2rem] sm:rounded-[2.5rem] bg-orange-500/[0.03] border border-orange-500/10 italic shadow-inner">
                                             <p className="text-xl md:text-2xl font-bold text-foreground/80 leading-[1.6]">
                                                 "{selectedDraft?.original_email_summary}"
                                             </p>
