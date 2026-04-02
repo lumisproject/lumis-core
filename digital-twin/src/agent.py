@@ -318,7 +318,7 @@ class LumisAgent:
         JSON OUTPUT FORMAT (STRICT):
         {{
           "fulfillment_status": "COMPLETE" | "PARTIAL" | "NONE",
-          "summary": "A concise 2 sentence summary stating exactly what was done and what is still missing."
+          "summary": "A precise professional summary. DO NOT use symbols like '#', '**', or '*'. Provide a clean, structured response."
         }}
         """
         
@@ -402,7 +402,7 @@ class LumisAgent:
             {
               "risk_type": "SECURITY_FLAW" | "BUG" | "TECH_DEBT" | "BREAKING_CHANGE",
               "severity": "High" | "Medium" | "Low",
-              "description": "Precise explanation of the exact failure mechanism.",
+              "description": "Precise explanation using plain text. DO NOT use symbols like '#', '**', or '*'. Use '-' for bullet points.",
               "affected_units": ["name_of_function_or_file"]
             }
           ]
@@ -468,7 +468,7 @@ class LumisAgent:
             {
               "risk_type": "TIGHT_COUPLING" | "CONTRACT_BREAK" | "CIRCULAR_DEPENDENCY" | "ARCHITECTURAL_FLAW",
               "severity": "High" | "Medium",
-              "description": "Precise explanation of the architectural failure mechanism.",
+              "description": "Architectural risk explanation using plain text. DO NOT use symbols like '#', '**', or '*'. Use '-' for bullet points.",
               "affected_neighbors": ["neighboring_unit_name"]
             }
           ]
@@ -533,8 +533,8 @@ class LumisAgent:
         JSON OUTPUT FORMAT (STRICT):
         {
             "needs_ticket": true | false,
-            "title": "A short, descriptive Jira ticket title (only if needs_ticket is true)",
-            "summary": "A 1-sentence summary of what the code does."
+            "title": "A technical title (max 120 chars)",
+            "summary": "Full sentence describing work. DO NOT use Markdown symbols like '#', '**', or '*'. Use '-' for lists."
         }
         """
         prompt = f"COMMIT MESSAGES:\n{messages}\n\nCODE DIFF:\n{code}"
