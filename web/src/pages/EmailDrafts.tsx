@@ -36,14 +36,12 @@ interface DraftTicket {
 }
 
 
-
 export default function EmailDrafts() {
     const { project } = useProjectStore();
     const [drafts, setDrafts] = useState<DraftTicket[]>([]);
     const [selectedDraft, setSelectedDraft] = useState<DraftTicket | null>(null);
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState<'grid' | 'detail'>('grid');
-
     // Connection Settings State
     const [mappedEmail, setMappedEmail] = useState('');
     const [mappingLoading, setMappingLoading] = useState(false);
@@ -590,7 +588,6 @@ export default function EmailDrafts() {
                     )}
                 </AnimatePresence>
             </div>
-
         </div>
     );
 }
