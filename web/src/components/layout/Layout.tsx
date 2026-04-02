@@ -12,7 +12,8 @@ import {
     ShieldAlert,
     Network,
     LogOut,
-    Menu
+    Menu,
+    Mail
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUserStore } from '@/stores/useUserStore';
@@ -27,6 +28,7 @@ const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: { colla
     const menuItems = [
         { icon: BarChart3, label: 'Dashboard', path: '/app' },
         { icon: MessageSquare, label: 'The Brain', path: '/app/chat' },
+        { icon: Mail, label: 'Email Drafts', path: '/app/drafts' },
         { icon: LayoutGrid, label: 'Board', path: '/app/board' },
         { icon: ShieldAlert, label: 'Risks', path: '/app/risks' },
         { icon: Network, label: 'Architecture', path: '/app/architecture' },
