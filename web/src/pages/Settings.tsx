@@ -513,15 +513,17 @@ const Settings = () => {
                         )}
                     </div>
 
-                    {/* FULLY FUNCTIONAL NOTION INTEGRATION */}
-                    <div className="space-y-4 p-6 rounded-3xl border border-black/5 bg-accent/10 dark:border-white/5 relative">
-                        {!project && (
-                            <div className="absolute inset-0 z-20 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center rounded-3xl">
-                                <AlertTriangle className="h-6 w-6 text-orange-500 mb-2" />
-                                <div className="text-[10px] font-black uppercase tracking-widest">No Active Instance</div>
-                                <p className="text-[9px] text-muted-foreground mt-1">Select a project in the Command Center to map integrations.</p>
+                    {/* NOTION INTEGRATION - UNDER CONSTRUCTION */}
+                    <div className="space-y-4 p-6 rounded-3xl border border-black/5 bg-accent/10 dark:border-white/5 relative overflow-hidden group">
+                        {/* Simple Blurry Overlay */}
+                        <div className="absolute inset-0 z-30 bg-background/30 backdrop-blur-md flex flex-col items-center justify-center rounded-3xl transition-all duration-700">
+                            <div className="flex flex-col items-center gap-4 py-8">
+                                <div className="text-yellow-500 font-black uppercase tracking-[0.2em] text-[10px] bg-yellow-500/10 px-6 py-2.5 rounded-xl border border-yellow-500/20 shadow-[0_0_40px_rgba(234,179,8,0.15)]">
+                                    Under Construction
+                                </div>
+                                <span className="text-[11px] font-black uppercase tracking-[0.5em] text-foreground/30 ml-2">Notion Bridge</span>
                             </div>
-                        )}
+                        </div>
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <BookOpen className="h-4 w-4 text-emerald-500" />
