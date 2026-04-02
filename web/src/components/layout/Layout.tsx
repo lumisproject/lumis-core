@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+// LUMIS_GLOBAL_NOTIFICATION_ACTIVE
 import { Outlet, useLocation, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -12,13 +13,16 @@ import {
     ShieldAlert,
     Network,
     LogOut,
-    Menu
+    Menu,
+    Mail
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUserStore } from '@/stores/useUserStore';
 import { useProjectStore } from '@/stores/useProjectStore';
 import { useBillingStore } from '@/stores/useBillingStore';
 import { ProjectSwitcher } from './ProjectSwitcher';
+import { Sparkles, X } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: { collapsed: boolean, setCollapsed: (v: boolean) => void, mobileOpen: boolean, setMobileOpen: (v: boolean) => void }) => {
     const location = useLocation();
@@ -27,9 +31,10 @@ const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: { colla
     const menuItems = [
         { icon: BarChart3, label: 'Dashboard', path: '/app' },
         { icon: MessageSquare, label: 'The Brain', path: '/app/chat' },
-        { icon: LayoutGrid, label: 'Board', path: '/app/board' },
         { icon: ShieldAlert, label: 'Risks', path: '/app/risks' },
         { icon: Network, label: 'Architecture', path: '/app/architecture' },
+        { icon: Mail, label: 'Email Drafts', path: '/app/drafts' },
+        { icon: LayoutGrid, label: 'Board', path: '/app/board' },
         { icon: CreditCard, label: 'Billing', path: '/app/billing' },
         { icon: Settings, label: 'Settings', path: '/app/settings' },
     ];
@@ -150,8 +155,9 @@ const Layout = () => {
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
     const { user } = useUserStore();
-    const { fetchProjects, fetchJiraStatus, fetchNotionStatus } = useProjectStore();
+    const { fetchProjects, fetchJiraStatus, fetchNotionStatus, project } = useProjectStore();
     const { fetchBilling } = useBillingStore();
+    const [draftNotification, setDraftNotification] = useState<{ id: string; title: string } | null>(null);
 
     useEffect(() => {
         if (user?.id) {
@@ -161,6 +167,34 @@ const Layout = () => {
             fetchBilling();
         }
     }, [user?.id, fetchProjects, fetchJiraStatus, fetchNotionStatus, fetchBilling]);
+
+    // Global Draft Notification Listener
+    useEffect(() => {
+        if (!project?.id) return;
+
+        const channel = supabase
+            .channel('global-draft-updates')
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'draft_tickets',
+                    filter: `project_id=eq.${project.id}`
+                },
+                (payload) => {
+                    const newDraft = payload.new as any;
+                    setDraftNotification({ id: newDraft.id, title: newDraft.title });
+                    setTimeout(() => setDraftNotification(null), 6000); // Auto-hide after 6s
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [project?.id]);
+    
 
     const location = useLocation();
 
@@ -208,6 +242,54 @@ const Layout = () => {
                     </AnimatePresence>
                 </main>
             </div>
+
+            {/* Global Draft Notification Toast */}
+            <AnimatePresence>
+                {draftNotification && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 100, x: '-50%', scale: 0.9 }}
+                        animate={{ opacity: 1, y: 0, x: '-50%', scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+                        className="fixed bottom-12 left-1/2 z-[100] w-full max-w-md px-4"
+                    >
+                        <div 
+                            onClick={() => {
+                                setDraftNotification(null);
+                                window.location.href = '/app/drafts'; // Navigate to drafts when clicked
+                            }}
+                            className="bg-[#1A1A1A]/90 backdrop-blur-2xl border border-white/10 rounded-3xl p-5 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex items-center gap-5 group cursor-pointer hover:border-orange-500/50 transition-colors"
+                        >
+                            <div className="h-14 w-14 rounded-2xl bg-orange-500/20 flex items-center justify-center border border-orange-500/20 flex-shrink-0 relative overflow-hidden">
+                                <Sparkles className="h-6 w-6 text-orange-500 relative z-10" />
+                                <div className="absolute inset-0 bg-gradient-to-tr from-orange-500/10 to-transparent animate-pulse" />
+                            </div>
+                            
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-orange-500">Neural Sync Ready</span>
+                                    <div className="h-1 w-1 rounded-full bg-orange-500 animate-ping" />
+                                </div>
+                                <h4 className="text-sm font-bold text-white truncate leading-tight">
+                                    {draftNotification.title}
+                                </h4>
+                                <p className="text-[10px] font-medium text-white/40 mt-1">
+                                    A new draft has been synthesized. Click to view.
+                                </p>
+                            </div>
+
+                            <button 
+                                onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    setDraftNotification(null); 
+                                }}
+                                className="h-8 w-8 rounded-full flex items-center justify-center hover:bg-white/5 transition-colors group/close"
+                            >
+                                <X className="h-4 w-4 text-white/20 group-hover/close:text-white transition-colors" />
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

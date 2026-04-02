@@ -23,6 +23,19 @@ CREATE TABLE public.chat_sessions (
   CONSTRAINT chat_sessions_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id),
   CONSTRAINT chat_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
+CREATE TABLE public.draft_tickets (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  project_id uuid NOT NULL,
+  title text NOT NULL,
+  description text NOT NULL,
+  original_email_summary text NOT NULL,
+  status USER-DEFINED NOT NULL DEFAULT 'To Do'::draft_ticket_status,
+  sender_email text NOT NULL,
+  received_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT draft_tickets_pkey PRIMARY KEY (id),
+  CONSTRAINT draft_tickets_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id)
+);
 CREATE TABLE public.graph_edges (
   id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
   project_id uuid NOT NULL,
@@ -65,6 +78,14 @@ CREATE TABLE public.notion_tokens (
   bot_id text,
   created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
   CONSTRAINT notion_tokens_pkey PRIMARY KEY (user_id)
+);
+CREATE TABLE public.project_email_mappings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  project_id uuid NOT NULL,
+  client_email text NOT NULL,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT project_email_mappings_pkey PRIMARY KEY (id),
+  CONSTRAINT project_email_mappings_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id)
 );
 CREATE TABLE public.project_risks (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

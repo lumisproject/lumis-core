@@ -18,7 +18,8 @@ import {
     Sun,
     Moon,
     Monitor,
-    PartyPopper
+    PartyPopper,
+    Mail
 } from 'lucide-react';
 import { useSettingsStore } from '@/stores/useSettingsStore';
 import { useUserStore } from '@/stores/useUserStore';
@@ -26,16 +27,31 @@ import { useProjectStore } from '@/stores/useProjectStore';
 import { cn } from '@/lib/utils';
 import { API_BASE, supabase } from '@/lib/supabase';
 
-const SettingSection = ({ title, description, children, icon: Icon }: any) => (
-    <div className="grid grid-cols-1 gap-12 py-8 lg:grid-cols-3 border-b border-black/5 dark:border-white/5 last:border-0">
-        <div className="lg:col-span-1">
+const SettingSection = ({ title, description, children, icon: Icon, id, highlight, extra }: any) => (
+    <div 
+        id={id} 
+        className={cn(
+            "grid grid-cols-1 gap-12 py-12 lg:grid-cols-3 border-b border-black/5 dark:border-white/5 last:border-0 transition-all duration-1000 relative overflow-hidden",
+            highlight && "bg-primary/5 ring-1 ring-primary/20 scale-[1.02] z-30 rounded-[3rem] px-8 -mx-8 shadow-2xl"
+        )}
+    >
+        {highlight && (
+            <motion.div 
+                initial={{ x: '-100%' }}
+                animate={{ x: '100%' }}
+                transition={{ duration: 1.5, repeat: 1, ease: "easeInOut" }}
+                className="absolute inset-0 z-10 bg-gradient-to-r from-transparent via-primary/10 to-transparent pointer-events-none"
+            />
+        )}
+        <div className="lg:col-span-1 border-r border-black/5 dark:border-white/5 pr-8">
             <div className="flex items-center gap-3 mb-2">
                 {Icon && <Icon className="h-5 w-5 text-primary" />}
                 <h3 className="text-lg font-black tracking-tight uppercase">{title}</h3>
             </div>
-            <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
+            <p className="text-sm leading-relaxed text-muted-foreground font-medium opacity-70 mb-6">{description}</p>
+            {extra && <div className="mt-4 animate-in fade-in slide-in-from-top-2">{extra}</div>}
         </div>
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-6 relative z-10">
             {children}
         </div>
     </div>
@@ -136,11 +152,15 @@ const Settings = () => {
         selectedModel, setSelectedModel,
         theme, setTheme,
         baseUrl, setBaseUrl,
+        intakeUser, setIntakeUser,
+        intakePassword, setIntakePassword,
         resetDirty, _isDirty
     } = useSettingsStore();
 
     const [saving, setSaving] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [hasLoaded, setHasLoaded] = useState(false);
+    const [highlightSection, setHighlightSection] = useState<string | null>(null);
 
     const [showBillingSuccess, setShowBillingSuccess] = useState(false);
 
@@ -168,6 +188,22 @@ const Settings = () => {
             navigate(location.pathname, { replace: true });
         }
     }, [location]);
+
+    // NEW: Handle deep linking and highlight
+    useEffect(() => {
+        if (location.hash === '#intake') {
+            setHighlightSection('intake');
+            const el = document.getElementById('intake');
+            if (el) {
+                setTimeout(() => {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 500);
+            }
+            // Clear highlight after 5s
+            const timer = setTimeout(() => setHighlightSection(null), 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [location.hash]);
 
     useEffect(() => {
         if (user?.id) {
@@ -229,9 +265,11 @@ const Settings = () => {
             const payload = {
                 provider: provider,
                 selectedModel: selectedModel,
-                useDefault: useDefault, // FIX: Use the actual state, not a hardcoded false!
-                apiKey: apiKey, // If it's masked (••••), the backend handles preserving the old one
-                baseUrl: baseUrl
+                useDefault: useDefault,
+                apiKey: apiKey,
+                baseUrl: baseUrl,
+                intakeUser: intakeUser || "", // Send empty string if cleared
+                intakePassword: intakePassword || "" // Send empty string if cleared
             };
 
             const res = await fetch(`${API_BASE}/api/settings/${user.id}`, {
@@ -520,6 +558,102 @@ const Settings = () => {
                                 Link Notion Node
                             </button>
                         )}
+                    </div>
+                </div>
+            </SettingSection>
+
+            <SettingSection
+                id="intake"
+                title="Inbox Intake Protocol"
+                icon={Mail}
+                highlight={highlightSection === 'intake'}
+                description="Configure the direct neural link to your ticketing inbox or communication node."
+                extra={
+                    <div className="space-y-8">
+                        {/* ACTIVE PROTOCOL */}
+                        <div className="space-y-4">
+                            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-500/60 block ml-1">Available Services</span>
+                            <div className="h-12 w-12 rounded-2xl border border-dashed border-black/10 dark:border-white/10 flex items-center justify-center">
+                                <img 
+                                    src="/gmail.png" 
+                                    className="h-9 w-9" 
+                                    alt="Gmail" 
+                                />
+                            </div>
+                        </div>
+
+                        {/* COMING SOON */}
+                        <div className="space-y-4">
+                            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 block ml-1">Coming Soon</span>
+                            <div className="flex items-center gap-3">
+                                <div className="h-12 w-12 rounded-2xl border border-dashed border-black/10 dark:border-white/10 flex items-center justify-center">
+                                    <img 
+                                        src="/outlook.webp" 
+                                        className="h-9 w-9" 
+                                        alt="Outlook" 
+                                />
+                                </div>
+                                <div className="h-12 w-12 rounded-2xl border border-dashed border-black/10 dark:border-white/10 flex items-center justify-center">
+                                    <img 
+                                        src="/slack.webp" 
+                                        className="h-9 w-9" 
+                                        alt="Slack" 
+                                    />
+                                </div>
+                                <div className="h-12 w-12 rounded-2xl border border-dashed border-black/10 dark:border-white/10 flex items-center justify-center">
+                                    <img 
+                                        src="/whatsapp.png" 
+                                        className="h-9 w-9" 
+                                        alt="WhatsApp" 
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            >
+                <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <InputField 
+                            label="Intake Address" 
+                            icon={Mail} 
+                            value={intakeUser} 
+                            onChange={setIntakeUser} 
+                            placeholder="e.g. agent@company.com" 
+                        />
+                        <InputField 
+                            label="App Password / Access Token" 
+                            icon={Lock} 
+                            value={intakePassword} 
+                            onChange={setIntakePassword} 
+                            placeholder="(no spaces in password)" 
+                            type="password" 
+                            hide={true} 
+                        />
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <div className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/10 flex items-start gap-4 flex-1">
+                            <AlertTriangle className="h-5 w-5 text-orange-500 mt-0.5 flex-shrink-0" />
+                            <div className="space-y-1">
+                                <p className="text-[10px] font-black text-orange-500 uppercase tracking-wider">Security Requirement</p>
+                                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                    Standard passwords will not work. You must provide a service-specific 16-character password for Lumis to bridge the connection.
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Reset Button */}
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setIntakeUser('');
+                                setIntakePassword('');
+                            }}
+                            className="flex items-center gap-2 px-6 py-2 text-rose-500 hover:text-rose-600 transition-colors group ml-4"
+                        >
+                            <RefreshCw className="h-4 w-4 transition-transform group-hover:rotate-180" />
+                            <span className="text-[10px] font-black uppercase tracking-widest whitespace-nowrap">Unlink Account</span>
+                        </button>
                     </div>
                 </div>
             </SettingSection>

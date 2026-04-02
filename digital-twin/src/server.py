@@ -1,6 +1,7 @@
 import os
 from contextlib import asynccontextmanager
 import logging
+import asyncio
 import redis
 from typing import Dict, Optional
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Depends
@@ -16,9 +17,12 @@ from src.jira_auth import jira_auth_router
 from src.notion_auth import notion_auth_router
 from src.stripe_router import stripe_router
 from src.billing_middleware import verify_chat_limit, get_user_tier_and_usage
+from src.email_intake import email_intake_router
+from src.inbox_listener import start_inbox_listener
 
 # --- CONFIGURATION ---
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("LumisAPI")
 
 @asynccontextmanager
@@ -29,7 +33,14 @@ async def lifespan(app: FastAPI):
     # Warmup
     lc_embedder.embed_query("warmup")
     logger.info("✨ Neural Gateway: Model ready.")
+    
+    listener_task = asyncio.create_task(start_inbox_listener())
     yield
+    listener_task.cancel()
+    try:
+        await listener_task
+    except asyncio.CancelledError:
+        pass
 
 app = FastAPI(title="Lumis Brain API", lifespan=lifespan)
 app.state.limiter = limiter
@@ -48,6 +59,7 @@ app.add_middleware(
 app.include_router(jira_auth_router)
 app.include_router(notion_auth_router)
 app.include_router(stripe_router)
+app.include_router(email_intake_router)
 
 # --- STATE MANAGEMENT (Now Stateless via Redis) ---
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -575,7 +587,7 @@ async def get_user_jira_projects(user_id: str):
     return [{"key": p["key"], "name": p["name"]} for p in projects]
 
 @app.get("/api/settings/{user_id}")
-@limiter.limit("5/minute")
+@limiter.limit("10/minute")
 async def get_user_settings(user_id: str, request: Request, current_user = Depends(get_current_user)):
     from src.db_client import get_global_user_config
 
@@ -590,6 +602,8 @@ async def get_user_settings(user_id: str, request: Request, current_user = Depen
             "selectedModel": "",
             "apiKey": "",
             "baseUrl": "",
+            "intakeUser": "",
+            "intakePassword": "",
             "useDefault": True
         }
     
@@ -598,6 +612,8 @@ async def get_user_settings(user_id: str, request: Request, current_user = Depen
         "selectedModel": config.get("model", ""),
         "apiKey": "••••••••" if config.get("api_key") else "",
         "baseUrl": config.get("base_url", ""),
+        "intakeUser": config.get("intake_user", ""),
+        "intakePassword": "••••••••" if config.get("intake_password") else "",
         "useDefault": False
     }
 
@@ -615,11 +631,18 @@ async def update_user_settings(user_id: str, payload: dict, request: Request, cu
     if api_key and not api_key.startswith("••••"):
         encrypted_key = encrypt_value(api_key)
 
+    intake_user = payload.get("intakeUser")
+    intake_password = payload.get("intakePassword")
+    encrypted_intake_pw = None
+    if intake_password and not intake_password.startswith("••••"):
+        encrypted_intake_pw = encrypt_value(intake_password)
+
     new_user_config = {
         "provider": payload.get("provider"),
         "model": payload.get("selectedModel"),
         "use_default": payload.get("useDefault"),
         "base_url": payload.get("baseUrl"),
+        "intake_user": intake_user,
     }
     
     if encrypted_key:
@@ -627,6 +650,12 @@ async def update_user_settings(user_id: str, payload: dict, request: Request, cu
     elif api_key and api_key.startswith("••••"):
         existing_config = get_global_user_config(user_id)
         new_user_config["api_key"] = existing_config.get("api_key")
+
+    if encrypted_intake_pw:
+        new_user_config["intake_password"] = encrypted_intake_pw
+    elif intake_password and intake_password.startswith("••••"):
+        existing_config = get_global_user_config(user_id)
+        new_user_config["intake_password"] = existing_config.get("intake_password")
 
     try:
         supabase.table("user_settings").upsert({

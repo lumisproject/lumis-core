@@ -18,6 +18,7 @@ import ArchitectureGraph from '@/pages/ArchitectureGraph';
 import Board from '@/pages/Board';
 import PrivacyPolicy from '@/pages/PrivacyPolicy';
 import TermsOfService from '@/pages/TermsOfService';
+import EmailDrafts from '@/pages/EmailDrafts';
 
 
 
@@ -92,6 +93,7 @@ function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="chat" element={<Chat />} />
+          <Route path="drafts" element={<EmailDrafts />} />
           <Route path="risks" element={<RiskPage />} />
           <Route path="settings" element={<Settings />} />
           <Route path="billing" element={<Billing />} />
