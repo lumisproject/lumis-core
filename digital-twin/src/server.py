@@ -14,6 +14,7 @@ from src.db_client import supabase, get_current_user
 from src.config import Config
 from src.jira_auth import jira_auth_router
 from src.notion_auth import notion_auth_router
+from src.github_auth import github_auth_router
 from src.stripe_router import stripe_router
 from src.billing_middleware import verify_chat_limit, get_user_tier_and_usage
 
@@ -47,6 +48,7 @@ app.add_middleware(
 # Include Auth Routes
 app.include_router(jira_auth_router)
 app.include_router(notion_auth_router)
+app.include_router(github_auth_router)
 app.include_router(stripe_router)
 
 # --- STATE MANAGEMENT (Now Stateless via Redis) ---

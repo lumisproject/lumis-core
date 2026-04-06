@@ -4,8 +4,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    backend_url = "http://localhost:5000"
-    frontend_url = "http://localhost:8080"
+    # -- Frontend & Backend URLs --
+    backend_url = os.getenv("BACKEND_URL", "http://localhost:5000")
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:8080")
+    
     # Default LLM settings
     DEFAULT_LLM_PROVIDER = os.getenv("DEFAULT_LLM_PROVIDER", "openrouter")
     DEFAULT_LLM_MODEL = os.getenv("MODEL", "stepfun/step-3.5-flash:free")
@@ -35,7 +37,10 @@ class Config:
     SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
     # Github settings
-    GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+    GITHUB_TOKEN = os.getenv("GITHUB_TOKEN") # Keep this if you still have global fallback
+    GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
+    GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
+    GITHUB_REDIRECT_URI = "https://unsparing-kaley-unmodest.ngrok-free.dev/auth/github/callback"
 
     # Notion settings
     NOTION_CLIENT_ID = os.getenv("NOTION_CLIENT_ID")

@@ -47,6 +47,7 @@ interface ProjectState {
     risks: Risk[];
     jiraConnected: boolean;
     notionConnected: boolean;
+    githubConnected: boolean;
     ingestionStatus: IngestionStatus | null;
     projectStats: ProjectStats | null;
     isUpToDate: boolean;
@@ -56,12 +57,17 @@ interface ProjectState {
     error: string | null;
     jiraProjects: { key: string, name: string }[];
     notionProjects: { id: string, name: string }[];
+    githubRepos: { id: number, name: string, full_name: string, url: string }[];
+    
     fetchProjects: (userId: string) => Promise<void>;
     fetchJiraProjects: (userId: string) => Promise<void>;
     fetchNotionProjects: (userId: string) => Promise<void>;
     selectProject: (projectId: string) => void;
     fetchJiraStatus: (userId: string) => Promise<void>;
     fetchNotionStatus: (userId: string) => Promise<void>;
+    fetchGithubStatus: (userId: string) => Promise<void>;
+    fetchGithubRepos: (userId: string) => Promise<void>;
+    setupGithubWebhook: (userId: string, projectId: string, repoFullName: string) => Promise<void>;
     fetchRisks: (projectId: string) => Promise<void>;
     fetchProjectStats: (projectId: string) => Promise<void>;
     checkIsEmpty: (projectId: string) => Promise<void>;
@@ -69,6 +75,7 @@ interface ProjectState {
     pollIngestionStatus: (projectId: string) => Promise<IngestionStatus | null>;
     disconnectJira: (userId: string) => Promise<void>;
     disconnectNotion: (userId: string) => Promise<void>;
+    disconnectGithub: (userId: string) => Promise<void>;
     updateJiraMapping: (projectId: string, jiraKey: string) => Promise<void>;
     updateNotionMapping: (projectId: string, notionDbId: string) => Promise<void>;
     syncProject: (projectId: string) => Promise<void>;
@@ -83,6 +90,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     risks: [],
     jiraConnected: false,
     notionConnected: false,
+    githubConnected: false,
     ingestionStatus: null,
     projectStats: null as ProjectStats | null,
     isUpToDate: true,
@@ -92,6 +100,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     error: null,
     jiraProjects: [],
     notionProjects: [],
+    githubRepos: [],
 
     fetchProjects: async (userId: string) => {
         set({ loading: true });
@@ -182,6 +191,49 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         } catch (e) {
             console.error("Failed to fetch Notion databases:", e);
             set({ notionProjects: [] });
+        }
+    },
+
+    fetchGithubStatus: async (userId: string) => {
+        try {
+            const { data } = await supabase
+                .from('github_tokens')
+                .select('user_id')
+                .eq('user_id', userId)
+                .maybeSingle();
+            set({ githubConnected: !!data });
+        } catch (e) {
+            console.error("Failed to fetch GitHub status", e);
+        }
+    },
+
+    fetchGithubRepos: async (userId: string) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/github/repos/${userId}`);
+            if (res.ok) {
+                const data = await res.json();
+                set({ githubRepos: data });
+            }
+        } catch (e) {
+            console.error("Failed to fetch GitHub repos:", e);
+        }
+    },
+
+    setupGithubWebhook: async (userId: string, projectId: string, repoFullName: string) => {
+        const res = await fetch(`${API_BASE}/api/github/webhook`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: userId,
+                project_id: projectId,
+                repo_full_name: repoFullName
+            })
+        });
+
+        // If the backend returns our 403 ORG_ACCESS_REQUIRED error, we MUST throw it!
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to setup webhook");
         }
     },
 
@@ -279,15 +331,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         }
     },
 
-    // Replace these two functions inside your useProjectStore.ts
-
     pollIngestionStatus: async (projectId: string) => {
         try {
             const res = await fetch(`${API_BASE}/api/ingest/status/${projectId}`);
             const data = await res.json();
             set({ ingestionStatus: data });
             
-            // NEW: Sync the Redis state to the global project object
+            // Sync the Redis state to the global project object
             const state = get();
             if (state.project?.id === projectId) {
                 const oldStatus = state.project.sync_state?.status;
@@ -343,6 +393,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         try {
             await fetch(`${API_BASE}/api/notion/disconnect/${userId}`, { method: 'DELETE' });
             set({ notionConnected: false });
+        } catch { /* ignore */ }
+    },
+
+    disconnectGithub: async (userId: string) => {
+        try {
+            await fetch(`${API_BASE}/api/github/disconnect/${userId}`, { method: 'DELETE' });
+            set({ githubConnected: false });
         } catch { /* ignore */ }
     },
 
@@ -450,11 +507,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
                     }));
 
                     // Update active project if it's the one that changed
-                    // Update active project if it's the one that changed
                     if (current.project?.id === updatedProject.id) {
                         set({ project: { ...current.project, ...updatedProject } });
 
-                        // FIX: Check the nested sync_state.status instead of the root status
+                        // Check the nested sync_state.status instead of the root status
                         const newStatus = updatedProject.sync_state?.status;
                         const oldStatus = current.project?.sync_state?.status;
 
