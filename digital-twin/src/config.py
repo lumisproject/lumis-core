@@ -5,9 +5,13 @@ load_dotenv()
 
 class Config:
     # -- Frontend & Backend URLs --
-    backend_url = os.getenv("BACKEND_URL", "http://localhost:5000")
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:8080")
+    # Dynamically load URLs (Your work) but assign to both Upper and Lowercase (Teammate's work)
+    BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:5000")
+    FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8080")
     
+    backend_url = BACKEND_URL
+    frontend_url = FRONTEND_URL
+
     # Default LLM settings
     DEFAULT_LLM_PROVIDER = os.getenv("DEFAULT_LLM_PROVIDER", "openrouter")
     DEFAULT_LLM_MODEL = os.getenv("MODEL", "stepfun/step-3.5-flash:free")
@@ -24,8 +28,8 @@ class Config:
     # Jira settings
     JIRA_CLIENT_ID = os.getenv("JIRA_CLIENT_ID")
     JIRA_CLIENT_SECRET = os.getenv("JIRA_CLIENT_SECRET")
-    JIRA_REDIRECT_URI = os.getenv("JIRA_REDIRECT_URI", backend_url+"/auth/jira/callback")
-    JIRA_REDIRECT=os.getenv("JIRA_REDIRECT", frontend_url+"/app/settings")
+    JIRA_REDIRECT_URI = os.getenv("JIRA_REDIRECT_URI", BACKEND_URL+"/auth/jira/callback")
+    JIRA_REDIRECT = os.getenv("JIRA_REDIRECT", FRONTEND_URL+"/app/settings")
     
     JIRA_AUTH_URL = "https://auth.atlassian.com/authorize"
     JIRA_TOKEN_URL = "https://auth.atlassian.com/oauth/token"
@@ -53,7 +57,10 @@ class Config:
     # Billing settings
     STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
     STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
-    FRONTEND_URL = os.getenv("FRONTEND_URL", frontend_url)
 
     # Redis settings
     REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+    # Gmail settings (Your teammate's new additions)
+    GMAIL_USER = os.getenv("GMAIL_USER")
+    GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")

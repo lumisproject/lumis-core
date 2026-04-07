@@ -27,6 +27,7 @@ slowapi
 uvicorn
 pydantic
 python-multipart
+email-validator
 
 # Database & HTTP
 supabase
