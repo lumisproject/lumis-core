@@ -36,6 +36,13 @@ CREATE TABLE public.draft_tickets (
   CONSTRAINT draft_tickets_pkey PRIMARY KEY (id),
   CONSTRAINT draft_tickets_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id)
 );
+CREATE TABLE public.github_tokens (
+  user_id uuid NOT NULL,
+  access_token text NOT NULL,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT github_tokens_pkey PRIMARY KEY (user_id),
+  CONSTRAINT github_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
 CREATE TABLE public.graph_edges (
   id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
   project_id uuid NOT NULL,

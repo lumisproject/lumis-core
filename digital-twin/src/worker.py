@@ -26,7 +26,6 @@ lc_embedder.embed_query("warmup")
 def run_ingestion_pipeline_task(repo_url: str, project_id: str, user_config: dict):
     """Offloads the heavy Git cloning and embedding to a background worker."""
     logger.info(f"Worker picking up ingestion for {project_id}")
-
     
     def progress_cb(t, m):
         update_progress(project_id, t, m)
@@ -36,13 +35,13 @@ def run_ingestion_pipeline_task(repo_url: str, project_id: str, user_config: dic
         asyncio.run(ingest_repo(repo_url=repo_url, project_id=project_id, progress_callback=progress_cb, user_config=user_config))
         progress_cb("DONE", "Sync and analysis complete.")
     except Exception as e:
-        logger.error(f"Ingestion Pipeline Error: {e}")
+        logger.error(f"Ingestion Pipeline Error: {e}", exc_info=True)
         progress_cb("Error", f"Pipeline failed: {str(e)}")
+        raise e  # FORCE Celery to crash and mark the task as FAILED
 
 @celery_app.task(name="run_risk_analysis")
 def run_risk_analysis_task(project_id: str, user_config: dict):
     """Offloads AST parsing and Graph-RAG risk checks."""
-
     
     def progress_cb(t, m):
         print(f"[{t}] {m}")
@@ -57,5 +56,6 @@ def run_risk_analysis_task(project_id: str, user_config: dict):
         
         progress_cb("READY", "Neural Risk Analysis Complete.")
     except Exception as e:
-        logger.error(f"Risk Analysis Error: {e}")
+        logger.error(f"Risk Analysis Error: {e}", exc_info=True)
         progress_cb("Error", f"Risk analysis failed: {str(e)}")
+        raise e
