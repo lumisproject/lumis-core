@@ -250,7 +250,7 @@ const Dashboard = () => {
                     style={{ backgroundImage: 'radial-gradient(circle, #888 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
             </div>
 
-            <header className="flex items-center justify-between gap-4 py-4 shrink-0 border-b border-black/5 dark:border-white/5 relative z-10">
+            <header className="flex items-center justify-between gap-4 py-4 shrink-0 border-b border-black/5 dark:border-white/5 relative z-20">
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-2">
@@ -526,7 +526,12 @@ const Dashboard = () => {
                     {/* PROJECT MANAGEMENT & ACTION COLUMN */}
                     <div className="flex flex-col gap-4 h-full">
                         {/* SYSTEM BRAIN - NEURAL QUERY INTERFACE */}
-                        <div className="relative p-8 rounded-[2.5rem] bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 overflow-hidden group shadow-2xl flex-grow flex flex-col justify-center min-h-[200px] border border-white/5">
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            whileHover={{ y: -6, scale: 1.01 }}
+                            className="relative p-8 rounded-[2.5rem] bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 overflow-hidden group shadow-2xl flex-grow flex flex-col justify-center min-h-[200px] border border-white/5 transition-all duration-500"
+                        >
                             {/* Decorative Background Binary - High Clarity Adjust */}
                             <div className="absolute right-8 top-1/2 -translate-y-1/2 select-none pointer-events-none opacity-[0.07]">
                                 <div className="text-[120px] font-black leading-none tracking-tighter text-white/50 flex flex-col items-center">
@@ -570,7 +575,7 @@ const Dashboard = () => {
                                     </Link>
                                 </div>
                             </div>
-                        </div>
+                        </motion.div>
 
                         <IntelligencePanel
                             title="Project Management"

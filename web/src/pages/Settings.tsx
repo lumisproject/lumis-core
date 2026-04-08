@@ -34,7 +34,7 @@ const SettingSection = ({ title, description, children, icon: Icon, id, highligh
     <div 
         id={id} 
         className={cn(
-            "grid grid-cols-1 gap-12 py-12 lg:grid-cols-3 border-b border-black/5 dark:border-white/5 last:border-0 transition-all duration-1000 relative overflow-hidden",
+            "grid grid-cols-1 gap-12 py-12 lg:grid-cols-3 border-b border-black/5 dark:border-white/5 last:border-0 transition-all duration-1000 relative",
             highlight && "bg-primary/5 ring-1 ring-primary/20 scale-[1.02] z-30 rounded-[3rem] px-8 -mx-8 shadow-2xl"
         )}
     >
@@ -64,7 +64,7 @@ const ModernSelect = ({ label, icon: Icon, value, onChange, options, placeholder
     const [open, setOpen] = useState(false);
 
     return (
-        <div className="space-y-2 relative">
+        <div className={cn("space-y-2 relative", open && "z-[100]")}>
             {label && <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">{label}</label>}
             <div
                 onClick={() => !loading && setOpen(!open)}
@@ -91,7 +91,7 @@ const ModernSelect = ({ label, icon: Icon, value, onChange, options, placeholder
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: 5, scale: 0.98 }}
                             transition={{ duration: 0.15 }}
-                            className="absolute left-0 right-0 top-[calc(100%+8px)] z-[70] max-h-[320px] overflow-y-auto rounded-2xl border border-black/10 bg-card p-2 shadow-2xl dark:border-white/10"
+                            className="absolute left-0 right-0 top-[calc(100%+8px)] z-[100] max-h-[320px] overflow-y-auto rounded-2xl border border-black/10 bg-[#FFFFFF] p-2 shadow-2xl dark:border-white/10 dark:bg-[#0F0F0F] opacity-100"
                         >
                             {options.length === 0 ? (
                                 <div className="p-4 text-center text-xs font-medium text-muted-foreground">No records found. Link account first.</div>
@@ -358,7 +358,7 @@ const Settings = () => {
                         
                         {/* GITHUB CARD (Global) */}
                         <div className={cn(
-                            "relative overflow-hidden flex flex-col justify-between p-6 rounded-[2rem] border transition-all duration-500",
+                            "relative flex flex-col justify-between p-6 rounded-[2rem] border transition-all duration-500",
                             githubConnected 
                                 ? "bg-green-500/5 border-green-500/20 shadow-[inset_0_0_20px_rgba(34,197,94,0.05)]" 
                                 : "bg-accent/10 border-black/5 dark:border-white/5"
@@ -408,7 +408,7 @@ const Settings = () => {
 
                         {/* JIRA CARD (Project Specific) */}
                         <div className={cn(
-                            "relative overflow-hidden flex flex-col justify-between p-6 rounded-[2rem] border transition-all duration-500",
+                            "relative flex flex-col justify-between p-6 rounded-[2rem] border transition-all duration-500",
                             jiraConnected 
                                 ? "bg-blue-500/5 border-blue-500/20 shadow-[inset_0_0_20px_rgba(59,130,246,0.05)]" 
                                 : "bg-accent/10 border-black/5 dark:border-white/5"
@@ -452,7 +452,7 @@ const Settings = () => {
                                 )}
                             </div>
 
-                            <div className="mt-8 relative z-10">
+                            <div className="mt-8 relative">
                                 {jiraConnected ? (
                                     <button onClick={() => user?.id && disconnectJira(user.id)} className="w-full flex items-center justify-center h-10 rounded-xl bg-destructive/10 text-destructive text-[10px] font-black uppercase tracking-widest hover:bg-destructive hover:text-white transition-all">
                                         Disconnect Node
@@ -466,7 +466,7 @@ const Settings = () => {
                         </div>
 
                         {/* NOTION CARD (Under Construction) */}
-                        <div className="relative overflow-hidden flex flex-col justify-between p-6 rounded-[2rem] border border-black/5 dark:border-white/5 bg-accent/5 opacity-70 grayscale pointer-events-none">
+                        <div className="relative flex flex-col justify-between p-6 rounded-[2rem] border border-black/5 dark:border-white/5 bg-accent/5 opacity-70 grayscale pointer-events-none">
                             <div className="absolute inset-0 z-20 bg-background/40 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
                                 <div className="px-4 py-1.5 bg-yellow-500 text-black text-[9px] font-black uppercase tracking-[0.2em] rounded-full mb-3 shadow-xl shadow-yellow-500/20">
                                     In Development
