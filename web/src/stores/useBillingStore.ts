@@ -11,7 +11,7 @@ interface BillingState {
 
 export const useBillingStore = create<BillingState>((set) => ({
     tier: 'free',
-    limits: { queries: 50, projects: 1, storage_gb: 1 },
+    limits: { queries: 50, projects: 3, storage_gb: 1 },
     usage: { query_count: 0, project_count: 0 },
     loading: true,
     fetchBilling: async () => {

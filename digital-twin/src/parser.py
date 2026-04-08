@@ -101,6 +101,7 @@ class AdvancedCodeParser:
         Returns a list of logical blocks (Classes, Functions).
         """
         if not self.filter_process(file_path):
+            print(f"⚠️ Ignored by filter: {file_path}")
             return []
 
         # 1. Read the file content first so both markdown and code parsers can use it
@@ -132,10 +133,12 @@ class AdvancedCodeParser:
         # 3. Proceed with standard Tree-sitter language check for source code
         lang = self._get_language(file_path)
         if not lang:
+            print(f"⚠️ Skipped (Unknown Language): {file_path}") # <--- ADD THIS
             return []
 
         parser = get_parser(lang)
         if not parser:
+            print(f"❌ CRITICAL: Tree-sitter failed to load parser for {lang} in {file_path}!") # <--- ADD THIS
             return []
 
         try:
@@ -149,6 +152,7 @@ class AdvancedCodeParser:
             
             # Walk Tree for Definitions
             self._visit_node(root, content, blocks, file_path, lang, parent_scope=None)
+            print(f"✅ Extracted {len(blocks)} architectural blocks from {file_path}") # <--- ADD THIS
             
             # Attach Context
             for block in blocks:

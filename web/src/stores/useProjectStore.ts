@@ -57,7 +57,17 @@ interface ProjectState {
     error: string | null;
     jiraProjects: { key: string, name: string }[];
     notionProjects: { id: string, name: string }[];
-    githubRepos: { id: number, name: string, full_name: string, url: string }[];
+    githubRepos: { 
+        id: number; 
+        name: string; 
+        full_name: string; 
+        url: string;
+        description?: string;
+        stargazers_count?: number;
+        private?: boolean;
+        language?: string;
+        updated_at: string;
+    }[];
     
     fetchProjects: (userId: string) => Promise<void>;
     fetchJiraProjects: (userId: string) => Promise<void>;

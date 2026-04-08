@@ -146,7 +146,6 @@ async def setup_webhook(request: Request):
     import secrets
     from src.db_client import supabase
     webhook_secret = secrets.token_hex(20)
-    supabase.table("projects").update({"webhook_secret": webhook_secret}).eq("id", project_id).execute()
     
     hook_payload = {
         "name": "web",
@@ -164,8 +163,9 @@ async def setup_webhook(request: Request):
     print(f"   ↳ GitHub Response Code: {res.status_code}")
     print(f"   ↳ GitHub Message: {res.text}")
     
-    # --- UPDATED: Graceful Degradation ---
+    # --- UPDATED: Conditional Persistence ---
     if res.status_code in [200, 201]:
+        supabase.table("projects").update({"webhook_secret": webhook_secret}).eq("id", project_id).execute()
         print("✅ SUCCESS: Webhook created successfully!\n")
         return {"status": "created", "message": "Webhook successfully created"}
     else:
