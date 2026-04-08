@@ -203,7 +203,6 @@ const Dashboard = () => {
         }
     };
     
-    // Find velocity risk if it exists
     const velocityRisk = risks.find(r => r.riskType === 'Predictive Delay');
 
     const handleCopy = () => {
@@ -481,7 +480,7 @@ const Dashboard = () => {
                                                     <div className="flex items-center gap-2 bg-black/20 rounded-lg p-2 border border-white/5">
                                                         <code className="text-[8px] font-mono text-primary flex-1 truncate">{webhookUrl}</code>
                                                         <button onClick={handleCopy} className="p-1.5 hover:bg-white/10 rounded-md transition-colors">
-                                                            <Copy className="h-3 w-3 text-primary" />
+                                                            {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3 text-primary" />}
                                                         </button>
                                                     </div>
                                                 </div>
@@ -490,7 +489,7 @@ const Dashboard = () => {
                                                     <div className="flex items-center gap-2 bg-black/20 rounded-lg p-2 border border-white/5">
                                                         <code className="text-[8px] font-mono text-primary flex-1 truncate">Temporary Manual Secret Provided below</code>
                                                         <button onClick={handleCopySecret} className="p-1.5 hover:bg-white/10 rounded-md transition-colors">
-                                                            <Copy className="h-3 w-3 text-primary" />
+                                                            {copiedSecret ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3 text-primary" />}
                                                         </button>
                                                     </div>
                                                 </div>
