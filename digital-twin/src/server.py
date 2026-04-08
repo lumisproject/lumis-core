@@ -6,6 +6,8 @@ import redis
 from typing import Dict, Optional
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from src.limiter import limiter
 from slowapi import _rate_limit_exceeded_handler
@@ -20,6 +22,7 @@ from src.stripe_router import stripe_router
 from src.billing_middleware import verify_chat_limit, get_user_tier_and_usage
 from src.email_intake import email_intake_router
 from src.inbox_listener import start_inbox_listener
+from src.cache import get_cached_json, set_cached_json, invalidate_cache
 
 # --- CONFIGURATION ---
 logging.basicConfig(level=logging.INFO)
@@ -46,6 +49,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Lumis Brain API", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# --- NEW: PERFORMANCE OPTIMIZATION ---
+# Compress all responses larger than 1KB (Massively speeds up the Architecture Graph transfer)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Allow Frontend access
 app.add_middleware(
@@ -79,7 +86,7 @@ class ChatRequest(BaseModel):
     mode: str = "single-turn"
     reasoning: bool = False
     user_config: Optional[Dict] = None
-    session_id: Optional[str] = None  # NEW: Tracks active chat history
+    session_id: Optional[str] = None
 
 class IngestRequest(BaseModel):
     user_id: str
@@ -97,10 +104,11 @@ def get_repo_name_from_url(repo_url: str) -> str:
             break
     return name
 
-def fetch_commits(repo_full_name: str, user_id: str = None):
+# NEW: Made asynchronous using httpx to prevent blocking the event loop
+async def fetch_commits(repo_full_name: str, user_id: str = None):
     """Return the most recent commits for the repository as a normalized list."""
-    import requests
-    from src.github_auth import get_valid_github_token # Import token fetcher
+    import httpx
+    from src.github_auth import get_valid_github_token 
 
     url = f"https://api.github.com/repos/{repo_full_name}/commits"
     headers = {"Accept": "application/vnd.github.v3+json"}
@@ -118,17 +126,19 @@ def fetch_commits(repo_full_name: str, user_id: str = None):
         headers["Authorization"] = f"Bearer {token}"
         
     try:
-        resp = requests.get(url, headers=headers, params={"per_page": 10})
-        resp.raise_for_status()
-        commits_data = resp.json()
-        
-        formatted_commits = []
-        for c in commits_data:
-            formatted_commits.append({
-                "sha": c.get("sha"),
-                "message": c.get("commit", {}).get("message", "")
-            })
-        return formatted_commits
+        # ASYNC FETCH: Allows other users to use the API while waiting for GitHub
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, headers=headers, params={"per_page": 10})
+            resp.raise_for_status()
+            commits_data = resp.json()
+            
+            formatted_commits = []
+            for c in commits_data:
+                formatted_commits.append({
+                    "sha": c.get("sha"),
+                    "message": c.get("commit", {}).get("message", "")
+                })
+            return formatted_commits
     except Exception as e:
         logger.error(f"Failed to fetch commits for {repo_full_name}. Error: {e}")
         return []
@@ -136,7 +146,6 @@ def fetch_commits(repo_full_name: str, user_id: str = None):
 def update_progress(project_id, task, message):
     import json
 
-    # Fetch current state from Redis instead of RAM
     state_str = redis_client.get(f"sync_state:{project_id}")
     state = json.loads(state_str) if state_str else {"status": "processing", "logs": [], "step": "Starting"}
 
@@ -156,16 +165,17 @@ def update_progress(project_id, task, message):
     if message:
         state["logs"].append(f"[{task}] {message}")
 
-    # Save back to Redis (expires after 24 hours to save memory)
     redis_client.setex(f"sync_state:{project_id}", 86400, json.dumps(state))
+    
+    # Broadcast the update instantly via Redis Pub/Sub
+    redis_client.publish(f"sync_stream:{project_id}", json.dumps(state))
 
-    # Persist critical status changes to the DB for real-time frontend updates
     try:
         supabase.table("projects").update({
             "sync_state": {
                 "status": state["status"],
                 "step": state["step"],
-                "logs": state["logs"][-20:] # Show last 20 logs
+                "logs": state["logs"][-20:] 
             }
         }).eq("id", project_id).execute()
     except Exception as db_err:
@@ -202,14 +212,12 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
             
         proj_data = proj_row.data[0] if isinstance(proj_row.data, list) else proj_row.data
         
-        # Security: Ensure URL user_id matches project owner
         if str(proj_data.get("user_id")) != user_id:
             logger.warning(f"Webhook user mismatch: expected {proj_data.get('user_id')}, got {user_id}")
             raise HTTPException(status_code=403, detail="Forbidden: User ID mismatch")
 
         project_secret = proj_data.get("webhook_secret")
 
-        # 3. VERIFY SIGNATURE (if secret is configured)
         if project_secret:
             x_hub_signature = request.headers.get("x-hub-signature-256")
             if not x_hub_signature:
@@ -223,7 +231,6 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
                 logger.warning(f"Webhook signature mismatch for project {project_id}")
                 raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
-        # 4. Parse JSON after verification
         try:
             payload = json.loads(raw_body)
         except json.JSONDecodeError:
@@ -240,7 +247,6 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
             logger.info(f"Webhook Ignored: {reason}")
             return {"status": "ignored", "reason": reason}
 
-        # 5. Extract logic configs
         global_config = get_global_user_config(user_id)
         global_config["user_id"] = user_id
         
@@ -267,7 +273,6 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
             f"GitHub Push detected ({new_sha[:7]}). Dispatching to Worker..."
         )
 
-        # Dispatch heavy indexing to Celery worker!
         run_ingestion_pipeline_task.delay(repo_url, project_id, global_config)
 
         raw_commits = payload.get("commits", [])
@@ -280,7 +285,6 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
                 "message": c.get("message", "")
             })
 
-        # Agent instantiated on the fly for check_taskes
         agent = LumisAgent(project_id=project_id, max_steps=3, user_config=global_config, mode="single-turn")
 
         check_taskes(
@@ -322,10 +326,8 @@ async def chat_endpoint(req: ChatRequest, request: Request, tier_data: dict = De
         global_config = get_global_user_config(user_id)
         global_config["user_id"] = user_id
         
-        # Enforce tier-based capability restrictions
         limits = tier_data.get("limits", {})
         
-        # If reasoning is requested but not allowed, override to False
         is_reasoning_allowed = limits.get("reasoning", False)
         if req.reasoning and not is_reasoning_allowed:
             logger.warning(f"Reasoning requested by Free user {user_id}. Restricting.")
@@ -333,7 +335,6 @@ async def chat_endpoint(req: ChatRequest, request: Request, tier_data: dict = De
         else:
             global_config["reasoning_enabled"] = req.reasoning
 
-        # If multi-turn(memory) is requested but not allowed, override to single-turn
         is_memory_allowed = limits.get("memory", False)
         if req.mode == "multi-turn" and not is_memory_allowed:
             logger.warning(f"Multi-turn requested by Free user {user_id}. Restricting to single-turn.")
@@ -341,10 +342,8 @@ async def chat_endpoint(req: ChatRequest, request: Request, tier_data: dict = De
         else:
             global_config["mode"] = req.mode
 
-
         logger.info(f"✨ Initializing stateless agent for project {req.project_id}")
         
-        # Completely stateless. Creates a new agent, tying it to a session if provided
         agent = LumisAgent(project_id=req.project_id, user_config=global_config, session_id=req.session_id)
 
         async def event_generator():
@@ -352,7 +351,6 @@ async def chat_endpoint(req: ChatRequest, request: Request, tier_data: dict = De
                 async for event_str in agent.ask_stream(req.query):
                     yield f"data: {event_str}\n\n"
                     
-                # The agent automatically updates the DB inside its logic. We just return the session ID.
                 yield f"data: {json.dumps({'type': 'done', 'session_id': agent.session_id})}\n\n"
                 
                 increment_query_usage(tier_data["user_id"])
@@ -441,7 +439,9 @@ async def start_ingest(req: IngestRequest, request: Request, background_tasks: B
         global_config["user_id"] = req.user_id
         
         repo_name = get_repo_name_from_url(req.repo_url)
-        all_commits = fetch_commits(repo_name, req.user_id)
+        
+        # ASYNC AWAIT ADDED HERE
+        all_commits = await fetch_commits(repo_name, req.user_id)
 
         if is_existing_project:
             project_data = existing.data[0]
@@ -479,10 +479,8 @@ async def start_ingest(req: IngestRequest, request: Request, background_tasks: B
             jira_proj = None
             notion_proj = None
 
-        # Seed Redis state immediately
         redis_client.setex(f"sync_state:{project_id}", 86400, json.dumps({"status": "starting", "logs": ["Request received..."], "step": "Init"}))
 
-        # Offload to Celery Background Worker
         run_ingestion_pipeline_task.delay(req.repo_url, project_id, global_config)
 
         agent = LumisAgent(project_id=project_id, max_steps=3, user_config=global_config)
@@ -515,6 +513,48 @@ async def get_ingest_status(project_id: str):
         return json.loads(state_str)
     return {"status": "idle", "logs": [], "step": "Ready"}
 
+@app.get("/api/ingest/status/{project_id}/stream")
+async def stream_ingest_status(project_id: str, request: Request):
+    import json
+    import asyncio
+
+    async def event_generator():
+        # 1. Send the current state immediately on connection so the UI doesn't blink
+        state_str = redis_client.get(f"sync_state:{project_id}")
+        if state_str:
+            yield f"data: {state_str}\n\n"
+        
+        # 2. Subscribe to the real-time Redis channel
+        pubsub = redis_client.pubsub()
+        pubsub.subscribe(f"sync_stream:{project_id}")
+        
+        try:
+            while True:
+                # Disconnect gracefully if the user closes the tab
+                if await request.is_disconnected():
+                    break
+                    
+                # Non-blocking check for new messages
+                message = pubsub.get_message(ignore_subscribe_messages=True)
+                if message and message.get("type") == "message":
+                    data = message["data"]
+                    
+                    # Yield the SSE formatted string
+                    yield f"data: {data}\n\n"
+                    
+                    # Cut the stream if we are finished or hit an error
+                    parsed = json.loads(data)
+                    if parsed.get("status") in ["ready", "error"]:
+                        break
+                        
+                # Sleep briefly to yield the event loop (keeps FastAPI lightning fast)
+                await asyncio.sleep(0.5)
+        finally:
+            pubsub.unsubscribe(f"sync_stream:{project_id}")
+            pubsub.close()
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 # --- NEW: CHAT HISTORY ENDPOINTS ---
 @app.get("/api/chat/sessions/{project_id}")
 @limiter.limit("20/minute")
@@ -532,7 +572,6 @@ async def get_chat_messages(session_id: str, current_user = Depends(get_current_
 @app.delete("/api/chat/sessions/{session_id}")
 async def delete_chat_session(session_id: str, current_user = Depends(get_current_user)):
     """Deletes a chat session and its associated messages."""
-    # First verify ownership
     owner_check = supabase.table("chat_sessions").select("user_id").eq("id", session_id).limit(1).execute()
     if not owner_check or not owner_check.data:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -540,8 +579,6 @@ async def delete_chat_session(session_id: str, current_user = Depends(get_curren
     if str(owner_check.data[0]["user_id"]) != str(current_user.id):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    # Cascading delete is handled by DB in common setups, but let's be explicit if needed
-    # Actually Supabase/Supabase-py delete executes immediately.
     supabase.table("chat_messages").delete().eq("session_id", session_id).execute()
     supabase.table("chat_sessions").delete().eq("id", session_id).execute()
     
@@ -588,11 +625,13 @@ async def get_user_jira_projects(user_id: str):
     if not access_token:
         raise HTTPException(status_code=401, detail="Jira not connected")
         
-    resources = get_accessible_resources(access_token)
+    resources = await get_accessible_resources(access_token)
     if not resources: return []
         
     cloud_id = resources[0]["id"]
-    projects = get_projects(cloud_id, access_token)
+    
+    projects = await get_projects(cloud_id, access_token)
+    
     return [{"key": p["key"], "name": p["name"]} for p in projects]
 
 @app.get("/api/settings/{user_id}")
@@ -723,7 +762,7 @@ async def get_user_notion_databases(user_id: str):
     if not access_token:
         raise HTTPException(status_code=401, detail="Notion not connected")
         
-    databases = get_accessible_databases(access_token)
+    databases = await get_accessible_databases(access_token)
     return databases
 
 @app.post("/api/projects/{project_id}/jira-mapping")
@@ -774,6 +813,12 @@ async def update_notion_mapping(
 @app.get("/api/projects/{project_id}/board")
 async def get_project_board(project_id: str, tool: str = "jira", current_user = Depends(get_current_user)):
     """Fetches the synchronized Kanban board data."""
+    # INSTANT CACHE RETURN
+    cache_key = f"board:{project_id}:{tool}"
+    cached_board = get_cached_json(cache_key)
+    if cached_board:
+        return cached_board
+
     from src.jira_client import get_project_statuses, get_board_issues
     from src.jira_auth import get_valid_token
     # Import Notion auth and client functions
@@ -781,7 +826,7 @@ async def get_project_board(project_id: str, tool: str = "jira", current_user = 
     from src.notion_client import get_notion_board_data
     
     try:
-        # 1. Get project info (ADDED notion_project_id to the select statement)
+        # 1. Get project info
         res = supabase.table("projects").select("user_id, jira_project_id, notion_project_id").eq("id", project_id).limit(1).execute()
         if not res.data: raise HTTPException(status_code=404, detail="Project not found")
         
@@ -789,6 +834,8 @@ async def get_project_board(project_id: str, tool: str = "jira", current_user = 
         if str(project["user_id"]) != str(current_user.id):
             raise HTTPException(status_code=403, detail="Forbidden")
         
+        result_data = {"columns": [], "tickets": []}
+
         # --- JIRA INTEGRATION ---
         if tool == "jira" and project.get("jira_project_id"):
             access_token = get_valid_token(project["user_id"])
@@ -796,14 +843,13 @@ async def get_project_board(project_id: str, tool: str = "jira", current_user = 
                 raise HTTPException(status_code=401, detail="Jira authentication expired or missing.")
                 
             from src.jira_client import get_accessible_resources
-            resources = get_accessible_resources(access_token)
+            resources = await get_accessible_resources(access_token)
             cloud_id = resources[0]["id"]
             
-            # Fetch Dynamic Columns & Tickets
-            columns = get_project_statuses(cloud_id, project["jira_project_id"], access_token)
-            tickets = get_board_issues(cloud_id, project["jira_project_id"], access_token)
+            columns = await get_project_statuses(cloud_id, project["jira_project_id"], access_token)
+            tickets = await get_board_issues(cloud_id, project["jira_project_id"], access_token)
             
-            return {"columns": columns, "tickets": tickets}
+            result_data = {"columns": columns, "tickets": tickets}
             
         # --- NOTION INTEGRATION ---
         elif tool == "notion" and project.get("notion_project_id"):
@@ -811,11 +857,13 @@ async def get_project_board(project_id: str, tool: str = "jira", current_user = 
             if not access_token:
                 raise HTTPException(status_code=401, detail="Notion authentication expired or missing.")
                 
-            # Fetch Dynamic Columns & Tickets using your new function
-            board_data = get_notion_board_data(project["notion_project_id"], access_token)
-            return board_data
+            board_data = await get_notion_board_data(project["notion_project_id"], access_token)
+            result_data = board_data
             
-        return {"columns": [], "tickets": []}
+        # CACHE THE RESULT
+        set_cached_json(cache_key, result_data, ttl=300)
+        return result_data
+        
     except Exception as e:
         logger.error(f"Board fetch error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -838,14 +886,15 @@ async def update_ticket_status(project_id: str, ticket_id: str, payload: dict, t
         if tool == "jira":
             access_token = get_valid_token(user_id)
             from src.jira_client import get_accessible_resources
-            cloud_id = get_accessible_resources(access_token)[0]["id"]
+            resources = await get_accessible_resources(access_token)
+            cloud_id = resources[0]["id"]
             
             try:
-                # This will raise an exception if the Jira admin blocked this specific transition
-                transition_issue_to_status(cloud_id, ticket_id, target_status_id, access_token)
+                await transition_issue_to_status(cloud_id, ticket_id, target_status_id, access_token)
             except Exception as transition_error:
                 raise HTTPException(status_code=400, detail=str(transition_error))
                 
+        invalidate_cache(f"board:{project_id}:{tool}")
         return {"status": "success"}
     except HTTPException:
         raise
@@ -872,32 +921,31 @@ async def create_board_ticket(project_id: str, payload: dict, tool: str = "jira"
                 raise HTTPException(status_code=401, detail="Jira authentication expired or missing.")
                 
             from src.jira_client import get_accessible_resources, create_issue, transition_issue_to_status
-            cloud_id = get_accessible_resources(access_token)[0]["id"]
+            resources = await get_accessible_resources(access_token)
+            cloud_id = resources[0]["id"]
             project_key = project["jira_project_id"]
             
             summary = payload.get("title", "New Task")
             description = payload.get("description", "")
             target_status_id = payload.get("status")
-            assignee_id = payload.get("assigneeId") # NEW: Get assignee from frontend
+            assignee_id = payload.get("assigneeId")
             
-            # 1. Create the issue in Jira
-            new_issue = create_issue(cloud_id, project_key, summary, description, access_token)
+            new_issue = await create_issue(cloud_id, project_key, summary, description, access_token)
             
-            # 2. Move to column if needed
             if target_status_id:
                 try:
                     transition_issue_to_status(cloud_id, new_issue["id"], target_status_id, access_token)
                 except Exception as e:
                     logger.warning(f"Created ticket but couldn't move to target column: {e}")
                     
-            # 3. Assign to user if selected
             if assignee_id:
                 try:
                     from src.jira_client import assign_issue
-                    assign_issue(cloud_id, new_issue["key"], assignee_id, access_token)
+                    await assign_issue(cloud_id, new_issue["key"], assignee_id, access_token)
                 except Exception as e:
                     logger.warning(f"Created ticket but couldn't assign user: {e}")
             
+            invalidate_cache(f"board:{project_id}:{tool}")
             return {"status": "success", "ticket_id": new_issue["id"], "ticket_key": new_issue["key"]}
         else:
             raise HTTPException(status_code=400, detail="Tool not supported or project not mapped.")
@@ -922,15 +970,44 @@ async def update_ticket_description(project_id: str, ticket_id: str, payload: di
             if not access_token: raise HTTPException(status_code=401, detail="Jira authentication missing.")
                 
             from src.jira_client import get_accessible_resources, update_issue_description
-            cloud_id = get_accessible_resources(access_token)[0]["id"]
+            resources = await get_accessible_resources(access_token)
+            cloud_id = resources[0]["id"]
             
             description = payload.get("description", "")
-            update_issue_description(cloud_id, ticket_id, description, access_token)
+            await update_issue_description(cloud_id, ticket_id, description, access_token)
             
+            invalidate_cache(f"board:{project_id}:{tool}")
             return {"status": "success"}
         raise HTTPException(status_code=400, detail="Tool not supported.")
     except Exception as e:
         logger.error(f"Failed to update description: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/projects/{project_id}/board/tickets/{ticket_id}/title")
+async def update_ticket_title(project_id: str, ticket_id: str, payload: dict, tool: str = "jira"):
+    """Updates the summary/title of a ticket."""
+    try:
+        res = supabase.table("projects").select("user_id, jira_project_id").eq("id", project_id).limit(1).execute()
+        if not res.data: raise HTTPException(status_code=404, detail="Project not found")
+        
+        project = res.data[0]
+        if tool == "jira" and project.get("jira_project_id"):
+            from src.jira_auth import get_valid_token
+            access_token = get_valid_token(project["user_id"])
+            if not access_token: raise HTTPException(status_code=401, detail="Jira authentication missing.")
+                
+            from src.jira_client import get_accessible_resources, update_issue_title
+            resources = await get_accessible_resources(access_token)
+            cloud_id = resources[0]["id"]
+            
+            title = payload.get("title", "")
+            await update_issue_title(cloud_id, ticket_id, title, access_token)
+            
+            invalidate_cache(f"board:{project_id}:{tool}")
+            return {"status": "success"}
+        raise HTTPException(status_code=400, detail="Tool not supported.")
+    except Exception as e:
+        logger.error(f"Failed to update title: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/projects/{project_id}/board/tickets/{ticket_id}/comments")
@@ -949,13 +1026,15 @@ async def add_ticket_comment(project_id: str, ticket_id: str, payload: dict, too
             if not access_token: raise HTTPException(status_code=401, detail="Jira authentication missing.")
                 
             from src.jira_client import get_accessible_resources, add_comment
-            cloud_id = get_accessible_resources(access_token)[0]["id"]
+            resources = await get_accessible_resources(access_token)
+            cloud_id = resources[0]["id"]
             
             text = payload.get("text", "")
             if not text: raise HTTPException(status_code=400, detail="Comment text cannot be empty")
             
-            add_comment(cloud_id, ticket_id, text, access_token)
+            await add_comment(cloud_id, ticket_id, text, access_token)
             
+            invalidate_cache(f"board:{project_id}:{tool}")
             return {"status": "success"}
         else:
             raise HTTPException(status_code=400, detail="Tool not supported or project not mapped.")
@@ -979,10 +1058,12 @@ async def delete_ticket_comment(project_id: str, ticket_id: str, comment_id: str
             if not access_token: raise HTTPException(status_code=401, detail="Jira authentication missing.")
                 
             from src.jira_client import get_accessible_resources, delete_comment
-            cloud_id = get_accessible_resources(access_token)[0]["id"]
+            resources = await get_accessible_resources(access_token)
+            cloud_id = resources[0]["id"]
             
-            delete_comment(cloud_id, ticket_id, comment_id, access_token)
+            await delete_comment(cloud_id, ticket_id, comment_id, access_token)
             
+            invalidate_cache(f"board:{project_id}:{tool}")
             return {"status": "success"}
         else:
             raise HTTPException(status_code=400, detail="Tool not supported or project not mapped.")
@@ -1005,9 +1086,10 @@ async def get_team_members(project_id: str, tool: str = "jira"):
             if not access_token: raise HTTPException(status_code=401, detail="Jira authentication missing.")
                 
             from src.jira_client import get_accessible_resources, get_assignable_users
-            cloud_id = get_accessible_resources(access_token)[0]["id"]
+            resources = await get_accessible_resources(access_token)
+            cloud_id = resources[0]["id"]
             
-            users = get_assignable_users(cloud_id, project["jira_project_id"], access_token)
+            users = await get_assignable_users(cloud_id, project["jira_project_id"], access_token)
             return {"users": users}
         return {"users": []}
     except Exception as e:
@@ -1030,11 +1112,13 @@ async def update_ticket_assignee(project_id: str, ticket_id: str, payload: dict,
             if not access_token: raise HTTPException(status_code=401, detail="Jira authentication missing.")
                 
             from src.jira_client import get_accessible_resources, assign_issue
-            cloud_id = get_accessible_resources(access_token)[0]["id"]
+            resources = await get_accessible_resources(access_token)
+            cloud_id = resources[0]["id"]
             
-            account_id = payload.get("accountId") # Can be empty string to unassign
+            account_id = payload.get("accountId")
             assign_issue(cloud_id, ticket_id, account_id, access_token)
             
+            invalidate_cache(f"board:{project_id}:{tool}")
             return {"status": "success"}
         raise HTTPException(status_code=400, detail="Tool not supported.")
     except Exception as e:
@@ -1056,10 +1140,12 @@ async def delete_board_ticket(project_id: str, ticket_id: str, tool: str = "jira
             if not access_token: raise HTTPException(status_code=401, detail="Jira authentication missing.")
                 
             from src.jira_client import get_accessible_resources, delete_issue
-            cloud_id = get_accessible_resources(access_token)[0]["id"]
+            resources = await get_accessible_resources(access_token)
+            cloud_id = resources[0]["id"]
             
-            delete_issue(cloud_id, ticket_id, access_token)
+            await delete_issue(cloud_id, ticket_id, access_token)
             
+            invalidate_cache(f"board:{project_id}:{tool}")
             return {"status": "success"}
         raise HTTPException(status_code=400, detail="Tool not supported.")
     except Exception as e:
@@ -1068,6 +1154,7 @@ async def delete_board_ticket(project_id: str, ticket_id: str, tool: str = "jira
         raise HTTPException(status_code=500, detail=str(e))
     
 @app.get("/api/projects/{project_id}/check-remote")
+# NEW: Made asynchronous by applying the await keyword
 async def check_remote_sync(project_id: str):
     try:
         res = supabase.table("projects").select("user_id, repo_url, last_commit").eq("id", project_id).limit(1).execute()
@@ -1083,7 +1170,8 @@ async def check_remote_sync(project_id: str):
             return {"up_to_date": True, "message": "No repository URL linked"}
 
         repo_name = get_repo_name_from_url(repo_url)
-        remote_commits = fetch_commits(repo_name, user_id)
+        # ASYNC AWAIT ADDED HERE
+        remote_commits = await fetch_commits(repo_name, user_id)
         
         if not remote_commits:
             return {"up_to_date": True, "status": "unknown", "message": "Could not verify remote status"}
@@ -1124,29 +1212,32 @@ async def trigger_risk_analysis(project_id: str, request: Request):
     
     update_progress(project_id, "ANALYZING", "Queuing risk analysis task...")
     
-    # Dispatch heavy analysis to Celery Worker
+    invalidate_cache(f"graph:{project_id}")
     run_risk_analysis_task.delay(project_id, user_config)
     
     return {"status": "analysis_queued"}
 
 @app.get("/api/projects/{project_id}/architecture-graph")
 async def get_architecture_graph(project_id: str):
+    cache_key = f"graph:{project_id}"
+    
+    cached_graph = get_cached_json(cache_key)
+    if cached_graph:
+        return cached_graph
+
     try:
-        # 1. Fetch units (Functions, Classes, Methods)
         units_res = supabase.table("memory_units")\
             .select("unit_name, file_path, unit_type, last_modified_at")\
             .eq("project_id", project_id)\
             .execute()
         units = units_res.data or []
 
-        # 2. Fetch edges (Who calls who)
         edges_res = supabase.table("graph_edges")\
             .select("source_unit_name, target_unit_name, edge_type")\
             .eq("project_id", project_id)\
             .execute()
         edges = edges_res.data or []
 
-        # 3. Fetch ACTUAL risks
         risks_res = supabase.table("project_risks")\
             .select("severity, risk_type, affected_units")\
             .eq("project_id", project_id)\
@@ -1171,13 +1262,11 @@ async def get_architecture_graph(project_id: str):
         nodes_dict = {}
         links = []
 
-        # 4. Build Nodes & Structural Links (File -> Function)
         for u in units:
             uname = u.get("unit_name")
             fpath = u.get("file_path")
             if not uname or not fpath: continue
             
-            # A. Create the Big File Node (if it doesn't exist yet)
             if fpath not in nodes_dict:
                 nodes_dict[fpath] = {
                     "id": fpath,
@@ -1189,7 +1278,6 @@ async def get_architecture_graph(project_id: str):
                     "unit_count": 0
                 }
 
-            # B. Create the Function/Class Node
             short_name = uname.split("::")[-1] if "::" in uname else uname
             nodes_dict[uname] = {
                 "id": uname,
@@ -1201,7 +1289,6 @@ async def get_architecture_graph(project_id: str):
                 "unit_count": 1
             }
 
-            # Bubble up risk/legacy status to the parent file so it turns red/amber if a child is sick
             file_node = nodes_dict[fpath]
             file_node["unit_count"] += 1
             if nodes_dict[uname]["risk_score"] > file_node["risk_score"]:
@@ -1209,20 +1296,17 @@ async def get_architecture_graph(project_id: str):
             if nodes_dict[uname]["legacy_flag"]:
                 file_node["legacy_flag"] = True
 
-            # C. Link the Function to its Parent File (Structural Link)
             links.append({
                 "source": fpath,
                 "target": uname,
                 "types": ["contains"],
-                "weight": 2 # Stronger weight so functions stay near their files
+                "weight": 2
             })
 
-        # 5. Filter Noise & Build Dependency Links (Function -> Function)
         for e in edges:
             src = e.get("source_unit_name")
             tgt = e.get("target_unit_name")
             
-            # NOISE FILTER: Only draw a connection if BOTH source and target exist in our parsed memory_units
             if src in nodes_dict and tgt in nodes_dict:
                 links.append({
                     "source": src,
@@ -1231,10 +1315,14 @@ async def get_architecture_graph(project_id: str):
                     "weight": 1
                 })
 
-        return {
+        result = {
             "nodes": list(nodes_dict.values()),
             "links": links
         }
+
+        set_cached_json(cache_key, result, ttl=3600)
+        
+        return result
 
     except Exception as e:
         import logging

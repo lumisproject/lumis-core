@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { 
   LayoutGrid, 
-  ChevronRight,
   Loader2,
   AlertCircle,
   Search,
@@ -9,10 +8,11 @@ import {
   Plus,
   Cpu
 } from 'lucide-react';
+import { ProjectSwitcher } from '@/components/layout/ProjectSwitcher';
 import { KanbanColumn } from '../components/board/KanbanColumn';
 import { TicketModal } from '../components/board/TicketModal';
 import { CreateIssueModal } from '../components/board/CreateIssueModal';
-import { CreateColumnModal } from '../components/board/CreateColumnModal'; // Ensure this exists
+import { CreateColumnModal } from '../components/board/CreateColumnModal';
 import { AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
 import { useBoardStore, type Ticket, type StatusColumn } from '../stores/useBoardStore';
@@ -103,16 +103,12 @@ const Board = () => {
         <div className="flex items-center gap-4">
           <div className="flex flex-col space-y-1 md:space-y-2">
             <h1 className="text-xl md:text-3xl font-black tracking-tighter uppercase leading-none">Project Board</h1>
-            <div className="flex items-center gap-4 mt-1">
-              <span className="text-xs text-muted-foreground flex items-center gap-1 font-bold uppercase tracking-widest bg-white/5 px-2 py-0.5 rounded border border-black/5 dark:border-white/5">
-                {(() => {
-                  const slug = project?.repo_name || project?.repo_url?.replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
-                  if (!slug) return 'Active Project';
-                  const name = slug.split('/').pop() || slug;
-                  return name.replace(/\.git$/, '');
-                })()} <ChevronRight className="h-3 w-3" /> {activeTool.toUpperCase()}
-              </span>
-              <span className="text-[10px] font-bold text-yellow-500/80 uppercase tracking-[0.2em] flex items-center gap-1.5 border-l border-border/20 pl-4">
+            <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center">
+                <ProjectSwitcher />
+              </div>
+              <span className="text-muted-foreground/20 font-light text-sm">/</span>
+              <span className="text-[10px] font-bold text-yellow-500/80 uppercase tracking-[0.2em] flex items-center gap-1.5 pl-2">
                 <RefreshCw className="h-2.5 w-2.5" />
                 SYNC ACTIVE
               </span>

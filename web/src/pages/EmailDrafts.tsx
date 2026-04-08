@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 // LUMIS_GRID_REFRESH_ONLY_ACTIVE
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
@@ -20,7 +20,8 @@ import {
     Calendar,
     ArrowUpRight,
     Zap,
-    X
+    X,
+    Play,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useSettingsStore } from '@/stores/useSettingsStore';
@@ -55,7 +56,16 @@ export default function EmailDrafts() {
     // Detail Edit State
     const [editForm, setEditForm] = useState<Partial<DraftTicket>>({});
     const [actionLoading, setActionLoading] = useState<'accept' | 'reject' | null>(null);
-    
+    const titleRef = useRef<HTMLTextAreaElement>(null);
+
+    // Auto-resize title textarea
+    useEffect(() => {
+        if (titleRef.current) {
+            titleRef.current.style.height = 'auto';
+            titleRef.current.style.height = titleRef.current.scrollHeight + 'px';
+        }
+    }, [editForm.title, viewMode]);
+
     const { intakeUser, intakePassword } = useSettingsStore();
     const isLocked = !intakeUser || !intakePassword;
 
@@ -107,10 +117,10 @@ export default function EmailDrafts() {
         try {
             const { data: { session } } = await supabase.auth.getSession();
             const VITE_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-            
+
             const res = await fetch(`${VITE_API_URL}/api/projects/${project?.id}/email-mappings`, {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Authorization': `Bearer ${session?.access_token}`,
                     'Content-Type': 'application/json'
                 },
@@ -264,8 +274,8 @@ export default function EmailDrafts() {
                 <div className="absolute inset-0 pointer-events-none overflow-hidden -z-10">
                     <div className="absolute top-[20%] left-[10%] w-[60%] h-[60%] bg-orange-500/10 blur-[200px] rounded-full opacity-50" />
                 </div>
-                
-                <motion.div 
+
+                <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="max-w-3xl w-full p-6 sm:p-10 md:p-16 rounded-[2.5rem] sm:rounded-[4rem] bg-card/40 backdrop-blur-3xl border border-black/5 dark:border-white/5 shadow-2xl text-left space-y-8 md:space-y-12 relative overflow-hidden"
@@ -337,11 +347,11 @@ export default function EmailDrafts() {
                         <p className="text-[9px] font-medium text-rose-500 italic opacity-80 max-w-[340px] text-center xl:text-left leading-relaxed">
                             We use OAuth 2.0, the same secure standard that apps like Slack, Zoom, and Google Calendar use to access your email. Lumis never sees or stores your actual Gmail password. We only receive a temporary token that grants us permission to read your inbox and send emails on your behalf. This connection is encrypted end-to-end and can be revoked instantly from your Google Account settings at any time.
                         </p>
-                        <Link 
+                        <Link
                             to="/app/settings#intake"
                             className="inline-flex items-center gap-3 px-10 py-4 rounded-xl bg-primary text-primary-foreground text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-primary/20 group relative overflow-hidden whitespace-nowrap w-full sm:w-auto justify-center"
                         >
-                            <motion.div 
+                            <motion.div
                                 initial={{ x: '-100%' }}
                                 whileHover={{ x: '100%' }}
                                 transition={{ duration: 0.6, ease: "easeInOut" }}
@@ -369,14 +379,10 @@ export default function EmailDrafts() {
                 {/* Global Header */}
                 <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-10 mb-16 px-2">
                     <div className="space-y-6">
-                        <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.5em] text-primary">
-                            <Zap className="h-4 w-4 fill-current" />
-                            <span>Lumis AI Protocol</span>
-                        </div>
-                        <h1 className="text-4xl md:text-6xl lg:text-8xl font-black tracking-tighter uppercase leading-[0.9] md:leading-[0.8] transition-all">
+                        <h1 className="text-4xl md:text-5xl lg:text-8xl font-black tracking-tighter uppercase leading-[0.9] md:leading-[0.8] transition-all">
                             Email <br /> <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 via-rose-500 to-yellow-500">Intake</span>
                         </h1>
-                        <p className="text-xs font-semibold text-muted-foreground max-w-md opacity-60">
+                        <p className="text-[10px] sm:text-xs font-semibold text-muted-foreground max-w-md opacity-60">
                             Neural synthesis of client communications into high-fidelity engineering tickets.
                         </p>
                     </div>
@@ -400,7 +406,7 @@ export default function EmailDrafts() {
                                     linkedEmails.map(email => (
                                         <div key={email} className="flex items-center gap-2 px-3 py-1.5 bg-muted/30 rounded-xl text-[10px] font-bold border border-black/5 dark:border-white/5 group/badge animate-in fade-in slide-in-from-top-1">
                                             <span className="text-foreground/70">{email}</span>
-                                            <button 
+                                            <button
                                                 onClick={() => handleRemoveEmail(email)}
                                                 className="ml-1 opacity-0 group-hover/badge:opacity-60 hover:!opacity-100 transition-opacity"
                                             >
@@ -418,14 +424,14 @@ export default function EmailDrafts() {
                             {/* Add New Email Mapping */}
                             <div className="pt-4 border-t border-black/5 dark:border-white/5">
                                 <div className="flex items-center gap-3">
-                                    <div className="flex-1 bg-muted/20 rounded-xl border border-black/5 dark:border-white/5 px-4 py-2 flex items-center gap-2 group-hover:border-primary/20 transition-all">
-                                        <Mail className="h-3 w-3 text-muted-foreground/40" />
+                                    <div className="flex-1 bg-muted/20 rounded-xl border border-black/5 dark:border-white/5 px-4 py-2 flex items-center gap-2 focus-within:border-primary/20 transition-all">
+                                        <Mail className="h-3 w-3 text-muted-foreground/40 rotate-12 transition-transform group-focus-within:rotate-0" />
                                         <input
                                             type="email"
                                             placeholder="Link new client email..."
                                             value={mappedEmail}
                                             onChange={(e) => setMappedEmail(e.target.value)}
-                                            className="bg-transparent border-none focus:ring-0 text-[11px] font-bold placeholder:text-muted-foreground/30 w-full text-foreground"
+                                            className="bg-transparent border-none focus:ring-0 focus:outline-none text-[11px] font-bold placeholder:text-muted-foreground/30 w-full text-foreground"
                                         />
                                     </div>
                                     <button
@@ -433,8 +439,8 @@ export default function EmailDrafts() {
                                         disabled={!mappedEmail || mappingLoading}
                                         className={cn(
                                             "h-9 px-4 rounded-xl text-[10px] font-bold transition-all flex-shrink-0 whitespace-nowrap shadow-sm",
-                                            mappedSuccess 
-                                                ? "bg-emerald-500 text-white" 
+                                            mappedSuccess
+                                                ? "bg-emerald-500 text-white"
                                                 : "bg-primary text-primary-foreground hover:scale-105 active:scale-95 disabled:opacity-20"
                                         )}
                                     >
@@ -454,61 +460,61 @@ export default function EmailDrafts() {
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.98 }}
                             transition={{ duration: 0.4, ease: "circOut" }}
-                            className="space-y-8"
+                            className="space-y-4"
                         >
-                            <div className="flex items-center justify-between mb-8 px-2">
-                                <div className="flex items-center gap-4">
-                                    <h2 className="text-base font-bold flex items-center gap-3 text-foreground">
-                                        <Inbox className="h-4 w-4 text-orange-500" />
+                            <div className="flex items-center justify-between mb-4 px-2">
+                                <div className="flex items-center gap-3">
+                                    <h2 className="text-sm font-bold flex items-center gap-2 text-foreground">
+                                        <Inbox className="h-3.5 w-3.5 text-orange-500" />
                                         Pending Tickets
                                     </h2>
                                     <div className="h-1 w-1 rounded-full bg-muted-foreground/30" />
-                                    <span className="text-[11px] font-bold text-muted-foreground/60 transition-opacity hover:opacity-100">
-                                        {drafts.length} Active Records
+                                    <span className="text-[10px] font-bold text-muted-foreground/60 transition-opacity hover:opacity-100">
+                                        {drafts.length} Records
                                     </span>
                                 </div>
                             </div>
 
                             {loading ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                                    {[1, 2, 3].map(i => (
-                                        <div key={i} className="h-80 rounded-[2.5rem] bg-card/50 border border-black/5 dark:border-white/5 animate-pulse" />
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    {[1, 2, 3, 4].map(i => (
+                                        <div key={i} className="h-48 rounded-[1.5rem] bg-card/50 border border-black/5 dark:border-white/5 animate-pulse" />
                                     ))}
                                 </div>
                             ) : drafts.length === 0 ? (
-                                <div className="h-[40vh] flex flex-col items-center justify-center text-muted-foreground/20">
-                                    <Sparkles className="h-16 w-16 mb-6 opacity-10" />
-                                    <p className="text-sm font-bold opacity-30 tracking-tight">Neural Queue Empty</p>
+                                <div className="h-[30vh] flex flex-col items-center justify-center text-muted-foreground/20">
+                                    <Sparkles className="h-12 w-12 mb-4 opacity-10" />
+                                    <p className="text-[10px] font-bold opacity-30 tracking-tight uppercase">Neural Queue Empty</p>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                     {drafts.map((draft, idx) => (
                                         <motion.button
                                             key={idx}
                                             onClick={() => setSelectedDraft(draft)}
-                                            whileHover={{ y: -8, scale: 1.01 }}
-                                            className="group relative flex flex-col items-start p-6 sm:p-8 md:p-10 rounded-[2rem] sm:rounded-[2.5rem] bg-card/30 backdrop-blur-xl border border-black/5 dark:border-white/5 hover:border-orange-500/20 transition-all text-left overflow-hidden min-h-[300px] sm:min-h-[340px] md:min-h-[380px] shadow-xl hover:shadow-orange-500/5"
+                                            whileHover={{ y: -4, scale: 1.01 }}
+                                            className="group relative flex flex-col items-start p-5 rounded-[1.5rem] bg-card/30 backdrop-blur-xl border border-black/5 dark:border-white/5 hover:border-orange-500/20 transition-all text-left overflow-hidden min-h-[200px] shadow-lg"
                                         >
-                                            <div className="absolute top-0 right-0 p-8 opacity-0 group-hover:opacity-100 transition-all group-hover:translate-x-[-4px] group-hover:translate-y-[4px]">
-                                                <ArrowUpRight className="h-6 w-6 text-orange-500" />
+                                            <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-all group-hover:translate-x-[-2px] group-hover:translate-y-[2px]">
+                                                <ArrowUpRight className="h-4 w-4 text-orange-500" />
                                             </div>
-                                            <div className="flex items-center gap-3 text-[10px] font-bold text-orange-500 mb-8 bg-orange-500/10 px-4 py-2 rounded-full border border-orange-500/10">
-                                                <Mail className="h-3 w-3" />
-                                                {draft.sender}
+                                            <div className="flex items-center gap-2 text-[8px] font-bold text-orange-500 mb-4 bg-orange-500/10 px-2.5 py-1 rounded-full border border-orange-500/10">
+                                                <Mail className="h-2.5 w-2.5" />
+                                                <span className="truncate max-w-[120px]">{draft.sender}</span>
                                             </div>
-                                            <h3 className="text-2xl md:text-3xl font-black tracking-tighter leading-[0.9] mb-6 group-hover:text-orange-500 transition-colors">
+                                            <h3 className="text-base font-black tracking-tight leading-tight mb-3 group-hover:text-orange-500 transition-colors break-words">
                                                 {draft.title}
                                             </h3>
-                                            <p className="text-sm font-medium text-muted-foreground leading-relaxed line-clamp-3 mb-auto opacity-70">
+                                            <p className="text-[10px] font-medium text-muted-foreground leading-relaxed line-clamp-2 mb-auto opacity-70">
                                                 {draft.description}
                                             </p>
-                                            <div className="w-full pt-8 mt-10 border-t border-black/5 dark:border-white/5 flex items-center justify-between">
-                                                <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground/40">
-                                                    <Calendar className="h-3 w-3" />
+                                            <div className="w-full pt-4 mt-4 border-t border-black/5 dark:border-white/5 flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5 text-[8px] font-bold text-muted-foreground/40">
+                                                    <Calendar className="h-2.5 w-2.5" />
                                                     {formatDistanceToNow(new Date(draft.received_at), { addSuffix: true })}
                                                 </div>
                                                 <div className={cn(
-                                                    "text-[10px] font-bold px-4 py-1.5 rounded-xl border",
+                                                    "text-[8px] font-bold px-2.5 py-1 rounded-lg border",
                                                     draft.status === 'Done' ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500" : "bg-muted/30 border-black/5 dark:border-white/5 text-muted-foreground"
                                                 )}>
                                                     {draft.status}
@@ -522,119 +528,148 @@ export default function EmailDrafts() {
                     ) : (
                         <motion.section
                             key="detail-view"
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.98 }}
-                            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                            className="bg-card/40 backdrop-blur-3xl border border-black/5 dark:border-white/5 rounded-[3.5rem] overflow-hidden shadow-2xl relative"
+                            initial={{ opacity: 0, scale: 0.99, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.2 } }}
+                            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                            className="relative w-full"
                         >
-                            {/* Detail Header */}
-                            <div className="p-8 md:p-12 border-b border-black/5 dark:border-white/5 bg-background/20 flex flex-col md:flex-row md:items-center justify-between gap-8">
-                                <button
-                                    onClick={() => setSelectedDraft(null)}
-                                    className="flex items-center gap-3 text-xs font-bold text-muted-foreground hover:text-orange-500 transition-colors group"
-                                >
-                                    <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
-                                    Return to Queue
-                                </button>
-                                <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
-                                    <button
-                                        onClick={handleRejectDraft}
-                                        disabled={actionLoading !== null}
-                                        className="h-12 w-full sm:w-auto px-10 rounded-2xl border border-rose-500/20 text-rose-500 hover:bg-rose-500 hover:text-white text-xs font-bold transition-all disabled:opacity-20"
-                                    >
-                                        Drop Draft
-                                    </button>
-                                    <button
-                                        onClick={handleAcceptDraft}
-                                        disabled={actionLoading !== null}
-                                        className="h-12 w-full sm:w-auto px-12 rounded-2xl bg-primary text-primary-foreground hover:scale-105 active:scale-95 text-xs font-bold transition-all shadow-xl shadow-primary/20 disabled:opacity-20 flex items-center justify-center gap-3"
-                                    >
-                                        Accept & Push
-                                        <Send className="h-4 w-4" />
-                                    </button>
-                                </div>
-                            </div>
+                            <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
 
-                            <div className="grid grid-cols-1 lg:grid-cols-2">
-                                {/* Left Side: Original Context */}
-                                <div className="p-8 md:p-16 space-y-12 border-b lg:border-b-0 lg:border-r border-black/5 dark:border-white/5">
-                                    <div className="space-y-8">
-                                        <div className="flex items-center gap-3 text-xs font-bold text-orange-500 bg-orange-500/5 px-4 py-2 rounded-full w-fit border border-orange-500/10">
-                                            <Sparkles className="h-4 w-4" />
-                                            Original Context Synthesis
+                                {/* -----------------------
+                                    LEFT PANE: THE CANVAS
+                                -------------------------*/}
+                                <div className="flex-1 bg-card/10 backdrop-blur-2xl border border-black/5 dark:border-white/5 rounded-[1.5rem] sm:rounded-[2rem] p-5 sm:p-10 lg:p-14 shadow-xl relative min-h-[450px] sm:min-h-[550px] flex flex-col group/canvas transition-all">
+
+                                    {/* Breadcrumb Return */}
+                                    <button
+                                        onClick={() => setSelectedDraft(null)}
+                                        className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground/50 hover:text-foreground transition-all group mb-10 w-fit"
+                                    >
+                                        <ArrowLeft className="h-3 w-3 transition-transform group-hover:-translate-x-1" />
+                                        Return to List
+                                    </button>
+
+                                    {/* The Canvas Editor */}
+                                    <div className="flex-1 flex flex-col gap-8">
+                                        {/* Auto-Resizing Title Area */}
+                                        <div className="relative group/title">
+                                            <div
+                                                contentEditable
+                                                onInput={(e) => setEditForm(prev => ({ ...prev, title: e.currentTarget.innerText }))}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        // Prevent new lines in title if you want it to be single-paragraph but wrapping
+                                                        // e.preventDefault(); 
+                                                    }
+                                                }}
+                                                className="w-full bg-transparent border-none p-0 text-xl md:text-2xl lg:text-2xl font-bold tracking-tight leading-snug focus:outline-none focus:ring-0 text-foreground transition-all empty:before:content-['Draft_Title...'] empty:before:text-muted-foreground/10 break-words whitespace-pre-wrap"
+                                            >
+                                                {editForm.title}
+                                            </div>
                                         </div>
-                                        <div className="relative p-6 sm:p-12 rounded-[2rem] sm:rounded-[2.5rem] bg-orange-500/[0.03] border border-orange-500/10 italic shadow-inner">
-                                            <p className="text-xl md:text-2xl font-bold text-foreground/80 leading-[1.6]">
-                                                "{selectedDraft?.original_email_summary}"
-                                            </p>
+
+                                        {/* Technical Description Area */}
+                                        <div className="flex-1 relative group flex flex-col">
+                                            <textarea
+                                                value={editForm.description || ''}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+                                                className="flex-1 w-full h-full min-h-[350px] bg-transparent border-none p-0 text-[12px] md:text-[13px] font-medium leading-[1.8] text-foreground/60 focus:outline-none focus:ring-0 transition-all placeholder:text-muted-foreground/5 resize-none selection:bg-primary/20"
+                                                placeholder="Technical specifications and requirements..."
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="w-full lg:w-[320px] xl:w-[360px] flex flex-col gap-4 lg:gap-6 shrink-0">
+
+                                    {/* Module 1: Execution Control */}
+                                    <div className="bg-muted/10 backdrop-blur-xl border border-black/5 dark:border-white/5 rounded-[1.5rem] p-6 shadow-lg relative overflow-hidden group/cmd">
+
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <Play className="h-2.5 w-2.5 text-black-foreground/20 fill-black-foreground/10" />
+                                            <h3 className="text-[8px] font-bold uppercase tracking-[0.2em] text-black-foreground/30">Actions</h3>
+                                        </div>
+                                        <div className="flex flex-col gap-3 relative z-10">
+                                            <button
+                                                onClick={handleAcceptDraft}
+                                                disabled={actionLoading !== null}
+                                                className="w-full h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 hover:bg-emerald-500/20 hover:text-emerald-600 text-[10px] font-bold uppercase tracking-widest transition-all shadow-sm hover:shadow-emerald-500/20 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-30"
+                                            >
+                                                {actionLoading === 'accept' ? (
+                                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                                ) : (
+                                                    <>
+                                                        Accept & Push
+                                                        <Send className="h-3 w-3" />
+                                                    </>
+                                                )}
+                                            </button>
+                                            <button
+                                                onClick={handleRejectDraft}
+                                                disabled={actionLoading !== null}
+                                                className="w-full h-10 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 hover:bg-rose-500/20 hover:text-rose-600 text-[9px] font-bold uppercase tracking-widest transition-all active:scale-95 disabled:opacity-30"
+                                            >
+                                                Discard Draft
+                                            </button>
                                         </div>
                                     </div>
 
-                                    <div className="space-y-8">
-                                        <div className="flex items-center gap-3 text-xs font-bold text-muted-foreground/40">
-                                            <Layers className="h-4 w-4" />
-                                            Record Metadata
+                                    {/* Module 2: Status */}
+                                    <div className="bg-muted/5 backdrop-blur-xl border border-black/5 dark:border-white/5 rounded-[1.5rem] p-6">
+
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <Zap className="h-2.5 w-2.5 text-black-foreground/20" />
+                                            <h3 className="text-[8px] font-bold uppercase tracking-[0.2em] text-black-foreground/30">Stage</h3>
                                         </div>
-                                        <div className="flex flex-col gap-6">
-                                            <div className="p-8 rounded-[2rem] bg-muted/20 border border-black/5 dark:border-white/5">
-                                                <span className="text-[10px] font-bold text-muted-foreground/30 block mb-3">Origin Node</span>
-                                                <span className="text-sm font-bold text-foreground">{selectedDraft?.sender}</span>
+                                        <div className="flex flex-col gap-1.5">
+                                            {['To Do', 'In Progress', 'Done'].map((s) => (
+                                                <button
+                                                    key={s}
+                                                    onClick={() => setEditForm(prev => ({ ...prev, status: s as any }))}
+                                                    className={cn(
+                                                        "h-10 rounded-lg px-4 flex items-center justify-between text-[10px] font-bold transition-all border group",
+                                                        editForm.status === s
+                                                            ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-600 dark:text-yellow-500"
+                                                            : "bg-transparent border-transparent text-foreground/30 hover:bg-muted/10 cursor-pointer"
+                                                    )}
+                                                >
+                                                    {s}
+                                                    <div className={cn(
+                                                        "h-1.5 w-1.5 rounded-full",
+                                                        editForm.status === s ? "bg-yellow-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]" : "bg-foreground/10"
+                                                    )} />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Module 3: Context Archive */}
+                                    <div className="bg-muted/5 backdrop-blur-xl border border-black/5 dark:border-white/5 rounded-[1.5rem] flex flex-col overflow-hidden">
+                                        <div className="p-6 flex flex-col gap-4">
+                                            <div className="flex items-center gap-2">
+                                                <Layers className="h-3 w-3 text-black-foreground/20" />
+                                                <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-black-foreground/20">Email Summary</span>
                                             </div>
-                                            <div className="p-8 rounded-[2rem] bg-muted/20 border border-black/5 dark:border-white/5">
-                                                <span className="text-[10px] font-bold text-muted-foreground/30 block mb-3">Reception Date</span>
-                                                <span className="text-sm font-bold text-foreground">
-                                                    {formatDistanceToNow(new Date(selectedDraft?.received_at || new Date()), { addSuffix: true })}
+
+                                            <p className="text-[11px] font-medium text-black-foreground/40 leading-relaxed italic border-l border-primary/20 pl-4 py-2">
+                                                "{selectedDraft?.original_email_summary}"
+                                            </p>
+                                        </div>
+
+                                        <div className="p-4 border-t border-black/5 dark:border-white/5 bg-background/5 grid grid-cols-2 gap-4">
+                                            <div className="space-y-1">
+                                                <span className="text-[7px] font-bold text-black-foreground/20 uppercase tracking-[0.1em]">Sender</span>
+                                                <span className="text-[9px] font-bold text-foreground/40 truncate block">{selectedDraft?.sender}</span>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <span className="text-[7px] font-bold text-black-foreground/20 uppercase tracking-[0.1em]">Received</span>
+                                                <span className="text-[9px] font-bold text-foreground/40 block">
+                                                    {selectedDraft?.received_at ? formatDistanceToNow(new Date(selectedDraft.received_at), { addSuffix: true }) : 'N/A'}
                                                 </span>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
 
-                                {/* Right Side: Editable Fields */}
-                                <div className="p-8 md:p-16 space-y-12">
-                                    <div className="space-y-10">
-                                        <div className="space-y-4">
-                                            <label className="text-xs font-bold text-muted-foreground/40 ml-2">Ticket Title</label>
-                                            <input
-                                                type="text"
-                                                value={editForm.title || ''}
-                                                onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
-                                                className="w-full bg-muted/20 border border-black/5 dark:border-white/5 rounded-[1.5rem] px-8 py-5 text-2xl font-black tracking-tight focus:outline-none focus:border-orange-500/50 transition-all placeholder:opacity-20"
-                                                placeholder="Enter ticket title..."
-                                            />
-                                        </div>
-
-                                        <div className="space-y-4">
-                                            <label className="text-xs font-bold text-muted-foreground/40 ml-2">Development Status</label>
-                                            <div className="grid grid-cols-3 gap-3">
-                                                {['To Do', 'In Progress', 'Done'].map((s) => (
-                                                    <button
-                                                        key={s}
-                                                        onClick={() => setEditForm(prev => ({ ...prev, status: s as any }))}
-                                                        className={cn(
-                                                            "h-14 rounded-2xl text-xs font-bold transition-all border",
-                                                            editForm.status === s
-                                                                ? "bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-500/20"
-                                                                : "bg-muted/10 border-black/5 dark:border-white/5 text-muted-foreground hover:bg-muted/20"
-                                                        )}
-                                                    >
-                                                        {s}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-4">
-                                            <label className="text-xs font-bold text-muted-foreground/40 ml-2">Technical Description</label>
-                                            <textarea
-                                                value={editForm.description || ''}
-                                                onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
-                                                className="w-full h-80 bg-muted/20 border border-black/5 dark:border-white/5 rounded-[2.5rem] p-10 text-sm font-medium leading-[1.7] text-foreground focus:outline-none focus:border-orange-500/50 transition-all resize-none shadow-inner"
-                                                placeholder="Elaborate technical specifications..."
-                                            />
-                                        </div>
-                                    </div>
                                 </div>
                             </div>
                         </motion.section>

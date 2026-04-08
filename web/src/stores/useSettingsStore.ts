@@ -25,7 +25,7 @@ interface SettingsState {
     setIntakeUser: (val: string) => void;
     setIntakePassword: (val: string) => void;
     resetDirty: () => void;
-
+    setSettings: (settings: Partial<any>) => void;
     fetchSettings: (userId: string) => Promise<void>;
 }
 
@@ -54,6 +54,8 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
     setIntakePassword: (val) => set({ intakePassword: val, _isDirty: true }),
     resetDirty: () => set({ _isDirty: false }),
 
+    setSettings: (settings: Partial<SettingsState>) => set((state) => ({ ...state, ...settings })),
+
     fetchSettings: async (userId) => {
         if (!userId) return;
 
@@ -76,7 +78,7 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
             const config = data.user_config;
             set({
                 useDefault: config.use_default ?? false,
-                provider: isDirty ? current.provider : (config.provider ?? 'openai'),
+                provider: isDirty ? current.provider : (config.provider ?? ''),
                 apiKey: isDirty ? current.apiKey : (config.api_key ? '••••••••••••••••' : ''),
                 selectedModel: isDirty ? current.selectedModel : (config.model ?? ''),
                 baseUrl: isDirty ? current.baseUrl : (config.base_url ?? ''),

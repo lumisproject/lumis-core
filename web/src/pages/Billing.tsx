@@ -157,8 +157,8 @@ const Billing = () => {
     return (
         <div className="space-y-12 pb-20 p-8">
             <div className="text-center">
-                <h1 className="text-4xl font-black tracking-tight">Billing & Plans</h1>
-                <p className="mt-2 text-muted-foreground">Manage your subscription and project limits.</p>
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight">Billing & Plans</h1>
+                <p className="mt-2 text-[10px] sm:text-sm text-muted-foreground uppercase font-bold tracking-widest opacity-60">Manage your subscription and project limits.</p>
                 
                 {/* Billing Toggle */}
                 <div className="mt-10 flex items-center justify-center gap-4">

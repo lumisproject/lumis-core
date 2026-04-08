@@ -297,10 +297,8 @@ const MacroArchitectureGraph: React.FC<MacroArchitectureGraphProps> = ({ data })
                       <div className="bg-rose-500/10 border border-rose-500/20 p-5 rounded-2xl">
                           <div className="text-rose-400 font-bold mb-3 flex flex-col gap-2">
                               <span className="flex items-center gap-2 font-black uppercase tracking-widest text-[11px]"><AlertTriangle className="h-4 w-4 shrink-0" /> Critical Risk</span>
-                              <span className="text-[9px] w-fit uppercase font-black tracking-widest bg-rose-500/20 px-2 py-0.5 rounded-md">Score: {Math.round(selectedNode.risk_score)}</span>
                           </div>
-                          <div className="text-gray-400 text-xs leading-relaxed mb-5">This unit has been identified as a critical risk factor. High complexity or tight coupling threatens stability.</div>
-                          <button className="w-full py-3 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors shadow-xl shadow-rose-500/20 active:scale-95">Ask AI to Refactor</button>
+                          <div className="text-gray-400 text-xs leading-relaxed">This unit has been identified as a critical risk factor. High complexity or tight coupling threatens stability.</div>
                       </div>
                   ) : selectedNode.legacy_flag ? (
                       <div className="bg-amber-400/10 border border-amber-400/20 p-5 rounded-2xl">

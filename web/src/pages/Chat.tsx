@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Sparkles, Shield, Code2, AlertTriangle, Workflow, Brain, History, Plus, PanelLeftClose, PanelLeftOpen, Trash2 } from 'lucide-react';
+import { Send, Sparkles, Shield, Code2, AlertTriangle, Workflow, Brain, History, Plus, PanelLeftClose, PanelLeftOpen, Trash2, ArrowRight, Lock } from 'lucide-react';
 import { useChatStore } from '@/stores/useChatStore';
 import { useProjectStore } from '@/stores/useProjectStore';
 import { useUserStore } from '@/stores/useUserStore';
@@ -94,10 +94,11 @@ const Chat = () => {
                 <div className="p-4">
                     <button
                         onClick={startNewSession}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 transition-all group"
+                        className="w-full relative flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-white dark:text-black font-bold hover:scale-[1.02] active:scale-[0.98] transition-all group overflow-hidden shadow-[0_10px_20px_rgba(var(--primary),0.3)]"
                     >
-                        <Plus className="h-4 w-4 transition-transform group-hover:rotate-90" />
-                        <span className="text-[10px] font-black uppercase tracking-widest">New Session</span>
+                        <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <Plus className="h-4 w-4 relative z-10 transition-transform group-hover:rotate-90" />
+                        <span className="text-[10px] font-black uppercase tracking-widest relative z-10">New Intel Session</span>
                     </button>
                 </div>
 
@@ -120,16 +121,15 @@ const Chat = () => {
 
                         return Object.entries(groups).map(([key, items]) => {
                             if (items.length === 0) return null;
-                            const title = key === 'today' ? 'Today' : key === 'yesterday' ? 'Yesterday' : 'Previous Intel';
+                            const title = key === 'today' ? 'Active Cycles' : key === 'yesterday' ? 'Previous Cycles' : 'Neural Archives';
 
                             return (
-                                <div key={key} className="space-y-2">
-                                    <div className="px-3 flex items-center gap-2 mb-3">
-                                        <div className="h-px flex-1 bg-black/[0.03] dark:bg-white/[0.03]" />
-                                        <span className="text-[7px] font-black uppercase tracking-[0.3em] text-muted-foreground/40 whitespace-nowrap">{title}</span>
-                                        <div className="h-px flex-1 bg-black/[0.03] dark:bg-white/[0.03]" />
+                                <div key={key} className="space-y-4">
+                                    <div className="px-3 flex items-center gap-3">
+                                        <span className="text-[8px] font-black uppercase tracking-[0.4em] text-primary/50 whitespace-nowrap">{title}</span>
+                                        <div className="h-px flex-1 bg-gradient-to-r from-primary/10 to-transparent" />
                                     </div>
-                                    <div className="space-y-1">
+                                    <div className="space-y-2">
                                         {items.map((item) => (
                                             <div
                                                 key={item.id}
@@ -138,10 +138,10 @@ const Chat = () => {
                                                 <div
                                                     onClick={() => loadSession(item.id)}
                                                     className={cn(
-                                                        "flex flex-col gap-2 p-4 rounded-2xl cursor-pointer transition-all border relative overflow-hidden group/session",
+                                                        "flex flex-col gap-1 p-3.5 rounded-2xl cursor-pointer transition-all border relative overflow-hidden group/session",
                                                         activeSessionId === item.id
-                                                            ? "bg-primary/[0.08] border-primary/20 shadow-[0_8px_20px_rgba(var(--primary),0.05)]"
-                                                            : "hover:bg-white/[0.03] border-transparent hover:border-white/5",
+                                                            ? "bg-primary/[0.08] border-primary/30 shadow-[0_8px_30px_rgba(var(--primary),0.08)] ring-1 ring-primary/20"
+                                                            : "hover:bg-white/[0.04] border-transparent hover:border-black/5 dark:hover:border-white/5",
                                                         deletingSessionId === item.id && "bg-red-500/5 border-red-500/20"
                                                     )}
                                                 >
@@ -152,11 +152,11 @@ const Chat = () => {
                                                                 initial={{ opacity: 0, scale: 0.95 }}
                                                                 animate={{ opacity: 1, scale: 1 }}
                                                                 exit={{ opacity: 0, scale: 0.95 }}
-                                                                className="flex flex-col gap-3"
+                                                                className="flex flex-col gap-3 py-1"
                                                             >
                                                                 <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-red-500">
                                                                     <Trash2 className="h-3 w-3" />
-                                                                    Purge Intel From Cache?
+                                                                    Delete Session?
                                                                 </div>
                                                                 <div className="flex items-center gap-2">
                                                                     <button
@@ -165,16 +165,16 @@ const Chat = () => {
                                                                             deleteSession(item.id);
                                                                             setDeletingSessionId(null);
                                                                         }}
-                                                                        className="flex-1 py-1.5 rounded-xl bg-red-500 text-white text-[8px] font-black uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20 active:scale-95"
+                                                                        className="flex-1 py-2 rounded-xl bg-red-500 text-white text-[8px] font-black uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20 active:scale-95"
                                                                     >
-                                                                        Confirm
+                                                                        Delete
                                                                     </button>
                                                                     <button
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
                                                                             setDeletingSessionId(null);
                                                                         }}
-                                                                        className="flex-1 py-1.5 rounded-xl bg-white/5 text-[8px] font-black uppercase tracking-widest hover:bg-white/10 transition-all active:scale-95"
+                                                                        className="flex-1 py-2 rounded-xl bg-white/5 text-[8px] font-black uppercase tracking-widest hover:bg-white/10 transition-all active:scale-95"
                                                                     >
                                                                         Cancel
                                                                     </button>
@@ -189,29 +189,13 @@ const Chat = () => {
                                                                 className="relative z-10"
                                                             >
                                                                 <div className="flex items-start justify-between gap-3">
-                                                                    <div className="flex flex-col min-w-0">
-                                                                        <div className="flex items-center gap-2 mb-1">
-                                                                            <div className={cn(
-                                                                                "h-1 w-1 rounded-full",
-                                                                                activeSessionId === item.id ? "bg-primary animate-pulse shadow-[0_0_8px_theme(colors.primary.DEFAULT)]" : "bg-white/20"
-                                                                            )} />
-                                                                            <span className="text-[7px] font-black uppercase tracking-widest text-muted-foreground/50">Sequence #{item.id.slice(0, 4).toUpperCase()}</span>
-                                                                        </div>
+                                                                    <div className="flex flex-col min-w-0 flex-1">
+                                                                        
                                                                         <span className={cn(
-                                                                            "text-[11px] font-bold truncate leading-tight tracking-tight",
-                                                                            activeSessionId === item.id ? "text-primary" : "text-foreground/70 group-hover/session:text-foreground"
+                                                                            "text-[12px] font-black tracking-tight leading-snug line-clamp-2 transition-colors",
+                                                                            activeSessionId === item.id ? "text-primary" : "text-foreground/60 group-hover/session:text-foreground"
                                                                         )}>
                                                                             {item.title}
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-                                                                <div className="flex items-center justify-between mt-3">
-                                                                    <div className="flex items-center gap-1.5 opacity-40">
-                                                                        <div className="h-1 w-4 bg-white/20 rounded-full overflow-hidden">
-                                                                            <div className="h-full bg-primary w-2/3" />
-                                                                        </div>
-                                                                        <span className="text-[7px] font-bold text-muted-foreground uppercase tracking-widest">
-                                                                            {new Date(item.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                                         </span>
                                                                     </div>
                                                                     <button
@@ -219,10 +203,15 @@ const Chat = () => {
                                                                             e.stopPropagation();
                                                                             setDeletingSessionId(item.id);
                                                                         }}
-                                                                        className="opacity-0 group-hover/session:opacity-100 p-1.5 rounded-lg hover:bg-red-500/10 hover:text-red-500 text-muted-foreground/30 transition-all"
+                                                                        className="opacity-0 group-hover/session:opacity-100 p-1.5 rounded-lg hover:bg-red-500/10 hover:text-red-500 text-muted-foreground/30 transition-all shrink-0"
                                                                     >
                                                                         <Trash2 className="h-3 w-3" />
                                                                     </button>
+                                                                </div>
+                                                                <div className="flex items-center justify-between mt-3 pt-2 border-t border-black/[0.02] dark:border-white/[0.02]">
+                                                                    <span className="text-[8px] font-bold text-muted-foreground/40 uppercase tracking-widest tabular-nums">
+                                                                        {new Date(item.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                    </span>
                                                                 </div>
                                                             </motion.div>
                                                         )}
@@ -230,7 +219,7 @@ const Chat = () => {
                                                     {activeSessionId === item.id && (
                                                         <motion.div
                                                             layoutId="session-bg-glow"
-                                                            className="absolute inset-0 bg-primary/5 pointer-events-none"
+                                                            className="absolute inset-0 bg-gradient-to-br from-primary/[0.02] to-transparent pointer-events-none"
                                                         />
                                                     )}
                                                 </div>
@@ -271,6 +260,7 @@ const Chat = () => {
 
             {/* Main Chat Area */}
             <div className="flex flex-1 h-full flex-col overflow-hidden bg-background relative">
+                
                 {/* Panel Toggle Button (When sidebar hidden) */}
                 {!showHistory && (
                     <button
@@ -310,7 +300,7 @@ const Chat = () => {
                 <div className="absolute bottom-[-20%] left-[-10%] w-[600px] h-[600px] bg-accent/5 blur-[120px] rounded-full pointer-events-none" />
                 
                 {/* Noise Texture Overlay */}
-                <div className="absolute inset-0 opacity-[0.012] pointer-events-none mix-blend-overlay" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }} />
+                <div className="absolute inset-0 opacity-[0.012] pointer-events-none mix-blend-overlay" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C%2Ffilter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C%2Fsvg%3E")` }} />
 
                 <div
                     ref={scrollRef}
@@ -334,32 +324,45 @@ const Chat = () => {
                                     </p>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full pt-8">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-4xl mx-auto pt-8">
                                     {[
-                                        { icon: Code2, label: "Architecture", prompt: "Explain the core architecture and structure of this project", desc: "Scan project layout" },
-                                        { icon: AlertTriangle, label: "Security", prompt: "Scan the codebase for potential security vulnerabilities", desc: "Risk audit" },
-                                        { icon: Workflow, label: "Optimization", prompt: "Suggest performance optimizations for the main logic flow", desc: "Efficiency scan" },
-                                        { icon: Sparkles, label: "Refactoring", prompt: "Identify complex functions that would benefit from refactoring", desc: "Logic cleanup" }
+                                        { icon: Code2, label: "Architecture", prompt: "Explain the core architecture and structure of this project", desc: "System Map" },
+                                        { icon: AlertTriangle, label: "Security", prompt: "Scan for security vulnerabilities and implementation risks", desc: "Pen-Audit" },
+                                        { icon: Workflow, label: "Optimization", prompt: "Analyze logic flows for performance bottlenecks", desc: "Efficiency" },
+                                        { icon: Sparkles, label: "Refactoring", prompt: "Identify code smells and suggest modern abstractions", desc: "Logic Polish" }
                                     ].map((suggestion, i) => (
-                                        <div
+                                        <motion.div
                                             key={i}
+                                            initial={{ opacity: 0, y: 20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: i * 0.1 }}
                                             onClick={() => handleSuggestionClick(suggestion.prompt)}
-                                            className="rounded-[2rem] border border-black/5 dark:border-white/5 bg-card/40 backdrop-blur-md p-6 text-left transition-all hover:-translate-y-2 hover:bg-accent/40 hover:shadow-[0_20px_50px_rgba(0,0,0,0.1)] cursor-pointer group relative overflow-hidden"
+                                            className="group relative p-5 rounded-[1.8rem] border border-black/5 dark:border-white/5 bg-card/40 backdrop-blur-3xl transition-all duration-500 hover:border-primary/30 hover:bg-primary/[0.03] hover:shadow-[0_20px_50px_-12px_rgba(0,0,0,0.2)] cursor-pointer overflow-hidden flex items-center gap-4"
                                         >
                                             <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                                            <div className="relative z-10">
-                                                <div className="flex items-center justify-between mb-4">
-                                                    <div className="p-3 bg-primary/10 rounded-xl text-primary group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
-                                                        <suggestion.icon className="h-5 w-5" />
-                                                    </div>
-                                                    <span className="text-[8px] font-black uppercase tracking-[0.2em] text-muted-foreground opacity-40">{suggestion.desc}</span>
-                                                </div>
-                                                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-primary mb-2">{suggestion.label}</div>
-                                                <div className="text-xs font-bold text-foreground/70 line-clamp-2 leading-relaxed group-hover:text-foreground transition-colors">
-                                                    {suggestion.prompt}
-                                                </div>
+                                            
+                                            <div className="relative z-10 flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-all duration-500 group-hover:scale-110 group-hover:bg-primary group-hover:text-white shadow-lg shadow-primary/5">
+                                                <suggestion.icon className="h-6 w-6" />
                                             </div>
-                                        </div>
+                                            
+                                            <div className="relative z-10 flex flex-col items-start text-left min-w-0">
+                                                <div className="flex items-center gap-2 mb-1.5">
+                                                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-primary">{suggestion.label}</span>
+                                                    <span className="h-0.5 w-0.5 rounded-full bg-primary/30" />
+                                                    <span className="text-[7px] font-black uppercase tracking-[0.15em] text-muted-foreground opacity-40 truncate">{suggestion.desc}</span>
+                                                </div>
+                                                <p className="text-[12px] font-bold text-foreground/80 leading-tight group-hover:text-foreground transition-colors line-clamp-2">
+                                                    {suggestion.prompt}
+                                                </p>
+                                            </div>
+
+                                            <div className="ml-auto opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-4 group-hover:translate-x-0 group-hover:scale-110">
+                                                <ArrowRight className="h-4 w-4 text-primary" />
+                                            </div>
+                                            
+                                            {/* Decorative Corner flourish */}
+                                            <div className="absolute top-0 right-0 h-16 w-16 bg-primary/5 blur-2xl rounded-full translate-x-8 -translate-y-8 group-hover:bg-primary/10 transition-colors" />
+                                        </motion.div>
                                     ))}
                                 </div>
                             </div>
@@ -399,7 +402,7 @@ const Chat = () => {
                         )}
 
                         <div className={cn(
-                            "relative rounded-[1.8rem] border border-white/5 bg-card/30 p-1.5 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.4)] backdrop-blur-[40px] transition-all duration-700 ring-1 ring-white/5",
+                            "relative rounded-[2rem] border border-white/5 bg-card/30 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.4)] backdrop-blur-[40px] transition-all duration-700 ring-1 ring-white/5 overflow-hidden",
                             isConfigComplete && "focus-within:ring-primary/20 focus-within:border-primary/30 focus-within:bg-card/45"
                         )}>
                             <textarea
@@ -413,73 +416,65 @@ const Chat = () => {
                                 }}
                                 placeholder={isConfigComplete ? "Enter neural instruction..." : "Bridge configuration required..."}
                                 disabled={!isConfigComplete}
-                                className="w-full resize-none bg-transparent px-6 py-3 text-[14px] font-medium focus:outline-none min-h-[52px] max-h-[200px] disabled:opacity-0 placeholder:text-muted-foreground/30 placeholder:font-black placeholder:uppercase placeholder:tracking-widest placeholder:text-[9px]"
+                                className="w-full resize-none bg-transparent px-6 pt-5 pb-16 text-[14px] font-medium focus:outline-none min-h-[60px] max-h-[250px] disabled:opacity-0 placeholder:text-muted-foreground/30 placeholder:font-black placeholder:uppercase placeholder:tracking-widest placeholder:text-[9px]"
                                 rows={1}
                             />
-                             <div className="flex flex-wrap items-center gap-3 justify-between w-full border-t border-white/5 px-4 pb-2.5 pt-3">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <div className="flex items-center rounded-xl bg-white/[0.03] p-0.5 gap-0.5 border border-white/5">
-                                        <Link to="/app/settings" className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-primary/10 text-[8px] font-black uppercase tracking-[0.2em] text-muted-foreground hover:text-primary transition-all group/model">
-                                            <div className="h-1.5 w-1.5 rounded-full bg-primary/40 group-hover/model:bg-primary group-hover/model:animate-ping" />
-                                            <span>{!isConfigComplete ? "Link Engine" : (useDefault ? 'Lumis Core' : selectedModel)}</span>
-                                        </Link>
-                                    </div>
+                            
+                            <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between pointer-events-none">
+                                <div className="flex items-center gap-2 pointer-events-auto">
+                                    <Link to="/app/settings" className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.03] border border-white/5 hover:bg-primary/10 text-[8px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 hover:text-primary transition-all group/model">
+                                        <div className="h-1.5 w-1.5 rounded-full bg-primary/40 group-hover/model:bg-primary" />
+                                        <span>{!isConfigComplete ? "Link Engine" : (useDefault ? 'Lumis Core' : selectedModel)}</span>
+                                    </Link>
                                     
-                                    <div className="flex items-center gap-2 ml-2">
-                                        <button
-                                            onClick={() => tier !== 'free' && setChatMode(chatMode === 'multi-turn' ? 'single-turn' : 'multi-turn')}
-                                            disabled={!isConfigComplete || tier === 'free'}
-                                            className={cn(
-                                                "group/mem flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all relative overflow-hidden",
-                                                chatMode === 'multi-turn' ? "bg-primary/10 text-primary border border-primary/20" : "bg-white/[0.03] text-muted-foreground hover:text-foreground border border-white/5",
-                                                tier === 'free' && "opacity-30 grayscale cursor-allowed"
-                                            )}
-                                            title="Contextual Memory"
-                                        >
-                                            <History className="h-3.5 w-3.5 relative z-10" />
-                                            <span className="text-[9px] font-black uppercase tracking-widest relative z-10">Memory</span>
-                                            {chatMode === 'multi-turn' && <div className="absolute inset-0 bg-primary/10 animate-pulse" />}
-                                        </button>
-                                        
-                                        <button
-                                            onClick={() => tier !== 'free' && setReasoningEnabled(!reasoningEnabled)}
-                                            disabled={!isConfigComplete || tier === 'free'}
-                                            className={cn(
-                                                "group/reason flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all relative overflow-hidden",
-                                                reasoningEnabled ? "bg-accent/10 text-accent border border-accent/20" : "bg-white/[0.03] text-muted-foreground hover:text-foreground border border-white/5",
-                                                tier === 'free' && "opacity-30 grayscale cursor-allowed"
-                                            )}
-                                            title="Reasoning Engine"
-                                        >
-                                            <Brain className="h-3.5 w-3.5 relative z-10" />
-                                            <span className="text-[9px] font-black uppercase tracking-widest relative z-10">Reasoning</span>
-                                            {reasoningEnabled && <div className="absolute inset-0 bg-accent/10 animate-pulse" />}
-                                        </button>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <div className="flex flex-col items-end mr-1 hidden sm:flex">
-                                        <span className="text-[7px] font-black uppercase tracking-[0.3em] text-primary">Transmit</span>
-                                    </div>
                                     <button
-                                        onClick={handleSend}
-                                        disabled={!input.trim() || sending || !isConfigComplete}
+                                        onClick={() => tier !== 'free' && setChatMode(chatMode === 'multi-turn' ? 'single-turn' : 'multi-turn')}
+                                        disabled={!isConfigComplete || tier === 'free'}
                                         className={cn(
-                                            "flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-500 relative group/send overflow-hidden",
-                                            input.trim() && !sending && isConfigComplete
-                                                ? "bg-primary text-primary-foreground shadow-[0_5px_15px_rgba(var(--primary),0.2)] hover:scale-105 active:scale-95"
-                                                : "bg-white/5 text-muted-foreground cursor-not-allowed"
+                                            "flex items-center gap-2 px-2.5 py-1.5 rounded-lg transition-all border",
+                                            chatMode === 'multi-turn' ? "bg-primary/10 text-primary border-primary/20" : "bg-white/[0.03] text-muted-foreground/40 border-white/5 hover:text-foreground",
+                                            tier === 'free' && "opacity-50 cursor-not-allowed bg-black/5 dark:bg-white/5"
                                         )}
+                                        title={tier === 'free' ? "Pro Feature - Upgrade required" : "Contextual Memory"}
                                     >
-                                        <div className="absolute inset-0 bg-gradient-to-tr from-white/20 to-transparent opacity-0 group-hover/send:opacity-100 transition-opacity" />
-                                        <Send className={cn("h-4 w-4 relative z-10 transition-transform", input.trim() && "group-hover/send:-translate-y-0.5 group-hover/send:translate-x-0.5")} />
+                                        {tier === 'free' ? <Lock className="h-3 w-3 text-muted-foreground/40" /> : <History className="h-3 w-3" />}
+                                        <span className="text-[8px] font-black uppercase tracking-widest leading-none">Memory</span>
+                                        {tier === 'free' && <span className="text-[6px] px-1 py-0.5 rounded-sm bg-primary/10 text-primary font-black ml-1">PRO</span>}
+                                    </button>
+                                    
+                                    <button
+                                        onClick={() => tier !== 'free' && setReasoningEnabled(!reasoningEnabled)}
+                                        disabled={!isConfigComplete || tier === 'free'}
+                                        className={cn(
+                                            "flex items-center gap-2 px-2.5 py-1.5 rounded-lg transition-all border",
+                                            reasoningEnabled ? "bg-accent/10 text-accent border-accent/20" : "bg-white/[0.03] text-muted-foreground/40 border-white/5 hover:text-foreground",
+                                            tier === 'free' && "opacity-50 cursor-not-allowed bg-black/5 dark:bg-white/5"
+                                        )}
+                                        title={tier === 'free' ? "Pro Feature - Upgrade required" : "Reasoning Engine"}
+                                    >
+                                        {tier === 'free' ? <Lock className="h-3 w-3 text-muted-foreground/40" /> : <Brain className="h-3 w-3" />}
+                                        <span className="text-[8px] font-black uppercase tracking-widest leading-none">Reasoning</span>
+                                        {tier === 'free' && <span className="text-[6px] px-1 py-0.5 rounded-sm bg-primary/10 text-primary font-black ml-1">PRO</span>}
                                     </button>
                                 </div>
+
+                                <button
+                                    onClick={handleSend}
+                                    disabled={!input.trim() || sending || !isConfigComplete}
+                                    className={cn(
+                                        "flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-300 pointer-events-auto group/send",
+                                        input.trim() && !sending && isConfigComplete
+                                            ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:scale-105"
+                                            : "bg-white/5 text-muted-foreground/30 cursor-not-allowed"
+                                    )}
+                                >
+                                    <Send className={cn("h-4 w-4 relative z-10 transition-transform", input.trim() && "group-hover/send:-translate-y-0.5 group-hover/send:translate-x-0.5")} />
+                                </button>
                             </div>
                         </div>
                     </div>
                     <p className="mt-3 text-center text-[10px] font-medium text-muted-foreground opacity-90">
-                        Make sure to provide a good LLM model for even better accuracy.
+                        Accuracy may be affected by the LLM model you choose.
                     </p>
                 </div>
             </div>

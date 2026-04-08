@@ -134,8 +134,8 @@ const NewProject = () => {
                     </div>
 
                     <div className="space-y-4">
-                        <h1 className="text-5xl font-black tracking-tighter leading-tight uppercase">Connect Repository</h1>
-                        <p className="text-lg text-muted-foreground font-medium leading-relaxed">
+                        <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter leading-tight uppercase">Connect Repository</h1>
+                        <p className="text-base sm:text-lg text-muted-foreground font-medium leading-relaxed">
                             Lumis will parse and index your codebase. Select a synchronized repository to begin.
                         </p>
                     </div>

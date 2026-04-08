@@ -248,14 +248,14 @@ const ChatMessage = ({ role, content, isThinking, thoughts }: ChatMessageProps) 
                                 {/* Internal subtle light beam */}
                                 <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.03] via-transparent to-transparent pointer-events-none" />
                                 
-                                <div className="relative z-10 flex flex-wrap items-end">
+                                <div className="relative z-10">
                                     <ReactMarkdown
                                         remarkPlugins={[remarkGfm]}
                                         components={{
                                             code({ node, inline, className, children, ...props }: any) {
                                                 const match = /language-(\w+)/.exec(className || '');
                                                 return !inline && match ? (
-                                                    <div className="group/code relative rounded-2xl overflow-hidden border border-black/20 dark:border-white/20 my-8 shadow-2xl bg-[#0F0F12]">
+                                                    <div className="group/code relative w-full rounded-2xl overflow-hidden border border-black/20 dark:border-white/20 my-8 shadow-2xl bg-[#0F0F12]">
                                                         <div className="flex items-center justify-between border-b border-white/5 bg-white/[0.03] px-5 py-3.5 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground backdrop-blur-xl">
                                                             <div className="flex items-center gap-2.5">
                                                                 <div className="h-6 w-6 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
@@ -277,17 +277,17 @@ const ChatMessage = ({ role, content, isThinking, thoughts }: ChatMessageProps) 
                                                             style={vscDarkPlus}
                                                             language={match[1]}
                                                             PreTag="div"
-                                                            customStyle={{ margin: 0, padding: '1.5rem', background: 'transparent', fontSize: '0.9rem', lineHeight: '1.8' }}
+                                                            customStyle={{ margin: 0, padding: '1.5rem', background: 'transparent', fontSize: '0.85rem', lineHeight: '1.7' }}
                                                             {...props}
                                                         />
                                                     </div>
                                                 ) : (
-                                                    <code className={cn("rounded-lg bg-primary/5 text-primary px-2.5 py-1 font-mono text-[13px] font-black border border-primary/10", className)} {...props}>
+                                                    <code className={cn("rounded-lg bg-primary/5 text-primary px-2.5 py-1 font-mono text-[13px] font-black border border-primary/10 whitespace-nowrap", className)} {...props}>
                                                         {children}
                                                     </code>
                                                 );
                                             },
-                                        p: ({ children }) => <span className="mb-6 last:mb-0 leading-[1.8] tracking-wide text-foreground/90 block">{children}</span>,
+                                        p: ({ children }) => <p className="mb-6 last:mb-0 leading-[1.8] tracking-wide text-foreground/90">{children}</p>,
                                         ul: ({ children }) => <ul className="mb-6 space-y-3 list-none pl-0">{children}</ul>,
                                         ol: ({ children }) => <ol className="mb-6 space-y-3 list-decimal pl-5 font-mono text-sm marker:text-primary font-bold">{children}</ol>,
                                         li: ({ children }) => (
@@ -295,22 +295,23 @@ const ChatMessage = ({ role, content, isThinking, thoughts }: ChatMessageProps) 
                                                 <span className="font-sans font-medium">{children}</span>
                                             </li>
                                         ),
-                                        h1: ({ children }) => <h1 className="text-3xl font-black mb-6 tracking-tighter mt-10 text-foreground flex items-center gap-3"><Sparkles className="h-6 w-6 text-primary"/>{children}</h1>,
-                                        h2: ({ children }) => <h2 className="text-xl font-black mb-4 tracking-tight mt-8 uppercase text-foreground border-b border-black/5 dark:border-white/5 pb-2">{children}</h2>,
-                                        h3: ({ children }) => <h3 className="text-lg font-bold mb-3 tracking-tight mt-6 text-primary">{children}</h3>,
+                                        h1: ({ children }) => <h1 className="text-3xl font-black mb-6 tracking-tighter mt-12 text-foreground flex items-center gap-3"><Sparkles className="h-6 w-6 text-primary"/>{children}</h1>,
+                                        h2: ({ children }) => <h2 className="text-xl font-black mb-5 tracking-tight mt-10 uppercase text-foreground border-b-2 border-primary/20 pb-3 w-fit pr-10">{children}</h2>,
+                                        h3: ({ children }) => <h3 className="text-lg font-bold mb-4 tracking-tight mt-8 text-primary uppercase text-[12px] tracking-[0.2em]">{children}</h3>,
                                         strong: ({ children }) => <strong className="font-black text-foreground">{children}</strong>,
                                         blockquote: ({ children }) => (
-                                            <blockquote className="border-l-4 border-primary bg-primary/5 p-4 rounded-r-2xl my-6 text-foreground/80 italic shadow-sm">
+                                            <blockquote className="border-l-4 border-primary bg-primary/5 p-6 rounded-r-2xl my-8 text-foreground/80 italic shadow-sm relative overflow-hidden">
+                                                <div className="absolute top-0 right-0 p-2 opacity-10"><Code2 className="h-12 w-12" /></div>
                                                 {children}
                                             </blockquote>
                                         ),
                                         table: ({ children }) => (
-                                            <div className="overflow-x-auto rounded-xl border border-black/5 dark:border-white/5 my-6 bg-card/50">
-                                                <table className="min-w-full divide-y divide-black/5 dark:divide-white/5 text-sm">{children}</table>
+                                            <div className="overflow-x-auto rounded-2xl border border-black/10 dark:border-white/10 my-8 bg-card/50 shadow-xl w-full">
+                                                <table className="min-w-full divide-y divide-black/10 dark:divide-white/10 text-sm">{children}</table>
                                             </div>
                                         ),
-                                        th: ({ children }) => <th className="px-4 py-3 bg-black/5 dark:bg-white/5 font-bold uppercase tracking-widest text-[10px] text-muted-foreground text-left">{children}</th>,
-                                        td: ({ children }) => <td className="px-4 py-3 border-t border-black/5 dark:border-white/5 opacity-80">{children}</td>,
+                                        th: ({ children }) => <th className="px-6 py-4 bg-black/5 dark:bg-white/5 font-black uppercase tracking-widest text-[9px] text-primary/80 text-left">{children}</th>,
+                                        td: ({ children }) => <td className="px-6 py-4 border-t border-black/5 dark:border-white/5 text-foreground/70 font-medium">{children}</td>,
                                     }}
                                     >
                                         {displayContent}
@@ -319,7 +320,7 @@ const ChatMessage = ({ role, content, isThinking, thoughts }: ChatMessageProps) 
                                         <motion.span
                                             animate={{ opacity: [0, 1, 0] }}
                                             transition={{ repeat: Infinity, duration: 0.8 }}
-                                            className="inline-block w-2.5 h-5 bg-primary/80 ml-1.5 self-center rounded-sm shadow-[0_0_12px_theme(colors.primary.DEFAULT)]"
+                                            className="inline-block w-2.5 h-5 bg-primary/80 ml-1.5 align-middle rounded-sm shadow-[0_0_12px_theme(colors.primary.DEFAULT)]"
                                         />
                                     )}
                                 </div>

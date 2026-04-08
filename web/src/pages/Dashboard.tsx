@@ -89,9 +89,9 @@ const RiskStatus = ({ risks }: { risks: any[] }) => {
                     { label: 'Warning', count: medium, color: 'text-orange-500', bg: 'bg-orange-500/5' },
                     { label: 'Notice', count: low, color: 'text-emerald-500', bg: 'bg-emerald-500/5' }
                 ].map((stat, i) => (
-                    <div key={i} className={cn("rounded-[2rem] p-6 text-center border border-black/5 dark:border-white/5 bg-accent/10 transition-transform hover:scale-105", stat.bg)}>
-                        <div className={cn("text-4xl font-black tracking-tighter", stat.color)}>{stat.count}</div>
-                        <div className={cn("text-[9px] uppercase tracking-widest font-black opacity-40 mt-1", stat.color)}>{stat.label}</div>
+                    <div key={i} className={cn("rounded-[1.5rem] sm:rounded-[2rem] p-4 sm:p-6 text-center border border-black/5 dark:border-white/5 bg-accent/10 transition-transform hover:scale-105", stat.bg)}>
+                        <div className={cn("text-2xl sm:text-4xl font-black tracking-tighter", stat.color)}>{stat.count}</div>
+                        <div className={cn("text-[8px] sm:text-[9px] uppercase tracking-widest font-black opacity-40 mt-1", stat.color)}>{stat.label}</div>
                     </div>
                 ))}
             </div>
@@ -189,6 +189,7 @@ const Dashboard = () => {
     const { tier, limits } = useBillingStore();
     const navigate = useNavigate();
 
+    const isSyncing = syncing || ['starting', 'PROGRESSING', 'ANALYZING', 'syncing', 'ingesting'].includes(project?.sync_state?.status || '');
     const isLimitReached = tier === 'free' && projects.length >= (limits?.projects || 3);
     const webhookUrl = project ? `${import.meta.env.VITE_API_URL}/api/webhook/${user?.id}/${project?.id}` : '';
     const [copied, setCopied] = useState(false);
@@ -250,14 +251,14 @@ const Dashboard = () => {
                     style={{ backgroundImage: 'radial-gradient(circle, #888 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
             </div>
 
-            <header className="flex items-center justify-between gap-4 py-4 shrink-0 border-b border-black/5 dark:border-white/5 relative z-20">
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2">
-                             <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">Project Dashboard</h1>
+            <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 py-4 shrink-0 border-b border-black/5 dark:border-white/5 relative z-20">
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <div className="flex items-center gap-3 md:gap-4 w-full sm:w-auto">
+                        <div className="flex items-center gap-2 shrink-0">
+                             <h1 className="text-lg md:text-2xl font-bold tracking-tight text-foreground whitespace-nowrap">Dashboard</h1>
                         </div>
-                        <span className="text-muted-foreground/20 font-light text-xl">/</span>
-                        <div className="flex items-center">
+                        <span className="text-muted-foreground/20 font-light text-xl shrink-0">/</span>
+                        <div className="flex items-center min-w-0">
                             <ProjectSwitcher />
                         </div>
                     </div>
@@ -287,8 +288,7 @@ const Dashboard = () => {
             </header>
 
 
-            <div className="flex-grow overflow-y-auto custom-scrollbar pt-4 pb-19 space-y-4 pr-1">
-
+            <div className="flex-grow overflow-y-auto custom-scrollbar pt-4 pb-20 space-y-4 pr-1">
             {velocityRisk && project && (
                 <VelocityAlert risk={velocityRisk} />
             )}
@@ -313,15 +313,25 @@ const Dashboard = () => {
                         </div>
                     </div>
                     <button
-                        onClick={async () => {
-                            setSyncing(true);
-                            try { await syncProject(project.id); } finally { setSyncing(false); }
-                        }}
-                        disabled={syncing}
-                        className="h-14 px-10 rounded-2xl bg-orange-500 text-white text-[10px] font-black uppercase tracking-widest hover:bg-orange-600 transition-all hover:scale-105 active:scale-95 shadow-xl shadow-orange-500/20"
-                    >
-                        SYNCH NOW
-                    </button>
+                                    onClick={async () => {
+                                        if (!project) return;
+                                        setSyncing(true);
+                                        try { await syncProject(project.id); } finally { setSyncing(false); }
+                                    }}
+                                    disabled={isSyncing}
+                                    className={cn(
+                                        "h-20 rounded-[2.2rem] bg-accent group/btn flex items-center justify-between px-8 border border-black/5 dark:border-white/5 transition-all duration-500",
+                                        isSyncing ? "opacity-50 cursor-not-allowed" : "hover:bg-primary"
+                                    )}
+                                >
+                                    <div className="flex flex-col items-start translate-x-0 group-hover/btn:translate-x-2 transition-transform">
+                                        <span className={cn("text-[10px] font-black uppercase text-primary", !isSyncing && "group-hover/btn:text-primary-foreground")}>Manual Sync</span>
+                                        <span className={cn("text-[8px] font-bold text-muted-foreground uppercase", !isSyncing && "group-hover/btn:text-primary-foreground/60")}>
+                                            {isSyncing ? 'Ingesting...' : 'Pull Records'}
+                                        </span>
+                                    </div>
+                                    <RefreshCw className={cn("h-6 w-6 text-primary", !isSyncing && "group-hover/btn:text-primary-foreground", isSyncing && "animate-spin")} />
+                                </button>
                 </motion.div>
             )}
 
@@ -390,14 +400,14 @@ const Dashboard = () => {
                                         setSyncing(true);
                                         try { await syncProject(project.id); } finally { setSyncing(false); }
                                     }}
-                                    disabled={syncing || project?.sync_state?.status === 'ingesting'}
+                                    disabled={isSyncing}
                                     className="h-20 rounded-[2.2rem] bg-accent group/btn flex items-center justify-between px-8 border border-black/5 dark:border-white/5 hover:bg-primary transition-all duration-500"
                                 >
                                     <div className="flex flex-col items-start translate-x-0 group-hover/btn:translate-x-2 transition-transform">
                                         <span className="text-[10px] font-black uppercase text-primary group-hover/btn:text-primary-foreground">Manual Sync</span>
-                                        <span className="text-[8px] font-bold text-muted-foreground uppercase group-hover/btn:text-primary-foreground/60">{syncing ? 'Ingesting...' : 'Pull Records'}</span>
+                                        <span className="text-[8px] font-bold text-muted-foreground uppercase group-hover/btn:text-primary-foreground/60">{isSyncing ? 'Ingesting...' : 'Pull Records'}</span>
                                     </div>
-                                    <RefreshCw className={cn("h-6 w-6 text-primary group-hover/btn:text-primary-foreground", (syncing || project?.sync_state?.status === 'ingesting') && "animate-spin")} />
+                                    <RefreshCw className={cn("h-6 w-6 text-primary group-hover/btn:text-primary-foreground", isSyncing && "animate-spin")} />
                                 </button>
                             </div>
                         </div>
@@ -428,10 +438,10 @@ const Dashboard = () => {
                         description="Real-time Codebase Bridge"
                         icon={Webhook}
                         accent="primary"
-                        className="h-full"
+                        className={cn(project?.webhook_secret ? "h-fit self-start" : "h-full")}
                     >
-                        <div className="flex flex-col h-full">
-                            <div className="flex items-center justify-between mb-4 p-4 rounded-2xl bg-accent/20 border border-white/5">
+                        <div className={cn("flex flex-col gap-4", !project?.webhook_secret && "h-full")}>
+                            <div className="flex items-center justify-between p-4 rounded-2xl bg-accent/20 border border-white/5">
                                 <div className="flex items-center gap-3">
                                     <div className={cn(
                                         "h-10 w-10 rounded-xl flex items-center justify-center transition-all",
@@ -458,8 +468,8 @@ const Dashboard = () => {
 
                             {!project?.webhook_secret && (
                                 <div className="space-y-4">
-                                    <div className="p-4 rounded-2xl bg-orange-500/[0.03] border border-orange-500/10 border-dashed">
-                                        <h4 className="text-[10px] font-black uppercase tracking-widest text-orange-500 mb-3 flex items-center gap-2">
+                                    <div className="p-4 rounded-2xl bg-orange-500/[0.03] border border-orange-500/10 border-dashed flex flex-col gap-3">
+                                        <h4 className="text-[10px] font-black uppercase tracking-widest text-orange-500 flex items-center gap-2">
                                             <ShieldAlert className="h-3 w-3" />
                                             Manual Bridge Configuration
                                         </h4>
@@ -511,7 +521,7 @@ const Dashboard = () => {
                             )}
 
                             {project?.webhook_secret && (
-                                <div className="mt-auto p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 flex items-center gap-4">
+                                <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 flex items-center gap-4">
                                     <div className="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
                                         <RefreshCw className="h-5 w-5 text-emerald-500" />
                                     </div>
