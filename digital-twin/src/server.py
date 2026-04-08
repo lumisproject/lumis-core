@@ -63,6 +63,11 @@ app.include_router(github_auth_router)
 app.include_router(stripe_router)
 app.include_router(email_intake_router)
 
+@app.get("/api/billing/usage")
+async def get_billing_usage(tier_data: dict = Depends(get_user_tier_and_usage)):
+    """Provides the frontend with current tier, usage stats, and limits."""
+    return tier_data
+
 # --- STATE MANAGEMENT (Now Stateless via Redis) ---
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
@@ -444,12 +449,6 @@ async def start_ingest(req: IngestRequest, request: Request, background_tasks: B
             jira_proj = project_data.get('jira_project_id')
             notion_proj = project_data.get('notion_project_id')
             last_commit = project_data.get('last_commit')
-            webhook_secret = project_data.get('webhook_secret')
-
-            # Ensure secret exists for existing projects
-            if not webhook_secret:
-                webhook_secret = secrets.token_hex(16)
-                supabase.table("projects").update({"webhook_secret": webhook_secret}).eq("id", project_id).execute()
             
             commits = []
             for c in all_commits:
@@ -464,15 +463,13 @@ async def start_ingest(req: IngestRequest, request: Request, background_tasks: B
             commits = [all_commits[0]] if all_commits else [] 
             latest_commit_sha = commits[0]["sha"] if commits else None
             
-            new_webhook_secret = secrets.token_hex(16)
-
             insert_payload = {
                 "user_id": req.user_id,
                 "repo_url": req.repo_url,
                 "jira_project_id": None,
                 "notion_project_id": None,
                 "last_commit": latest_commit_sha,
-                "webhook_secret": new_webhook_secret
+                "webhook_secret": None
             }
             res = supabase.table("projects").insert(insert_payload).execute()
             if not res or not res.data:
@@ -500,7 +497,7 @@ async def start_ingest(req: IngestRequest, request: Request, background_tasks: B
             agent=agent
         )
 
-        return {"project_id": project_id, "status": "started", "webhook_secret": webhook_secret if is_existing_project else new_webhook_secret}
+        return {"project_id": project_id, "status": "started"}
     except HTTPException:
         raise
     except Exception as e:

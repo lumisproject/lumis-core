@@ -124,13 +124,14 @@ async def ingest_repo(repo_url, project_id, progress_callback=None, user_config=
                     # --- FIXED: Insert edges for modules AND specific imported functions ---
                     if block.imports: 
                         for i in block.imports:
-                            # 1. Add edge for the module itself (e.g., legacy_billing)
-                            edges_to_insert.append({
-                                "project_id": project_id, 
-                                "source_unit_name": clean_id, 
-                                "target_unit_name": i.module, 
-                                "edge_type": "imports"
-                            })
+                            # 1. Add edge for the module itself ONLY if it exists
+                            if i.module: # <--- ADD THIS CHECK
+                                edges_to_insert.append({
+                                    "project_id": project_id, 
+                                    "source_unit_name": clean_id, 
+                                    "target_unit_name": i.module, 
+                                    "edge_type": "imports"
+                                })
                             # 2. Add edges for specific imported names (e.g., calculate_tax_and_fees)
                             for name in i.names:
                                 if name and name != "*":

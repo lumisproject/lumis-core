@@ -223,11 +223,6 @@ const Layout = () => {
                 </header>
 
                 <main className="flex-1 overflow-y-auto relative h-full">
-                    {location.pathname === '/app' && (
-                        <div className="absolute top-4 right-4 md:top-8 md:right-8 z-30">
-                            <ProjectSwitcher />
-                        </div>
-                    )}
                     <AnimatePresence mode="wait">
                         <motion.div
                             key={window.location.pathname}
