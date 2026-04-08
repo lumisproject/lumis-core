@@ -3,7 +3,6 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_KEY || '';
 
-// Create a dummy client if no URL is configured to prevent crashes
 export const supabase: SupabaseClient = supabaseUrl
     ? createClient(supabaseUrl, supabaseAnonKey)
     : (new Proxy({} as SupabaseClient, {
@@ -20,6 +19,9 @@ export const supabase: SupabaseClient = supabaseUrl
             if (prop === 'from') {
                 return () => ({
                     select: () => ({
+                        limit: () => ({
+                            execute: async () => ({ data: null, error: { message: 'Supabase not configured.' } })
+                        }),
                         eq: () => ({
                             maybeSingle: async () => ({ data: null, error: null }),
                         }),
@@ -30,4 +32,30 @@ export const supabase: SupabaseClient = supabaseUrl
         },
     }));
 
-export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+export const API_BASE = import.meta.env.VITE_API_URL;
+
+export async function inspectProjectsTable() {
+    try {
+        const { data, error } = await supabase
+            .from('projects')
+            .select('*')
+            .limit(1);
+
+        if (error) {
+            console.error('Error fetching table info:', error.message);
+            return { status: 'error', message: error.message };
+        }
+
+        if (data && data.length > 0) {
+            const columns = Object.keys(data[0]);
+            console.log('Detected Columns:', columns);
+            return { status: 'success', columns };
+        } else {
+            console.log('No data found in projects table to determine schema.');
+            return { status: 'success', message: 'No data in projects table' };
+        }
+    } catch (err) {
+        console.error('Unexpected error during DB inspection:', err);
+        return { status: 'error', message: 'An unexpected error occurred' };
+    }
+}

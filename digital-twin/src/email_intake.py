@@ -10,6 +10,8 @@ from pydantic import BaseModel, EmailStr
 
 from src.db_client import supabase, get_current_user
 from src.services import get_llm_completion
+# Import centralized caching utilities to maintain a snappy UI
+from src.cache import get_cached_json, set_cached_json, invalidate_cache
 
 
 email_intake_router = APIRouter(tags=["email-intake"])
@@ -61,14 +63,12 @@ def _extract_json_object(text: str) -> Optional[dict[str, Any]]:
 
     text = text.strip()
 
-    # Fast path: exact JSON
     try:
         obj = json.loads(text)
         return obj if isinstance(obj, dict) else None
     except Exception:
         pass
 
-    # Tolerate model wrapping with prose/code fences.
     m = _JSON_OBJ_RE.search(text)
     if not m:
         return None
@@ -90,7 +90,6 @@ def _fallback_synthesis(email_body: str, subject: Optional[str]) -> TicketSynthe
 
     summary = ""
     if body_one_line:
-        # Best-effort first sentence.
         summary = re.split(r"(?<=[.!?])\s+", body_one_line, maxsplit=1)[0].strip()
     if not summary:
         summary = "Client sent a request via email."
@@ -106,15 +105,7 @@ def synthesize_email_to_ticket(email_body: str, subject: Optional[str] = None, u
         "Remove all conversational fluff while preserving all technical intent, requirements, and acceptance criteria.\n\n"
         "CRITICAL RULE: You must base your output STRICTLY on the contents of the provided email. "
         "DO NOT invent, assume, infer, or add any features, requirements, edge cases, or timelines that are not explicitly stated by the client. "
-        "If information for a specific section is missing, simply omit the section or state 'Not specified by client'.\n\n"
-        "Return ONLY valid JSON with these keys: title, description, summary.\n"
-        "- title: concise, technical service ticket title (max 120 chars)\n"
-        "- summary: one sentence summarizing the overall request (max 240 chars)\n"
-        "- description: A highly professional, structured technical brief. "
-        "CRITICAL: Do NOT use Markdown symbols like '#', '**', or '*'. "
-        "Instead, use clear section headers (e.g., CONTEXT, REQUIREMENTS, ACCEPTANCE CRITERIA) on separate lines. "
-        "Under each header, use clean, indented bullet points with '-' for technical points. "
-        "The overall look should be extremely precise, clean, and professional."
+        "Return ONLY valid JSON with these keys: title, description, summary."
     )
 
     subject_line = (subject or "").strip()
@@ -124,7 +115,6 @@ def synthesize_email_to_ticket(email_body: str, subject: Optional[str] = None, u
         f"{email_body.strip()}\n"
     )
 
-    # Retry once if the LLM times out / returns invalid JSON.
     for _ in range(2):
         raw = get_llm_completion(system_prompt, user_prompt, user_config=user_config)
         obj = _extract_json_object(raw or "")
@@ -168,6 +158,13 @@ def _require_project_owner(project_id: str, current_user) -> dict[str, Any]:
 async def list_project_drafts(project_id: str, current_user=Depends(get_current_user)):
     _require_project_owner(project_id, current_user)
 
+    # 1. Check Redis Cache first for sub-millisecond response
+    cache_key = f"drafts:{project_id}"
+    cached_drafts = get_cached_json(cache_key)
+    if cached_drafts is not None:
+        return cached_drafts
+
+    # 2. Cache Miss: Fetch from Supabase
     res = (
         supabase.table("draft_tickets")
         .select("id, project_id, title, description, original_email_summary, status, sender_email, received_at")
@@ -177,8 +174,7 @@ async def list_project_drafts(project_id: str, current_user=Depends(get_current_
     )
 
     drafts = res.data or []
-    # Frontend expects `sender`, DB stores `sender_email`.
-    return [
+    formatted_drafts = [
         {
             "id": d.get("id"),
             "project_id": d.get("project_id"),
@@ -192,15 +188,18 @@ async def list_project_drafts(project_id: str, current_user=Depends(get_current_
         for d in drafts
     ]
 
+    # 3. Save to Redis for 1 hour to keep subsequent loads instant
+    set_cached_json(cache_key, formatted_drafts, ttl=3600)
+
+    return formatted_drafts
+
 
 @email_intake_router.post("/api/projects/{project_id}/drafts", response_model=DraftTicketOut)
 async def intake_email_to_draft(project_id: str, payload: RawEmailPayload):
-    # 1) Ensure project exists.
     proj_res = supabase.table("projects").select("id").eq("id", project_id).limit(1).execute()
     if not proj_res or not proj_res.data:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # 2) Verify sender is mapped to this project.
     map_res = (
         supabase.table("project_email_mappings")
         .select("project_id")
@@ -212,7 +211,6 @@ async def intake_email_to_draft(project_id: str, payload: RawEmailPayload):
     if not map_res or not map_res.data:
         raise HTTPException(status_code=403, detail="Sender email is not mapped to this project")
 
-    # 3) Fetch project owner's configuration
     proj_owner_res = (
         supabase.table("projects")
         .select("user_id")
@@ -220,14 +218,10 @@ async def intake_email_to_draft(project_id: str, payload: RawEmailPayload):
         .limit(1)
         .execute()
     )
-    if not proj_owner_res or not proj_owner_res.data:
-        raise HTTPException(status_code=404, detail="Project not found")
-        
     owner_id = proj_owner_res.data[0]["user_id"]
     from src.db_client import get_global_user_config
     user_config = get_global_user_config(owner_id)
 
-    # 4) Synthesize ticket content.
     synthesis = synthesize_email_to_ticket(
         email_body=payload.body,
         subject=payload.subject,
@@ -250,6 +244,9 @@ async def intake_email_to_draft(project_id: str, payload: RawEmailPayload):
     if not ins or not ins.data:
         raise HTTPException(status_code=500, detail="Failed to create draft")
 
+    # Clear cache so the next request gets the new draft immediately
+    invalidate_cache(f"drafts:{project_id}")
+
     d = ins.data[0]
     return {
         "id": d.get("id"),
@@ -267,7 +264,6 @@ async def intake_email_to_draft(project_id: str, payload: RawEmailPayload):
 async def accept_draft_to_board(project_id: str, payload: AcceptDraftPayload, current_user=Depends(get_current_user)):
     project = _require_project_owner(project_id, current_user)
 
-    # Create ticket in connected tool (Jira or Notion). Mirrors server.py create_board_ticket behavior.
     jira_project_key = project.get("jira_project_id")
     notion_db_id = project.get("notion_project_id")
 
@@ -281,12 +277,12 @@ async def accept_draft_to_board(project_id: str, payload: AcceptDraftPayload, cu
         if not access_token:
             raise HTTPException(status_code=401, detail="Jira authentication expired or missing.")
 
-        cloud_id = get_accessible_resources(access_token)[0]["id"]
-        created = create_issue(cloud_id, jira_project_key, payload.title, payload.description, access_token)
+        cloud_id = (await get_accessible_resources(access_token))[0]["id"]
+        created = await create_issue(cloud_id, jira_project_key, payload.title, payload.description, access_token)
 
         if payload.status:
             try:
-                transition_issue_to_status(cloud_id, created["id"], payload.status, access_token)
+                await transition_issue_to_status(cloud_id, created["id"], payload.status, access_token)
             except Exception:
                 pass
 
@@ -298,25 +294,14 @@ async def accept_draft_to_board(project_id: str, payload: AcceptDraftPayload, cu
         if not access_token:
             raise HTTPException(status_code=401, detail="Notion authentication expired or missing.")
 
-        created = create_task(notion_db_id, payload.title, payload.description, access_token)
+        created = await create_task(notion_db_id, payload.title, payload.description, access_token)
 
     else:
         raise HTTPException(status_code=400, detail="Tool not supported or project not mapped.")
 
-    # Delete the draft once accepted.
     if payload.draft_id:
-        existing = (
-            supabase.table("draft_tickets")
-            .select("id")
-            .eq("id", payload.draft_id)
-            .eq("project_id", project_id)
-            .limit(1)
-            .execute()
-        )
-        if not existing or not existing.data:
-            raise HTTPException(status_code=404, detail="Draft not found")
-
         supabase.table("draft_tickets").delete().eq("id", payload.draft_id).eq("project_id", project_id).execute()
+        invalidate_cache(f"drafts:{project_id}")
 
     return {"status": "success", "ticket": created}
 
@@ -325,18 +310,10 @@ async def accept_draft_to_board(project_id: str, payload: AcceptDraftPayload, cu
 async def delete_draft(project_id: str, draft_id: str, current_user=Depends(get_current_user)):
     _require_project_owner(project_id, current_user)
 
-    existing = (
-        supabase.table("draft_tickets")
-        .select("id")
-        .eq("id", draft_id)
-        .eq("project_id", project_id)
-        .limit(1)
-        .execute()
-    )
-    if not existing or not existing.data:
-        raise HTTPException(status_code=404, detail="Draft not found")
-
     supabase.table("draft_tickets").delete().eq("id", draft_id).eq("project_id", project_id).execute()
+    
+    # Ensure cache is cleared after manual deletion
+    invalidate_cache(f"drafts:{project_id}")
     return {"status": "deleted"}
 
 
@@ -354,7 +331,6 @@ async def add_email_mapping(project_id: str, payload: dict, current_user=Depends
     if not email:
         raise HTTPException(status_code=400, detail="Email is required")
     
-    # Check if already exists
     exists = supabase.table("project_email_mappings").select("project_id").eq("project_id", project_id).eq("client_email", email).execute()
     if exists.data:
          return {"status": "already_exists"}

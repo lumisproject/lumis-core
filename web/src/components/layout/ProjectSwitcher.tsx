@@ -8,6 +8,7 @@ import { useBillingStore } from '@/stores/useBillingStore';
 import { ChevronDown, Github, Plus, Check, RefreshCw, Lock, Trash2, X, AlertTriangle, Search, Database } from 'lucide-react';
 import { API_BASE } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { useIngestionStream } from '@/hooks/useIngestionStream';
 
 export const ProjectSwitcher: React.FC = () => {
   const { projects, project, selectProject, fetchProjects, isUpToDate, syncProject, checkProjectSync } = useProjectStore();
@@ -20,6 +21,9 @@ export const ProjectSwitcher: React.FC = () => {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  const syncStream = useIngestionStream(project?.id);
+  const isSyncingActive = syncStream && ['starting', 'PROGRESSING', 'ANALYZING', 'syncing'].includes(syncStream.status);
+  
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -103,13 +107,13 @@ export const ProjectSwitcher: React.FC = () => {
         className="flex items-center justify-between gap-2 rounded-full border border-black/5 bg-accent/50 px-4 py-2 text-xs font-black dark:border-white/5 hover:bg-accent transition-colors min-w-[200px] uppercase tracking-widest"
       >
         <div className="flex items-center gap-2 truncate">
-          {project?.status === 'syncing' || project?.sync_state?.status === 'syncing' ? (
+          {isSyncingActive ? (
             <RefreshCw className="h-4 w-4 shrink-0 text-primary animate-spin" />
           ) : (
             <Github className="h-4 w-4 shrink-0 text-primary" />
           )}
-          <span className="truncate text-foreground max-w-[120px]">
-            {project?.status === 'syncing' || project?.sync_state?.status === 'syncing' ? 'Syncing...' : project ? displayName(project) : 'Select project'}
+          <span className="truncate text-foreground max-w-[80px] sm:max-w-[120px]">
+            {isSyncingActive ? 'Syncing...' : project ? displayName(project) : 'Select project'}
           </span>
         </div>
         <ChevronDown className={cn("h-4 w-4 shrink-0 opacity-50 transition-transform", open && "rotate-180")} />
@@ -122,7 +126,7 @@ export const ProjectSwitcher: React.FC = () => {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 mt-2 w-72 rounded-3xl border border-black/10 bg-white p-3 shadow-2xl dark:border-white/10 dark:bg-[#0F0F0F] z-50 origin-top-right"
+            className="absolute left-0 mt-2 w-72 rounded-3xl border border-black/10 bg-white p-3 shadow-2xl dark:border-white/10 dark:bg-[#0F0F0F] z-50 origin-top-left"
           >
             <div className="px-3 py-2 text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground mb-2">
               Your Projects
@@ -232,7 +236,7 @@ export const ProjectSwitcher: React.FC = () => {
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="relative w-full max-w-lg overflow-hidden rounded-[3rem] border border-destructive/20 bg-card p-12 shadow-2xl dark:bg-[#0F0F0F] z-[210] mx-auto"
+              className="relative w-full max-w-lg overflow-hidden rounded-[2rem] sm:rounded-[3rem] border border-destructive/20 bg-card p-6 sm:p-12 shadow-2xl dark:bg-[#0F0F0F] z-[210] mx-auto"
             >
               <button 
                 onClick={() => { setDeleteOpen(false); setDeleteConfirm(''); }} 
@@ -242,8 +246,8 @@ export const ProjectSwitcher: React.FC = () => {
               </button>
 
               <div className="mb-10 text-center space-y-4">
-                <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[2rem] bg-destructive/10 text-destructive border border-destructive/20 shadow-2xl shadow-destructive/10">
-                    <AlertTriangle className="h-10 w-10" />
+                <div className="mx-auto flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-[1.5rem] sm:rounded-[2rem] bg-destructive/10 text-destructive border border-destructive/20 shadow-2xl shadow-destructive/10">
+                    <AlertTriangle className="h-8 w-8 sm:h-10 sm:w-10" />
                 </div>
                 <div className="space-y-2">
                     <h2 className="text-3xl font-black tracking-tighter uppercase text-destructive">Delete Project</h2>

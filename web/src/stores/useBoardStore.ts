@@ -54,6 +54,7 @@ interface BoardState {
   fetchTeamMembers: (projectId: string, tool: string) => Promise<void>;
   assignTicket: (projectId: string, tool: string, ticketId: string, accountId: string) => Promise<void>;
   updateTicketDescription: (projectId: string, tool: string, ticketId: string, description: string) => Promise<void>;
+  updateTicketTitle: (projectId: string, tool: string, ticketId: string, title: string) => Promise<void>;
   addColumn: (projectId: string, tool: string, columnData: Omit<StatusColumn, 'id'>) => Promise<void>;
   deleteTicket: (projectId: string, tool: string, ticketId: string) => Promise<boolean>;
 }
@@ -189,6 +190,20 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     } catch (err: any) {
       console.error("Failed to update description", err);
       alert("Failed to update description: " + (err.response?.data?.detail || err.message));
+    }
+  },
+  
+  updateTicketTitle: async (projectId, tool, ticketId, title) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      await axios.put(`${API_BASE}/api/projects/${projectId}/board/tickets/${ticketId}/title?tool=${tool}`, 
+        { title },
+        { headers: { 'Authorization': `Bearer ${session?.access_token}` } }
+      );
+      get().fetchBoard(projectId, tool as any);
+    } catch (err: any) {
+      console.error("Failed to update title", err);
+      alert("Failed to update title: " + (err.response?.data?.detail || err.message));
     }
   },
 

@@ -1,244 +1,104 @@
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+import httpx
+import asyncio
 import logging
 
 logger = logging.getLogger("LumisAPI")
 
-# --- RATE LIMITING & RETRY STRATEGY ---
-notion_session = requests.Session()
-retry_strategy = Retry(
-    total=5,
-    backoff_factor=2,
-    status_forcelist=[429, 500, 502, 503, 504],
-    allowed_methods=["HEAD", "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE"]
-)
-adapter = HTTPAdapter(max_retries=retry_strategy)
-notion_session.mount("https://", adapter)
-notion_session.mount("http://", adapter)
-
-# Notion requires a specific version header
 NOTION_VERSION = "2022-06-28"
+notion_client = httpx.AsyncClient(timeout=15.0)
+
+async def _request(method: str, url: str, headers: dict, json: dict = None):
+    """Helper to execute async requests with exponential backoff for rate limits."""
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = await notion_client.request(method, url, headers=headers, json=json)
+            if response.status_code in [429, 500, 502, 503, 504]:
+                logger.warning(f"Notion API {response.status_code} on {url}. Retry {attempt+1}/{max_retries}")
+                await asyncio.sleep(2 ** attempt)
+                continue
+            response.raise_for_status()
+            return response
+        except Exception as e:
+            if attempt == max_retries - 1:
+                logger.error(f"Notion request failed permanently: {e}")
+                raise e
+            await asyncio.sleep(2 ** attempt)
 
 def notion_headers(access_token: str):
-    return {
-        "Authorization": f"Bearer {access_token}",
-        "Notion-Version": NOTION_VERSION,
-        "Content-Type": "application/json"
-    }
+    return {"Authorization": f"Bearer {access_token}", "Notion-Version": NOTION_VERSION, "Content-Type": "application/json"}
 
-def get_accessible_databases(access_token: str):
-    """Searches the user's workspace for available databases they've shared with Lumis."""
+async def get_accessible_databases(access_token: str):
     url = "https://api.notion.com/v1/search"
-    payload = {
-        "filter": {
-            "value": "database",
-            "property": "object"
-        }
-    }
-    response = notion_session.post(url, headers=notion_headers(access_token), json=payload)
-    response.raise_for_status()
-    results = response.json().get("results", [])
-    
-    # Return a clean list of databases with their IDs and Titles
+    res = await _request("POST", url, headers=notion_headers(access_token), json={"filter": {"value": "database", "property": "object"}})
     databases = []
-    for db in results:
-        title = "Untitled Database"
-        if "title" in db and db["title"]:
-            title = db["title"][0].get("plain_text", "Untitled Database")
+    for db in res.json().get("results", []):
+        title = db["title"][0].get("plain_text", "Untitled Database") if db.get("title") else "Untitled Database"
         databases.append({"id": db["id"], "name": title})
-        
     return databases
 
-def get_active_tasks(database_id: str, access_token: str):
-    """Fetches recent tasks from the database. (Simplified to grab the last 10 updated)."""
+async def get_active_tasks(database_id: str, access_token: str):
     url = f"https://api.notion.com/v1/databases/{database_id}/query"
-    
-    # We sort by last edited time to get the most relevant active tasks
-    payload = {
-        "sorts": [
-            {
-                "timestamp": "last_edited_time",
-                "direction": "descending"
-            }
-        ],
-        "page_size": 10
-    }
-    
     try:
-        response = notion_session.post(url, headers=notion_headers(access_token), json=payload)
-        response.raise_for_status()
-        pages = response.json().get("results", [])
-        
-        # Parse Notion's complex property structure into something Lumis AI can read
+        res = await _request("POST", url, headers=notion_headers(access_token), json={"sorts": [{"timestamp": "last_edited_time", "direction": "descending"}], "page_size": 10})
         tasks = []
-        for page in pages:
+        for page in res.json().get("results", []):
             props = page.get("properties", {})
-            
-            # Extract Title (Assuming the primary column is named "Name" or "Task")
             title = "Unknown Task"
             for key, val in props.items():
                 if val.get("type") == "title" and val.get("title"):
                     title = val["title"][0].get("plain_text", title)
                     break
-            
-            tasks.append({
-                "id": page["id"],
-                "url": page.get("url"),
-                "summary": title,
-                "raw_properties": props # Keep raw props for later processing if needed
-            })
-            
+            tasks.append({"id": page["id"], "url": page.get("url"), "summary": title, "raw_properties": props})
         return tasks
-    except Exception as e:
-        logger.error(f"❌ Failed to fetch Notion tasks: {e}")
+    except:
         return []
 
-def add_comment(page_id: str, comment_text: str, access_token: str):
-    """Adds a comment to a specific Notion page (task)."""
+async def add_comment(page_id: str, comment_text: str, access_token: str):
     url = "https://api.notion.com/v1/comments"
-    payload = {
-        "parent": {
-            "page_id": page_id
-        },
-        "rich_text": [
-            {
-                "text": {
-                    "content": comment_text
-                }
-            }
-        ]
-    }
-    try:
-        response = notion_session.post(url, headers=notion_headers(access_token), json=payload)
-        response.raise_for_status()
-    except Exception as e:
-        logger.error(f"❌ Failed to add Notion comment: {e}")
+    await _request("POST", url, headers=notion_headers(access_token), json={"parent": {"page_id": page_id}, "rich_text": [{"text": {"content": comment_text}}]})
 
-def transition_task(page_id: str, access_token: str):
-    """Moves a task to 'Done' (Assumes a Status property exists)."""
+async def transition_task(page_id: str, access_token: str):
     url = f"https://api.notion.com/v1/pages/{page_id}"
-    
-    # NOTE: Notion properties are strictly typed and named by the user. 
-    # This assumes they have a property named "Status" with an option "Done".
-    payload = {
-        "properties": {
-            "Status": {
-                "status": {
-                    "name": "Done"
-                }
-            }
-        }
-    }
-    try:
-        response = notion_session.patch(url, headers=notion_headers(access_token), json=payload)
-        response.raise_for_status()
-        logger.info(f"🚀 Successfully moved Notion task {page_id} to Done.")
-    except Exception as e:
-        logger.error(f"❌ Failed to transition Notion task. It might not have a 'Status' property: {e}")
+    await _request("PATCH", url, headers=notion_headers(access_token), json={"properties": {"Status": {"status": {"name": "Done"}}}})
 
-def create_task(database_id: str, summary: str, description: str, access_token: str):
-    """Creates a new task in the specified database."""
+async def create_task(database_id: str, summary: str, description: str, access_token: str):
     url = "https://api.notion.com/v1/pages"
-    
-    # We structure a basic page with a Title property and a text block for description
     payload = {
-        "parent": {
-            "database_id": database_id
-        },
-        "properties": {
-            # Notion's default title column is usually 'Name'
-            "Name": {
-                "title": [
-                    {
-                        "text": {
-                            "content": summary
-                        }
-                    }
-                ]
-            }
-        },
-        "children": [
-            {
-                "object": "block",
-                "type": "paragraph",
-                "paragraph": {
-                    "rich_text": [
-                        {
-                            "type": "text",
-                            "text": {
-                                "content": description
-                            }
-                        }
-                    ]
-                }
-            }
-        ]
+        "parent": {"database_id": database_id},
+        "properties": {"Name": {"title": [{"text": {"content": summary}}]}},
+        "children": [{"object": "block", "type": "paragraph", "paragraph": {"rich_text": [{"type": "text", "text": {"content": description}}]}}]
     }
-    
-    try:
-        response = notion_session.post(url, headers=notion_headers(access_token), json=payload)
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        logger.error(f"❌ Failed to create Notion task: {e}")
-        return None
+    res = await _request("POST", url, headers=notion_headers(access_token), json=payload)
+    return res.json()
 
-def get_database_schema(database_id: str, access_token: str):
-    """Fetches the actual column names and types configured by the user."""
+async def get_database_schema(database_id: str, access_token: str):
     url = f"https://api.notion.com/v1/databases/{database_id}"
-    response = notion_session.get(url, headers=notion_headers(access_token))
-    response.raise_for_status()
-    properties = response.json().get("properties", {})
+    res = await _request("GET", url, headers=notion_headers(access_token))
+    properties = res.json().get("properties", {})
     
     schema = {"title_prop": None, "status_prop": None, "assignee_prop": None, "status_options": []}
-    
     for prop_name, prop_data in properties.items():
-        if prop_data["type"] == "title":
-            schema["title_prop"] = prop_name
+        if prop_data["type"] == "title": schema["title_prop"] = prop_name
         elif prop_data["type"] in ["status", "select"]:
-            # Prioritize 'status' type, fallback to 'select' if they use dropdowns
             if not schema["status_prop"] or prop_data["type"] == "status":
                 schema["status_prop"] = prop_name
-                options_key = "status" if prop_data["type"] == "status" else "select"
-                schema["status_options"] = prop_data[options_key].get("options", [])
-        elif prop_data["type"] == "people":
-            schema["assignee_prop"] = prop_name
-            
+                schema["status_options"] = prop_data["status" if prop_data["type"] == "status" else "select"].get("options", [])
+        elif prop_data["type"] == "people": schema["assignee_prop"] = prop_name
     return schema
 
-def get_notion_board_data(database_id: str, access_token: str):
-    """Maps a Notion Database into Lumis Kanban Columns and Tickets."""
-    schema = get_database_schema(database_id, access_token)
+async def get_notion_board_data(database_id: str, access_token: str):
+    schema = await get_database_schema(database_id, access_token)
+    columns = [{"id": opt["name"], "title": opt["name"], "color": opt.get("color", "default")} for opt in schema.get("status_options", [])]
     
-    # 1. Create columns from the status/select options
-    columns = []
-    for opt in schema.get("status_options", []):
-        columns.append({
-            "id": opt["name"],  # Notion uses names as IDs for statuses generally
-            "title": opt["name"],
-            "color": opt.get("color", "default")
-        })
-
-    # 2. Fetch active tasks
-    raw_tasks = get_active_tasks(database_id, access_token)
+    raw_tasks = await get_active_tasks(database_id, access_token)
     tickets = []
-    
     for task in raw_tasks:
         props = task["raw_properties"]
-        
-        # Extract dynamic status
         status_val = "Unknown"
         if schema["status_prop"] and schema["status_prop"] in props:
             status_obj = props[schema["status_prop"]].get(props[schema["status_prop"]]["type"])
-            if status_obj:
-                status_val = status_obj.get("name", "Unknown")
+            if status_obj: status_val = status_obj.get("name", "Unknown")
 
-        tickets.append({
-            "id": task["id"],
-            "title": task["summary"],
-            "status": status_val,
-            "url": task["url"]
-        })
-        
+        tickets.append({"id": task["id"], "title": task["summary"], "status": status_val, "url": task["url"]})
     return {"columns": columns, "tickets": tickets}

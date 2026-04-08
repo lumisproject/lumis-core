@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  ShieldAlert, AlertTriangle, Bug, FileWarning, Clock, 
+import {
+  ShieldAlert, AlertTriangle, Bug, FileWarning, Clock,
   GitMerge, RefreshCw, Activity, FileCode
 } from 'lucide-react';
 import { useProjectStore } from '@/stores/useProjectStore';
@@ -44,9 +44,9 @@ const RiskCard = ({ risk }: { risk: any }) => {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-             <span className={cn("text-[9px] font-black uppercase tracking-widest", config.color)}>{config.label}</span>
-             <span className="h-1 w-1 rounded-full bg-muted-foreground/30" />
-             <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest leading-none">{risk.riskType || 'Architectural Risk'}</span>
+            <span className={cn("text-[9px] font-black uppercase tracking-widest", config.color)}>{config.label}</span>
+            <span className="h-1 w-1 rounded-full bg-muted-foreground/30" />
+            <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest leading-none">{risk.riskType || 'Architectural Risk'}</span>
           </div>
           <h3 className="text-lg font-black tracking-tight text-foreground uppercase leading-tight mb-2">{risk.title}</h3>
           {risk.file && (
@@ -56,7 +56,7 @@ const RiskCard = ({ risk }: { risk: any }) => {
             </div>
           )}
           <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed font-medium">
-             <ReactMarkdown>{risk.description}</ReactMarkdown>
+            <ReactMarkdown>{risk.description}</ReactMarkdown>
           </div>
         </div>
       </div>
@@ -72,7 +72,7 @@ const StatButton = ({ label, count, severity, isActive, onClick }: { label: stri
       onClick={onClick}
       className={cn(
         "flex items-center gap-3 px-6 py-3 rounded-2xl border transition-all duration-200",
-        isActive 
+        isActive
           ? "bg-primary border-primary text-primary-foreground shadow-lg shadow-primary/20 scale-[1.02]"
           : "bg-card border-black/5 dark:border-white/5 text-muted-foreground hover:border-black/20 dark:hover:border-white/20 hover:text-foreground"
       )}
@@ -102,7 +102,7 @@ const RiskPage = () => {
 
     // 2. If it's scanning, ping Redis every 3 seconds to update the UI
     let interval: ReturnType<typeof setInterval>;
-    
+
     if (isScanning) {
       interval = setInterval(() => {
         pollIngestionStatus(project.id);
@@ -136,36 +136,33 @@ const RiskPage = () => {
       <div className="flex flex-col gap-8">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div className="space-y-4">
-            <h1 className="text-5xl font-black tracking-tighter uppercase leading-none text-foreground">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter uppercase leading-none text-foreground">
               Operational Risks
             </h1>
-            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground opacity-60">
-              Instance: <span className="text-foreground">{(() => {
-                const slug = project?.repo_name || project?.repo_url?.replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
-                if (!slug) return 'Active Workspace';
-                const name = slug.split('/').pop() || slug;
-                return name.replace(/\.git$/, '');
-              })()}</span>
-            </p>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground opacity-60">
+                The intelligent risk analysis engine
+              </span>
+            </div>
           </div>
         </div>
 
         {!isScanning && risks.length > 0 && (
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-             <div className="flex flex-wrap items-center gap-3">
-                <StatButton label="All" count={stats.total} severity={null} isActive={filter === null} onClick={() => setFilter(null)} />
-                <StatButton label="Critical" count={stats.high} severity="high" isActive={filter === 'high'} onClick={() => setFilter('high')} />
-                <StatButton label="Warning" count={stats.medium} severity="medium" isActive={filter === 'medium'} onClick={() => setFilter('medium')} />
-                <StatButton label="Notice" count={stats.low} severity="low" isActive={filter === 'low'} onClick={() => setFilter('low')} />
-             </div>
-             <button
-                onClick={handleAnalyze}
-                className="group relative flex items-center gap-3 px-6 h-12 rounded-2xl border border-orange-500/30 bg-orange-500/5 text-orange-500 font-black uppercase tracking-widest text-[9px] transition-all hover:bg-orange-500 hover:text-white hover:shadow-2xl hover:shadow-orange-500/20 active:scale-95 overflow-hidden"
-              >
-                <RefreshCw className="h-3.5 w-3.5 group-hover:rotate-180 transition-transform duration-700" />
-                <span>Re-Scan Intelligence</span>
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-              </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <StatButton label="All" count={stats.total} severity={null} isActive={filter === null} onClick={() => setFilter(null)} />
+              <StatButton label="Critical" count={stats.high} severity="high" isActive={filter === 'high'} onClick={() => setFilter('high')} />
+              <StatButton label="Warning" count={stats.medium} severity="medium" isActive={filter === 'medium'} onClick={() => setFilter('medium')} />
+              <StatButton label="Notice" count={stats.low} severity="low" isActive={filter === 'low'} onClick={() => setFilter('low')} />
+            </div>
+            <button
+              onClick={handleAnalyze}
+              className="group relative flex items-center gap-3 px-6 h-12 rounded-2xl border border-orange-500/30 bg-orange-500/5 text-orange-500 font-black uppercase tracking-widest text-[9px] transition-all hover:bg-orange-500 hover:text-white hover:shadow-2xl hover:shadow-orange-500/20 active:scale-95 overflow-hidden"
+            >
+              <RefreshCw className="h-3.5 w-3.5 group-hover:rotate-180 transition-transform duration-700" />
+              <span>Re-Scan Intelligence</span>
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+            </button>
           </div>
         )}
       </div>
@@ -199,12 +196,12 @@ const RiskPage = () => {
                   No operational risks detected in the current stratum.
                 </p>
                 <button
-                    onClick={handleAnalyze}
-                    className="group relative flex items-center gap-3 px-8 h-14 rounded-2xl border border-orange-500/30 bg-orange-500/5 text-orange-500 font-black uppercase tracking-widest text-[10px] transition-all hover:bg-orange-500 hover:text-white hover:shadow-2xl hover:shadow-orange-500/20 active:scale-95 overflow-hidden"
+                  onClick={handleAnalyze}
+                  className="group relative flex items-center gap-3 px-8 h-14 rounded-2xl border border-orange-500/30 bg-orange-500/5 text-orange-500 font-black uppercase tracking-widest text-[10px] transition-all hover:bg-orange-500 hover:text-white hover:shadow-2xl hover:shadow-orange-500/20 active:scale-95 overflow-hidden"
                 >
-                    <RefreshCw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-700" />
-                    <span>Initialize Intelligence Scan</span>
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+                  <RefreshCw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-700" />
+                  <span>Initialize Intelligence Scan</span>
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
                 </button>
               </div>
             ) : (

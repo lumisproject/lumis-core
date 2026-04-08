@@ -161,7 +161,7 @@ const Settings = () => {
         baseUrl, setBaseUrl,
         intakeUser, setIntakeUser,
         intakePassword, setIntakePassword,
-        resetDirty, _isDirty
+        resetDirty, _isDirty, setSettings
     } = useSettingsStore();
 
     const [saving, setSaving] = useState(false);
@@ -230,11 +230,15 @@ const Settings = () => {
 
                 if (res.ok) {
                     const data = await res.json();
-                    setUseDefault(data.useDefault);
-                    setProvider(data.provider);
-                    setSelectedModel(data.selectedModel);
-                    setBaseUrl(data.baseUrl || "");
-                    setApiKey(data.useDefault ? "" : data.apiKey);
+                    setSettings({
+                        useDefault: data.useDefault,
+                        provider: data.provider,
+                        selectedModel: data.selectedModel,
+                        baseUrl: data.baseUrl || "",
+                        apiKey: data.useDefault ? "" : data.apiKey,
+                        intakeUser: data.intakeUser || "",
+                        intakePassword: data.intakePassword || ""
+                    });
                     setHasLoaded(true);
                 }
             } catch (e) {
@@ -242,7 +246,7 @@ const Settings = () => {
             }
         };
         loadSettings();
-    }, [user?.id, hasLoaded, _isDirty]);
+    }, [user?.id, hasLoaded, _isDirty, setSettings]);
 
     const handleSave = async () => {
         if (!user) return;

@@ -74,9 +74,6 @@ def process_unread_emails_sync():
                 mail.login(intake_user, intake_pw)
                 mail.select("inbox")
                 
-                # UPDATE: Made log clearer so you know which account the worker is checking!
-                logger.info(f"🎧 Listening to {intake_user} (User ID: {user_id[:8]}...)")
-
                 for client_email, project_id in mapped_clients.items():
                     search_criteria = f'(UNSEEN FROM "{client_email}")'
                     status, response = mail.search(None, search_criteria)
@@ -111,6 +108,8 @@ def process_unread_emails_sync():
                                 }
                                 
                                 supabase.table("draft_tickets").insert(insert_payload).execute()
+                                from src.cache import invalidate_cache
+                                invalidate_cache(f"drafts:{project_id}")
                                 logger.info(f"🎉 Draft ticket synthesized for {intake_user}!")
 
                 mail.logout()

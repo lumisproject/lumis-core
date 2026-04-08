@@ -3,7 +3,7 @@ import type { Ticket, Comment } from '../../stores/useBoardStore';
 import { useBoardStore } from '../../stores/useBoardStore';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { 
-  X, MessageSquare, Send, Bot, User, Sparkles, Trash2, Loader2, ChevronDown, AlertTriangle 
+  X, MessageSquare, Send, Bot, User, Sparkles, Trash2, Loader2, ChevronDown, AlertTriangle, Save 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../../lib/utils';
@@ -79,7 +79,7 @@ const CommentItem = ({ comment, onDelete }: { comment: Comment, onDelete: (id: s
 };
 
 export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose }) => {
-  const { addComment, deleteComment, deleteTicket, teamMembers, fetchTeamMembers, assignTicket, updateTicketDescription } = useBoardStore();
+  const { addComment, deleteComment, deleteTicket, teamMembers, fetchTeamMembers, assignTicket, updateTicketDescription, updateTicketTitle } = useBoardStore();
   const { project } = useProjectStore();
   
   const [commentText, setCommentText] = useState('');
@@ -91,6 +91,11 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose }) => 
   const [editDescText, setEditDescText] = useState(ticket.description || '');
   const [isSavingDesc, setIsSavingDesc] = useState(false);
 
+  // Title Edit State
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitleText, setEditTitleText] = useState(ticket.title || '');
+  const [isSavingTitle, setIsSavingTitle] = useState(false);
+
   // Ticket Delete State
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [isDeletingTicket, setIsDeletingTicket] = useState(false);
@@ -100,6 +105,12 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose }) => 
       setEditDescText(ticket.description || '');
     }
   }, [ticket.description, isEditingDesc]);
+
+  useEffect(() => {
+    if (!isEditingTitle) {
+      setEditTitleText(ticket.title || '');
+    }
+  }, [ticket.title, isEditingTitle]);
 
   useEffect(() => {
     if (project?.id && teamMembers.length === 0) {
@@ -135,6 +146,14 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose }) => 
     setIsSavingDesc(false);
   };
 
+  const handleSaveTitle = async () => {
+    if (!project?.id || !editTitleText.trim()) return;
+    setIsSavingTitle(true);
+    await updateTicketTitle(project.id, 'jira', ticket.id, editTitleText);
+    setIsEditingTitle(false);
+    setIsSavingTitle(false);
+  };
+
   const handleDeleteTicket = async () => {
     if (!project?.id) return;
     setIsDeletingTicket(true);
@@ -160,13 +179,13 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose }) => 
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="relative w-full max-w-4xl max-h-[90vh] bg-card border border-border shadow-2xl rounded-2xl flex flex-col overflow-hidden"
+        className="relative w-[95%] sm:w-full max-w-4xl max-h-[90vh] bg-card border border-border shadow-2xl rounded-2xl flex flex-col overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-8 py-6 border-b border-border/50">
-          <div className="flex flex-col gap-1">
+        <div className="flex items-start justify-between px-4 sm:px-8 py-4 sm:py-6 border-b border-border/50 gap-4 sm:gap-6">
+          <div className="flex-1 flex flex-col gap-1 min-w-0">
             <div className="flex items-center gap-3">
-              <div className="px-2 py-0.5 bg-secondary text-xs font-bold text-muted-foreground rounded border border-border shadow-sm tracking-wide">
+              <div className="px-2 py-0.5 bg-secondary text-xs font-bold text-muted-foreground rounded border border-border shadow-sm tracking-wide shrink-0">
                 {ticket.key}
               </div>
               
@@ -177,10 +196,10 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose }) => 
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -10 }}
-                    className="flex items-center gap-2 bg-destructive/10 text-destructive px-3 py-1 rounded-lg border border-destructive/20"
+                    className="flex items-center gap-2 bg-destructive/10 text-destructive px-3 py-1 rounded-lg border border-destructive/20 whitespace-nowrap"
                   >
                     <AlertTriangle className="h-3 w-3" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest">Delete this issue permanently?</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Delete issue?</span>
                     <button 
                       onClick={handleDeleteTicket}
                       disabled={isDeletingTicket}
@@ -191,19 +210,61 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose }) => 
                     <button 
                       onClick={() => setIsConfirmingDelete(false)}
                       disabled={isDeletingTicket}
-                      className="px-2 py-0.5 bg-background/50 rounded text-[10px] font-bold uppercase tracking-widest hover:bg-background transition-colors"
+                      className="px-2 py-0.5 bg-background/50 rounded text-[10px] font-bold uppercase tracking-widest hover:bg-background transition-colors transition-colors"
                     >
                       Cancel
                     </button>
                   </motion.div>
                 )}
               </AnimatePresence>
-
             </div>
-            <h2 className="text-2xl font-bold tracking-tight mt-2">{ticket.title}</h2>
+            
+            {isEditingTitle ? (
+              <div className="w-full flex items-start gap-2 mt-2 group">
+                <textarea
+                  value={editTitleText}
+                  onChange={(e) => setEditTitleText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSaveTitle();
+                    }
+                    if (e.key === 'Escape') setIsEditingTitle(false);
+                  }}
+                  className="w-full bg-background/50 border border-primary text-2xl font-bold tracking-tight rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-sans resize-none overflow-hidden min-h-[44px]"
+                  autoFocus
+                  onInput={(e) => {
+                    const target = e.target as HTMLTextAreaElement;
+                    target.style.height = 'auto';
+                    target.style.height = `${target.scrollHeight}px`;
+                  }}
+                  ref={(tag) => {
+                    if (tag) {
+                      tag.style.height = 'auto';
+                      tag.style.height = `${tag.scrollHeight}px`;
+                    }
+                  }}
+                />
+                <button 
+                  onClick={handleSaveTitle}
+                  disabled={isSavingTitle}
+                  className="p-3 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-all disabled:opacity-50 mt-1 shrink-0"
+                >
+                   {isSavingTitle ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                </button>
+              </div>
+            ) : (
+              <h2 
+                onClick={() => setIsEditingTitle(true)}
+                className="text-2xl font-bold tracking-tight mt-2 cursor-text hover:text-primary transition-colors block w-full"
+                title="Click to edit title"
+              >
+                {ticket.title}
+              </h2>
+            )}
           </div>
           
-          <div className="flex items-center gap-2 self-start">
+          <div className="flex items-center gap-2 shrink-0">
             {!isConfirmingDelete && (
               <button 
                 onClick={() => setIsConfirmingDelete(true)}
@@ -220,8 +281,8 @@ export const TicketModal: React.FC<TicketModalProps> = ({ ticket, onClose }) => 
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-          <div className="p-8 space-y-10">
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-12">
+          <div className="p-4 sm:p-8 space-y-6 sm:space-y-10">
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 sm:gap-12">
               <div className="space-y-12">
                 
                 {/* Description Section */}
