@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Database,
     User,
     Save,
     CheckCircle2,
@@ -12,13 +11,11 @@ import {
     Lock,
     Plug,
     BookOpen,
-    Search,
     ChevronDown,
     AlertTriangle,
     Sun,
     Moon,
     Monitor,
-    PartyPopper,
     Github,
     Trello,
     Network,
@@ -77,7 +74,7 @@ const ModernSelect = ({ label, icon: Icon, value, onChange, options, placeholder
                 )}
             >
                 <div className="flex items-center gap-3">
-                    <Icon className="h-4 w-4 text-muted-foreground" />
+                    {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
                     <span className={cn(!value && "text-muted-foreground font-medium", "text-xs font-bold")}>
                         {loading ? 'Fetching records...' : options.find((o: any) => o.id === value || o.key === value)?.name || value || placeholder}
                     </span>
@@ -289,7 +286,20 @@ const Settings = () => {
     return (
         <div className="pb-20 max-w-6xl mx-auto p-8 relative animate-fade-in">
             {/* Header Area */}
-            <div className="sticky top-0 z-40 -mx-8 px-8 py-6 bg-background/80 backdrop-blur-xl border-b border-black/5 dark:border-white/5 flex items-center justify-between mb-8">
+            <AnimatePresence>
+            {showBillingSuccess && (
+                <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="mb-4 p-4 rounded-2xl bg-green-500/10 border border-green-500/20 flex items-center gap-3"
+                >
+                    <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
+                    <span className="text-xs font-bold text-green-500">Subscription updated successfully.</span>
+                </motion.div>
+            )}
+        </AnimatePresence>
+        <div className="sticky top-0 z-40 -mx-8 px-8 py-6 bg-background/80 backdrop-blur-xl border-b border-black/5 dark:border-white/5 flex items-center justify-between mb-8">
                 <div>
                     <h1 className="text-3xl font-black tracking-tighter uppercase">Settings</h1>
                     <div className="flex items-center gap-2 mt-1">
@@ -428,6 +438,7 @@ const Settings = () => {
                                 {jiraConnected ? (
                                     <div className="pt-2">
                                         <ModernSelect
+                                            icon={Trello}
                                             value={project?.jira_project_id || 'none'}
                                             onChange={(val: string) => project?.id && updateJiraMapping(project.id, val === 'none' ? '' : val)}
                                             options={[{ key: 'none', name: 'None / Not Linked' }, ...jiraProjects]}

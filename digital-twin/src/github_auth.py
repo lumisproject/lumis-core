@@ -108,7 +108,6 @@ def get_user_repos(user_id: str):
     return [{"id": r["id"], "name": r["name"], "full_name": r["full_name"], "url": r["clone_url"]} for r in repos]
 
 @github_auth_router.post("/api/github/webhook")
-@github_auth_router.post("/api/github/webhook")
 async def setup_webhook(request: Request):
     """Automatically configures the Lumis webhook on the selected repository."""
     try:
@@ -144,7 +143,8 @@ async def setup_webhook(request: Request):
                 
     print(f"⚡ 2. Attempting to create new webhook pointing to: {webhook_url}")
     
-    # --- NEW: Generate a secure secret and save it to the project ---
+    import secrets
+    from src.db_client import supabase
     webhook_secret = secrets.token_hex(20)
     supabase.table("projects").update({"webhook_secret": webhook_secret}).eq("id", project_id).execute()
     
@@ -156,7 +156,7 @@ async def setup_webhook(request: Request):
             "url": webhook_url,
             "content_type": "json",
             "insecure_ssl": "0",
-            "secret": webhook_secret # <--- NEW: Tell GitHub to use this secret
+            "secret": webhook_secret
         }
     }
     
@@ -164,13 +164,16 @@ async def setup_webhook(request: Request):
     print(f"   ↳ GitHub Response Code: {res.status_code}")
     print(f"   ↳ GitHub Message: {res.text}")
     
+    # --- UPDATED: Graceful Degradation ---
     if res.status_code in [200, 201]:
         print("✅ SUCCESS: Webhook created successfully!\n")
         return {"status": "created", "message": "Webhook successfully created"}
-    elif res.status_code == 404 or res.status_code == 403:
-        # This specifically means Org Access was denied or hidden
-        print("❌ FAILED: Organization access denied.\n")
-        raise HTTPException(status_code=403, detail="ORG_ACCESS_REQUIRED")
     else:
-        print("❌ FAILED to create webhook.\n")
-        raise HTTPException(status_code=res.status_code, detail="Failed to create webhook")
+        # Instead of raising an HTTPException, we return a success status of "skipped"
+        # This allows the frontend to continue the user journey seamlessly while the repo ingests.
+        print(f"⚠️ Webhook setup skipped (Status {res.status_code}). Initial ingestion will still proceed.\n")
+        return {
+            "status": "skipped", 
+            "message": "Webhook creation skipped due to permissions or environment.",
+            "details": res.text
+        }

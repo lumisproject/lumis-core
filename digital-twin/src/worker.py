@@ -45,6 +45,7 @@ def run_risk_analysis_task(project_id: str, user_config: dict):
 
     
     def progress_cb(t, m):
+        print(f"[{t}] {m}")
         update_progress(project_id, t, m)
 
     try:

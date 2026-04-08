@@ -102,7 +102,7 @@ const Login = () => {
 
                 <p className="mt-8 text-center text-sm text-muted-foreground">
                     Don't have an account?{' '}
-                    <Link to="/signup" className="font-bold text-primary hover:underline">Create one</Link>
+                    <Link to="/signup" className="font-bold text-primary hover:underline">Sign up</Link>
                 </p>
             </motion.div>
         </div>

@@ -140,7 +140,12 @@ const RiskPage = () => {
               Operational Risks
             </h1>
             <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground opacity-60">
-              Instance: <span className="text-foreground">{project?.repo_name || 'Active Workspace'}</span>
+              Instance: <span className="text-foreground">{(() => {
+                const slug = project?.repo_name || project?.repo_url?.replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
+                if (!slug) return 'Active Workspace';
+                const name = slug.split('/').pop() || slug;
+                return name.replace(/\.git$/, '');
+              })()}</span>
             </p>
           </div>
         </div>

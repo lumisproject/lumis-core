@@ -164,11 +164,11 @@ const EmptyProjectAlert = () => {
                     </div>
                     <div>
                         <div className="flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-3 mb-1">
-                            <h3 className="text-lg md:text-xl font-black uppercase tracking-tighter text-rose-500 leading-tight">Project Too Large</h3>
+                            <h3 className="text-lg md:text-xl font-black uppercase tracking-tighter text-rose-500 leading-tight">Project Ingestion Failed</h3>
                             <span className="px-3 py-1 bg-rose-500 text-white text-[8px] md:text-[9px] font-black uppercase tracking-widest rounded-full animate-pulse shadow-lg shadow-rose-500/20">Indexing Skip</span>
                         </div>
                         <p className="text-sm font-bold text-foreground opacity-80 max-w-2xl leading-relaxed">
-                            This project is incredibly huge and was not indexed.
+                            This project has failed to ingest any data.
                         </p>
                     </div>
                 </div>
@@ -213,7 +213,7 @@ const Dashboard = () => {
     const getRepoName = () => {
         const slug = project?.repo_name || project?.repo_url?.replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
         if (!slug) return 'Unlinked Node';
-        return slug.split('/').pop() || slug;
+        return (slug.split('/').pop() ?? slug).replace(/\.git$/, '') || slug;
     };
 
     const getJiraProjectName = () => {
