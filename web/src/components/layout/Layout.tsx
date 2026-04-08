@@ -20,7 +20,6 @@ import { cn } from '@/lib/utils';
 import { useUserStore } from '@/stores/useUserStore';
 import { useProjectStore } from '@/stores/useProjectStore';
 import { useBillingStore } from '@/stores/useBillingStore';
-import { ProjectSwitcher } from './ProjectSwitcher';
 import { Sparkles, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -225,7 +224,7 @@ const Layout = () => {
                 <main className="flex-1 overflow-y-auto relative h-full">
                     <AnimatePresence mode="wait">
                         <motion.div
-                            key={window.location.pathname}
+                            key={location.pathname}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -10 }}
