@@ -44,7 +44,7 @@ class Config:
     GITHUB_TOKEN = os.getenv("GITHUB_TOKEN") # Keep this if you still have global fallback
     GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
     GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
-    GITHUB_REDIRECT_URI = "https://unsparing-kaley-unmodest.ngrok-free.dev/auth/github/callback"
+    GITHUB_REDIRECT_URI = BACKEND_URL+"/auth/github/callback"
 
     # Notion settings
     NOTION_CLIENT_ID = os.getenv("NOTION_CLIENT_ID")

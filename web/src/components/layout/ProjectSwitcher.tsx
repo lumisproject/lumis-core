@@ -88,7 +88,8 @@ export const ProjectSwitcher: React.FC = () => {
 
   const displayName = (p: { repo_name?: string; repo_url: string }) => {
     const slug = p.repo_name || p.repo_url.replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
-    return slug.split('/').pop() || slug;
+    const name = slug.split('/').pop() || slug;
+    return name.replace(/\.git$/, '');
   };
 
   if (projects.length === 0) return null;

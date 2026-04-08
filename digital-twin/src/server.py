@@ -92,15 +92,25 @@ def get_repo_name_from_url(repo_url: str) -> str:
             break
     return name
 
-def fetch_commits(repo_full_name: str):
+def fetch_commits(repo_full_name: str, user_id: str = None):
     """Return the most recent commits for the repository as a normalized list."""
     import requests
+    from src.github_auth import get_valid_github_token # Import token fetcher
 
     url = f"https://api.github.com/repos/{repo_full_name}/commits"
     headers = {"Accept": "application/vnd.github.v3+json"}
     
-    if getattr(Config, 'GITHUB_TOKEN', None):
-        headers["Authorization"] = f"token {Config.GITHUB_TOKEN}"
+    # 1. Try to use the connected user's OAuth token
+    token = None
+    if user_id:
+        token = get_valid_github_token(user_id)
+        
+    # 2. Fallback to the global env token if user isn't connected
+    if not token and getattr(Config, 'GITHUB_TOKEN', None):
+        token = Config.GITHUB_TOKEN
+        
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
         
     try:
         resp = requests.get(url, headers=headers, params={"per_page": 10})
@@ -115,7 +125,7 @@ def fetch_commits(repo_full_name: str):
             })
         return formatted_commits
     except Exception as e:
-        logger.error(f"Failed to fetch commits for {repo_full_name}. Ensure your GITHUB_TOKEN in .env has 'repo' access. Error: {e}")
+        logger.error(f"Failed to fetch commits for {repo_full_name}. Error: {e}")
         return []
     
 def update_progress(project_id, task, message):
@@ -426,7 +436,7 @@ async def start_ingest(req: IngestRequest, request: Request, background_tasks: B
         global_config["user_id"] = req.user_id
         
         repo_name = get_repo_name_from_url(req.repo_url)
-        all_commits = fetch_commits(repo_name)
+        all_commits = fetch_commits(repo_name, req.user_id)
 
         if is_existing_project:
             project_data = existing.data[0]
@@ -1062,13 +1072,13 @@ async def delete_board_ticket(project_id: str, ticket_id: str, tool: str = "jira
     
 @app.get("/api/projects/{project_id}/check-remote")
 async def check_remote_sync(project_id: str):
-    
     try:
-        res = supabase.table("projects").select("repo_url, last_commit").eq("id", project_id).limit(1).execute()
+        res = supabase.table("projects").select("user_id, repo_url, last_commit").eq("id", project_id).limit(1).execute()
         if not res or not res.data:
             raise HTTPException(status_code=404, detail="Project not found")
         
         project = res.data[0]
+        user_id = project.get("user_id")
         repo_url = project.get("repo_url")
         local_commit = project.get("last_commit")
         
@@ -1076,7 +1086,7 @@ async def check_remote_sync(project_id: str):
             return {"up_to_date": True, "message": "No repository URL linked"}
 
         repo_name = get_repo_name_from_url(repo_url)
-        remote_commits = fetch_commits(repo_name)
+        remote_commits = fetch_commits(repo_name, user_id)
         
         if not remote_commits:
             return {"up_to_date": True, "status": "unknown", "message": "Could not verify remote status"}

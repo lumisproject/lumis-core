@@ -105,7 +105,12 @@ const Board = () => {
             <h1 className="text-xl md:text-3xl font-black tracking-tighter uppercase leading-none">Project Board</h1>
             <div className="flex items-center gap-4 mt-1">
               <span className="text-xs text-muted-foreground flex items-center gap-1 font-bold uppercase tracking-widest bg-white/5 px-2 py-0.5 rounded border border-black/5 dark:border-white/5">
-                {project?.repo_name || 'Active Project'} <ChevronRight className="h-3 w-3" /> {activeTool.toUpperCase()}
+                {(() => {
+                  const slug = project?.repo_name || project?.repo_url?.replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, '');
+                  if (!slug) return 'Active Project';
+                  const name = slug.split('/').pop() || slug;
+                  return name.replace(/\.git$/, '');
+                })()} <ChevronRight className="h-3 w-3" /> {activeTool.toUpperCase()}
               </span>
               <span className="text-[10px] font-bold text-yellow-500/80 uppercase tracking-[0.2em] flex items-center gap-1.5 border-l border-border/20 pl-4">
                 <RefreshCw className="h-2.5 w-2.5" />

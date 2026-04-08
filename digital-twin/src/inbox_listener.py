@@ -70,12 +70,12 @@ def process_unread_emails_sync():
             
             # 4. Connect to user's Inbox (Currently using IMAP for Gmail/Outlook)
             try:
-                # FUTURE: Add logic to switch between IMAP, MS Graph (Outlook), and Slack Webhooks
-                mail = imaplib.IMAP4_SSL("imap.gmail.com") # Default to Gmail for now, but using generic keys
+                mail = imaplib.IMAP4_SSL("imap.gmail.com")
                 mail.login(intake_user, intake_pw)
                 mail.select("inbox")
                 
-                logger.info(f"🎧 Listening to {intake_user}")
+                # UPDATE: Made log clearer so you know which account the worker is checking!
+                logger.info(f"🎧 Listening to {intake_user} (User ID: {user_id[:8]}...)")
 
                 for client_email, project_id in mapped_clients.items():
                     search_criteria = f'(UNSEEN FROM "{client_email}")'

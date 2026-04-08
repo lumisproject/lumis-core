@@ -123,14 +123,17 @@ def get_global_user_config(user_id: str) -> dict:
     db_config = res.data[0].get("user_config", {}) if res and res.data else {}
 
     # If the user explicitly chose 'Use System Default', we wipe the custom 
-    # fields in the returned dict so the get_llm() service falls back to .env
+    # LLM fields in the returned dict so the get_llm() service falls back to .env
     if db_config.get("use_default") is True:
         return {
             "provider": None,
             "api_key": None,
             "model": None,
-            "base_url": None, # NEW: Added base_url
-            "use_default": True
+            "base_url": None, 
+            "use_default": True,
+            # BUG FIX: Ensure we still return their intake email settings!
+            "intake_user": db_config.get("intake_user"),
+            "intake_password": db_config.get("intake_password")
         }
     
     # If the database record is empty entirely, default to system settings

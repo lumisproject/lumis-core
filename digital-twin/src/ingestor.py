@@ -214,8 +214,10 @@ async def ingest_repo(repo_url, project_id, progress_callback=None, user_config=
         if progress_callback: progress_callback("DONE", "Fast Sync Complete. Ready for Analysis.")
         
     except Exception as e:
-        print(f"CRITICAL ERROR: {e}")
+        # --- FIX: Log properly and re-raise so Celery marks task as FAILED! ---
+        logger.error(f"CRITICAL ERROR IN INGESTION: {e}", exc_info=True)
         if progress_callback: progress_callback("Error", str(e))
+        raise e
     finally:
         try:
             if repo:
