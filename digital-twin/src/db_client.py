@@ -3,7 +3,6 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 from fastapi import HTTPException, Header
 
-
 load_dotenv()
 
 url: str = os.environ.get("SUPABASE_URL")
@@ -43,18 +42,6 @@ def get_project_data(project_id):
 
 # --- WRITE OPERATIONS ---
 
-def save_edges(project_id, source_unit_name, targets_list, edge_type="calls"):
-    # Kept for backward compatibility
-    edges = [{
-        "project_id": project_id, 
-        "source_unit_name": source_unit_name, 
-        "target_unit_name": target,
-        "edge_type": edge_type
-    } for target in targets_list]
-    save_edges(project_id, edges)
-
-# --- FASTCODE OPTIMIZATION: BULK WRITE OPERATIONS ---
-
 def save_memory_units(project_id, units_data_list):
     """Upserts multiple memory units in a single network transaction."""
     if not units_data_list: return
@@ -73,44 +60,60 @@ def save_memory_units(project_id, units_data_list):
             "author_email": unit_data.get("author_email")
         })
     
-    # Supabase handles list upserts natively
-    return supabase.table("memory_units").upsert(
-        payloads, on_conflict="project_id, unit_name"
+    res = supabase.table("memory_units").upsert(
+        payloads, on_conflict="project_id,unit_name"
     ).execute()
+    
+    # 1. Force an exception if Supabase returns an error internally
+    if hasattr(res, "error") and res.error:
+        raise Exception(f"Supabase Upsert Error (memory_units): {res.error}")
+        
+    # 2. Check for RLS silent blocking
+    if hasattr(res, "data") and not res.data:
+        raise Exception("Supabase inserted 0 rows into memory_units! Check if Row Level Security (RLS) is blocking the insert, or use your service_role key.")
+        
+    return res
 
-def save_edges(project_id, edges_list):
-    """Inserts multiple graph edges in a single network transaction."""
+def save_edges(project_id, edges_list_or_source=None, targets_list=None, edge_type="calls"):
+    """Handles both single edge inserts and bulk lists."""
+    if targets_list is not None:
+        edges_list = [{
+            "project_id": project_id, 
+            "source_unit_name": edges_list_or_source, 
+            "target_unit_name": target,
+            "edge_type": edge_type
+        } for target in targets_list]
+    else:
+        edges_list = edges_list_or_source
+
     if not edges_list: return
     
-    # We clear out old edges for the sources being updated to handle differential sync cleanly
     source_units = list(set([edge["source_unit_name"] for edge in edges_list]))
     
     if source_units:
-        # Delete old edges for the modified units before bulk inserting new ones
-        supabase.table("graph_edges")\
-            .delete()\
-            .eq("project_id", project_id)\
-            .in_("source_unit_name", source_units)\
-            .execute()
+        del_res = supabase.table("graph_edges").delete().eq("project_id", project_id).in_("source_unit_name", source_units).execute()
+        if hasattr(del_res, "error") and del_res.error:
+             raise Exception(f"Supabase Edge Delete Error: {del_res.error}")
             
-    supabase.table("graph_edges").insert(edges_list).execute()
+    res = supabase.table("graph_edges").insert(edges_list).execute()
+    
+    if hasattr(res, "error") and res.error:
+        raise Exception(f"Supabase Edge Insert Error: {res.error}")
+        
+    if hasattr(res, "data") and not res.data:
+        raise Exception("Supabase inserted 0 rows into graph_edges! Check if Row Level Security (RLS) is blocking the insert.")
+        
+    return res
 
 def save_risk_alerts(project_id, risks):
     if not risks: return
-    # Clear all predictive risk types for this project before saving new ones
-    supabase.table("project_risks") \
-        .delete() \
-        .eq("project_id", project_id) \
-        .in_("risk_type", ["Legacy Conflict", "Predictive Delay"]) \
-        .execute()
-    supabase.table("project_risks").insert(risks).execute()
+    supabase.table("project_risks").delete().eq("project_id", project_id).in_("risk_type", ["Legacy Conflict", "Predictive Delay"]).execute()
+    res = supabase.table("project_risks").insert(risks).execute()
+    
+    if hasattr(res, "error") and res.error:
+        raise Exception(f"Supabase Risk Insert Error: {res.error}")
 
 def get_global_user_config(user_id: str) -> dict:
-    """
-    Fetches the user's configuration from Supabase.
-    If 'use_default' is True, it returns a configuration that triggers 
-    a fallback to the .env file in the LLM service.
-    """
     res = (
         supabase.table("user_settings")
         .select("user_config")
@@ -118,12 +121,8 @@ def get_global_user_config(user_id: str) -> dict:
         .limit(1)
         .execute()
     )
-    
-    # Extract the configuration from the database response
     db_config = res.data[0].get("user_config", {}) if res and res.data else {}
 
-    # If the user explicitly chose 'Use System Default', we wipe the custom 
-    # LLM fields in the returned dict so the get_llm() service falls back to .env
     if db_config.get("use_default") is True:
         return {
             "provider": None,
@@ -131,12 +130,10 @@ def get_global_user_config(user_id: str) -> dict:
             "model": None,
             "base_url": None, 
             "use_default": True,
-            # BUG FIX: Ensure we still return their intake email settings!
             "intake_user": db_config.get("intake_user"),
             "intake_password": db_config.get("intake_password")
         }
     
-    # If the database record is empty entirely, default to system settings
     if not db_config:
         return {"use_default": True}
         
