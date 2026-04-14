@@ -1,15 +1,74 @@
-# lumisproject/lumis-brain
+# Lumis Project
 
 ## Introduction
 
-The `lumis-brain` repository provides an advanced backend for integrating AI-powered features into applications. It is designed to facilitate natural language processing, agent orchestration, and robust API handling for tasks such as chat, tool invocation, search, and memory management. The project supports direct communication with various AI models and provides a foundation for extending capabilities via plugins and modular agents.
+Lumis is an advanced AI-powered platform for codebase analysis, agent orchestration, and modular project management. It integrates natural language processing with robust API handling to facilitate deep architecture synthesizing, chat interactions, and automated tool invocation.
 
 ## Features
 
-- Modular agent system for handling user queries, tools, and plugins.
-- Integration with multiple AI providers, including OpenAI and Google.
-- Structured memory management supporting both chat and search.
-- Support for tool invocation, including web search, code execution, and more.
-- API endpoints for chat interaction, agent management, memory operations, and plugin orchestration.
-- Environment-based configuration for flexible deployments.
-- Robust error handling and logging for API requests.
+- **Modular Agent System**: Advanced orchestration for handling user queries, tools, and plugins.
+- **Deep Codebase Indexing**: Synthesizes and maps complex architectures for AI analysis.
+- **Multi-Provider Support**: Seamless integration with OpenAI, Anthropic, Gemini, Groq, and OpenRouter.
+- **Structured Memory**: High-density memory management supporting both context-aware chat and semantic search.
+- **Ecosystem Integration**: Built-in support for GitHub synchronization, Jira tickets, and Notion documentation.
+
+---
+
+## Launching Lumis
+
+Follow these steps to initialize the environment and launch the local development stack.
+
+### 1. Initialize Infrastructure
+Lumis requires Redis for task orchestration and caching.
+```bash
+docker run -p 6379:6379 -d redis
+```
+
+### 2. Start Web Interface
+Navigate to the web directory and start the Vite development server.
+```bash
+cd web
+npm run dev
+```
+
+### 3. Start Backend Services
+Open two separate terminal nodes for the API server and the background worker.
+
+**API Server:**
+```bash
+cd backend
+python -m uvicorn src.server:app --port 5000
+```
+
+**Celery Worker:**
+*Ensure your virtual environment is active (.venv).*
+```bash
+cd backend
+celery -A src.worker.celery_app worker --loglevel=info --pool=solo
+```
+
+---
+
+## Stripe Integration (Billing & Subscriptions)
+
+To facilitate local payment processing and subscription management:
+
+1. **Download Stripe CLI**: Obtain the binary from [Stripe CLI Releases](https://github.com/stripe/stripe-cli/releases).
+2. **Setup**: Move `stripe.exe` into the `backend/` directory.
+3. **Authentication**:
+   ```bash
+   stripe login
+   ```
+4. **Listen for Webhooks**:
+   ```bash
+   stripe listen --forward-to localhost:5000/api/billing/webhook
+   ```
+
+---
+
+## Technical Stack
+
+- **Frontend**: React, Vite, Framer Motion, Tailwind CSS
+- **Backend**: Python, FastAPI, Celery
+- **Database**: Supabase (PostgreSQL), Redis
+- **DevOps**: Docker, Stripe CLI
