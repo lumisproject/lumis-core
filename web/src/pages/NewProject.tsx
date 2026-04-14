@@ -219,19 +219,7 @@ const NewProject = () => {
                                 </div>
 
 
-                                <div className="space-y-2">
-                                    <div className="flex justify-between items-center px-1">
-                                        <span className="text-[8px] font-black uppercase tracking-widest text-muted-foreground/40">Bridge Progress</span>
-                                        <span className="text-[8px] font-mono text-primary/60">EST: 3-5m</span>
-                                    </div>
-                                    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
-                                        <motion.div 
-                                            animate={{ width: ['0%', '100%'] }}
-                                            transition={{ duration: 120, ease: "linear" }}
-                                            className="h-full bg-primary shadow-[0_0_10px_rgba(var(--primary),0.5)]" 
-                                        />
-                                    </div>
-                                </div>
+
                             </div>
                         ) : (
                             <div className="animate-in fade-in zoom-in-95 duration-300">
