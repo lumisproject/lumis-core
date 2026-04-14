@@ -20,7 +20,9 @@ import {
     Trello,
     Network,
     Link2,
-    Mail
+    Mail,
+    LifeBuoy,
+    Bug
 } from 'lucide-react';
 import { useSettingsStore } from '@/stores/useSettingsStore';
 import { useUserStore } from '@/stores/useUserStore';
@@ -28,7 +30,6 @@ import { useProjectStore } from '@/stores/useProjectStore';
 import { cn } from '@/lib/utils';
 import { API_BASE, supabase } from '@/lib/supabase';
 
-// --- Reusable UI Components ---
 
 const SettingSection = ({ title, description, children, icon: Icon, id, highlight, extra }: any) => (
     <div 
@@ -548,36 +549,7 @@ const Settings = () => {
                     </div>
                 </SettingSection>
 
-                {/* 4. Interface Overrides */}
-                <SettingSection
-                    title="Lumis Theme"
-                    icon={Monitor}
-                    description="Customize the environment visualization."
-                >
-                    <div className="grid grid-cols-3 gap-4">
-                        {[
-                            { id: 'light', icon: Sun, label: 'Light' },
-                            { id: 'dark', icon: Moon, label: 'Dark' },
-                            { id: 'system', icon: Monitor, label: 'System' }
-                        ].map((t) => (
-                            <button
-                                key={t.id}
-                                onClick={() => setTheme(t.id as 'light' | 'dark' | 'system')}
-                                className={cn(
-                                    "flex flex-col items-center justify-center gap-3 rounded-[2rem] border p-6 transition-all hover:scale-[1.02] active:scale-[0.98]",
-                                    theme === t.id 
-                                        ? "border-primary bg-primary/10 text-primary shadow-[0_0_20px_rgba(var(--primary),0.15)] ring-4 ring-primary/10" 
-                                        : "border-black/5 dark:border-white/5 bg-background text-muted-foreground hover:border-black/10 dark:hover:border-white/10"
-                                )}
-                            >
-                                <t.icon className="h-6 w-6" />
-                                <span className="text-[10px] font-black uppercase tracking-widest">{t.label}</span>
-                            </button>
-                        ))}
-                    </div>
-                </SettingSection>
-
-                {/* 5. Intake Protocol */}
+                {/* 4. Intake Protocol */}
                 <SettingSection
                     id="intake"
                     title="Inbox Intake Protocol"
@@ -685,6 +657,60 @@ const Settings = () => {
                             {success ? "SAVED" : "Save Changes"}
                         </button>
                     </div>
+                </SettingSection>
+
+                {/* 5. Interface Overrides */}
+                <SettingSection
+                    title="Lumis Theme"
+                    icon={Monitor}
+                    description="Customize the environment visualization."
+                >
+                    <div className="grid grid-cols-3 gap-4">
+                        {[
+                            { id: 'light', icon: Sun, label: 'Light' },
+                            { id: 'dark', icon: Moon, label: 'Dark' },
+                            { id: 'system', icon: Monitor, label: 'System' }
+                        ].map((t) => (
+                            <button
+                                key={t.id}
+                                onClick={() => setTheme(t.id as 'light' | 'dark' | 'system')}
+                                className={cn(
+                                    "flex flex-col items-center justify-center gap-3 rounded-[2rem] border p-6 transition-all hover:scale-[1.02] active:scale-[0.98]",
+                                    theme === t.id 
+                                        ? "border-primary bg-primary/10 text-primary shadow-[0_0_20px_rgba(var(--primary),0.15)] ring-4 ring-primary/10" 
+                                        : "border-black/5 dark:border-white/5 bg-background text-muted-foreground hover:border-black/10 dark:hover:border-white/10"
+                                )}
+                            >
+                                <t.icon className="h-6 w-6" />
+                                <span className="text-[10px] font-black uppercase tracking-widest">{t.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                </SettingSection>
+
+                {/* 6. Support & Feedback */}
+                <SettingSection
+                    title="Support & Feedback"
+                    icon={LifeBuoy}
+                    description="Need assistance or encountered an issue?"
+                >
+                    <button
+                        onClick={() => navigate('/app/support')}
+                        className="flex w-full items-center justify-between rounded-[2rem] border border-black/5 bg-background p-6 transition-all hover:border-primary/30 hover:shadow-lg dark:border-white/5 group"
+                    >
+                        <div className="flex items-center gap-4">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-500 group-hover:bg-orange-500 group-hover:text-white transition-all duration-500">
+                                <Bug className="h-6 w-6" />
+                            </div>
+                            <div className="text-left">
+                                <p className="text-sm font-black uppercase tracking-tight">Report a Problem</p>
+                                <p className="text-xs text-muted-foreground font-medium">Found a bug or have a suggestion? Let us know.</p>
+                            </div>
+                        </div>
+                        <div className="h-10 w-10 flex items-center justify-center rounded-full bg-accent/50 group-hover:bg-primary group-hover:text-white transition-all">
+                             <ChevronDown className="h-5 w-5 -rotate-90" />
+                        </div>
+                    </button>
                 </SettingSection>
 
             </div>

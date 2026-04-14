@@ -17,6 +17,8 @@ interface UserState {
     setupAuthListener: () => { unsubscribe: () => void };
     clearError: () => void;
     clearUser: () => void;
+    resetPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
+    updatePassword: (password: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const useUserStore = create<UserState>((set, get) => ({
@@ -104,6 +106,35 @@ export const useUserStore = create<UserState>((set, get) => ({
         return {
             unsubscribe: () => subscription.unsubscribe()
         };
+    },
+
+    resetPassword: async (email) => {
+        set({ loading: true, error: null });
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            // This URL needs to match the route we create in Step 3
+            redirectTo: `${window.location.origin}/update-password`,
+        });
+        
+        if (error) {
+            set({ loading: false, error: error.message });
+            return { success: false, error: error.message };
+        }
+        
+        set({ loading: false });
+        return { success: true };
+    },
+
+    updatePassword: async (password) => {
+        set({ loading: true, error: null });
+        const { error } = await supabase.auth.updateUser({ password });
+        
+        if (error) {
+            set({ loading: false, error: error.message });
+            return { success: false, error: error.message };
+        }
+        
+        set({ loading: false });
+        return { success: true };
     },
 
     clearError: () => set({ error: null }),

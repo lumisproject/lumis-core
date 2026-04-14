@@ -19,6 +19,8 @@ import Board from '@/pages/Board';
 import PrivacyPolicy from '@/pages/PrivacyPolicy';
 import TermsOfService from '@/pages/TermsOfService';
 import EmailDrafts from '@/pages/EmailDrafts';
+import UpdatePassword from '@/pages/UpdatePassword';
+import ReportProblem from '@/pages/ReportProblem';
 
 
 
@@ -77,6 +79,7 @@ function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/update-password" element={<UpdatePassword />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfService />} />
         <Route path="/auth/jira/callback" element={<JiraCallback />} />
@@ -96,6 +99,7 @@ function App() {
           <Route path="drafts" element={<EmailDrafts />} />
           <Route path="risks" element={<RiskPage />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="support" element={<ReportProblem />} />
           <Route path="billing" element={<Billing />} />
           <Route path="new-project" element={<NewProject />} />
           <Route path="architecture" element={<ArchitectureGraph />} />
