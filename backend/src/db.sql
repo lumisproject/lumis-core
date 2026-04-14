@@ -115,7 +115,28 @@ CREATE TABLE public.projects (
   jira_project_id text,
   notion_project_id text,
   webhook_secret text,
+  slack_channel_id text,
   CONSTRAINT projects_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.slack_tokens (
+  user_id uuid NOT NULL,
+  access_token text NOT NULL,
+  team_id text,
+  team_name text,
+  created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT slack_tokens_pkey PRIMARY KEY (user_id),
+  CONSTRAINT slack_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.support_tickets (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  subject text NOT NULL,
+  description text NOT NULL,
+  screenshots ARRAY DEFAULT '{}'::text[],
+  status text DEFAULT 'open'::text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT support_tickets_pkey PRIMARY KEY (id),
+  CONSTRAINT support_tickets_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.usage_stats (
   user_id uuid NOT NULL,

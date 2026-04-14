@@ -233,8 +233,8 @@ const Dashboard = () => {
                         <Zap className="h-16 w-16 text-primary animate-bounce relative z-10" />
                     </div>
                     <div className="text-center space-y-2">
-                        <p className="text-[10px] font-black uppercase tracking-[0.5em] text-primary animate-pulse">Initializing Synthesis</p>
-                        <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-widest opacity-40">Connecting to Intelligence Mesh...</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.5em] text-primary animate-pulse">Initializing</p>
+                        <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-widest opacity-40">Connecting to Lumis...</p>
                     </div>
                 </div>
             </div>

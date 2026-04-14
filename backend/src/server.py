@@ -1,4 +1,3 @@
-import os
 from contextlib import asynccontextmanager
 import logging
 import asyncio
@@ -76,7 +75,7 @@ async def get_billing_usage(tier_data: dict = Depends(get_user_tier_and_usage)):
     return tier_data
 
 # --- STATE MANAGEMENT (Now Stateless via Redis) ---
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+REDIS_URL = Config.REDIS_URL
 redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
 
 # --- MODELS ---
@@ -375,6 +374,19 @@ async def start_ingest(req: IngestRequest, request: Request, background_tasks: B
     from src.agent import LumisAgent
     import json
 
+    storage_limit_gb = tier_data["limits"]["storage_gb"]
+    try:
+        storage_res = supabase.rpc("get_user_storage_bytes", {"target_user_id": str(req.user_id)}).execute()
+        total_bytes = storage_res.data if storage_res.data else 0
+        used_gb = total_bytes / (1024 * 1024 * 1024)
+        
+        if used_gb >= storage_limit_gb:
+            raise HTTPException(
+                status_code=403, 
+                detail=f"Storage limit of {int(storage_limit_gb * 1024)}MB reached. Please upgrade to Premium."
+            )
+    except Exception as e:
+        logger.error(f"Failed to check storage limit: {e}")
     try:
         if str(req.user_id) != str(tier_data["user_id"]):
             raise HTTPException(status_code=403, detail="Forbidden: User ID mismatch")
@@ -1337,6 +1349,54 @@ async def check_db_empty(project_id: str):
 async def health_check():
     return {"status": "ok", "service": "Lumis Project Stateless"}
 
+def new_email_template(subject: str, description: str, screenshots: list) -> str:
+    screenshot_html = ""
+    for url in screenshots:
+        screenshot_html += f'<img src="{url}" alt="screenshot" style="max-width: 600px; margin-bottom: 10px;" />'
+    
+    return f"""
+    <h2>New Support Ticket: {subject}</h2>
+    <p><strong>Description:</strong></p>
+    <p>{description}</p>
+    {screenshot_html}
+    """
+
+@app.post("/api/support/ticket")
+@limiter.limit("5/minute")
+async def create_support_ticket(
+    request: Request, 
+    payload: dict, 
+    background_tasks: BackgroundTasks,
+    current_user = Depends(get_current_user)
+):
+    from src.mailer import send_smtp_notification
+    
+    subject = payload.get("subject")
+    description = payload.get("description")
+    screenshots = payload.get("screenshots", [])
+
+    try:
+        supabase.table("support_tickets").insert({
+            "user_id": str(current_user.id),
+            "subject": subject,
+            "description": description,
+            "screenshots": screenshots,
+            "status": "open"
+        }).execute()
+    except Exception as e:
+        logger.error(f"Database error: {e}")
+        raise HTTPException(status_code=500, detail="Could not save ticket")
+
+    # 2. Schedule the email in the background
+    html_body = new_email_template(subject, description, screenshots)
+    background_tasks.add_task(
+        send_smtp_notification, 
+        f"🚨 New Bug Report: {subject}", 
+        html_body
+    )
+
+    return {"status": "success", "message": "Ticket received. We're on it!"}
+    
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host='0.0.0.0', port=5000)

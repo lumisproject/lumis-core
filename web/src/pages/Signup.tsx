@@ -7,17 +7,31 @@ import { useUserStore } from '@/stores/useUserStore';
 const Signup = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [validationError, setValidationError] = useState<string | null>(null);
     const { signUp, loading, error, clearError } = useUserStore();
     const navigate = useNavigate();
 
     const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault();
+        setValidationError(null);
+
+        if (password !== confirmPassword) {
+            setValidationError("Passwords do not match.");
+            return;
+        }
+
+        if (password.length < 6) {
+            setValidationError("Password must be at least 6 characters.");
+            return;
+        }
+
         const success = await signUp(email, password);
         if (success) navigate('/app');
     };
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-[#FAFAFA] px-4 dark:bg-[#0A0A0A]">
+        <div className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -48,15 +62,23 @@ const Signup = () => {
                     </div>
 
                     <div className="rounded-3xl border border-black/5 bg-white p-8 shadow-2xl shadow-black/5 dark:border-white/5 dark:bg-card dark:shadow-none">
-                        {error && (
+                        {(error || validationError) && (
                             <motion.div
                                 initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 className="mb-6 flex items-center gap-3 rounded-xl bg-destructive/10 p-4 text-xs font-medium text-destructive border border-destructive/20"
                             >
                                 <AlertCircle className="h-4 w-4 shrink-0" />
-                                <p>{error}</p>
-                                <button onClick={clearError} className="ml-auto opacity-50 hover:opacity-100">×</button>
+                                <p>{validationError || error}</p>
+                                <button 
+                                    onClick={() => {
+                                        clearError();
+                                        setValidationError(null);
+                                    }} 
+                                    className="ml-auto opacity-50 hover:opacity-100"
+                                >
+                                    ×
+                                </button>
                             </motion.div>
                         )}
 
@@ -80,7 +102,18 @@ const Signup = () => {
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     className="flex h-12 w-full rounded-xl border border-black/5 bg-accent/30 px-4 text-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/10 dark:border-white/5"
-                                    placeholder="please enter you password"
+                                    placeholder="••••••••"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">Confirm Password</label>
+                                <input
+                                    type="password"
+                                    required
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    className="flex h-12 w-full rounded-xl border border-black/5 bg-accent/30 px-4 text-sm transition-all focus:border-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/10 dark:border-white/5"
+                                    placeholder="••••••••"
                                 />
                             </div>
                             <button
