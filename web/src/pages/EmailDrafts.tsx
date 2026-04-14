@@ -380,10 +380,10 @@ export default function EmailDrafts() {
                 <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-10 mb-16 px-2">
                     <div className="space-y-6">
                         <h1 className="text-4xl md:text-5xl lg:text-8xl font-black tracking-tighter uppercase leading-[0.9] md:leading-[0.8] transition-all">
-                            Email <br /> <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 via-rose-500 to-yellow-500">Intake</span>
+                            Email <br /> <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 via-rose-500 to-yellow-500">Drafts</span>
                         </h1>
                         <p className="text-[10px] sm:text-xs font-semibold text-muted-foreground max-w-md opacity-60">
-                            Neural synthesis of client communications into high-fidelity engineering tickets.
+                            Client Communications & Tickets Engineering.
                         </p>
                     </div>
 

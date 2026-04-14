@@ -77,7 +77,7 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
         if (data && data.user_config) {
             const config = data.user_config;
             set({
-                useDefault: config.use_default ?? false,
+                useDefault: isDirty ? current.useDefault : (config.use_default ?? false),
                 provider: isDirty ? current.provider : (config.provider ?? ''),
                 apiKey: isDirty ? current.apiKey : (config.api_key ? '••••••••••••••••' : ''),
                 selectedModel: isDirty ? current.selectedModel : (config.model ?? ''),

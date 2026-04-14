@@ -130,6 +130,8 @@ const InputField = ({ label, icon: Icon, value, onChange, placeholder, type = "t
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={placeholder}
                 disabled={disabled}
+                autoComplete="off"
+                spellCheck={false}
                 className="flex h-12 w-full rounded-2xl border border-black/5 bg-background pl-11 pr-4 text-xs font-bold transition-all focus:border-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/10 dark:border-white/5 shadow-sm"
             />
         </div>
@@ -161,7 +163,7 @@ const Settings = () => {
         baseUrl, setBaseUrl,
         intakeUser, setIntakeUser,
         intakePassword, setIntakePassword,
-        resetDirty, _isDirty, setSettings
+        resetDirty, _isDirty, setSettings, fetchSettings
     } = useSettingsStore();
 
     const [saving, setSaving] = useState(false);
@@ -220,33 +222,10 @@ const Settings = () => {
     }, [user?.id, project?.id, fetchJiraStatus, fetchNotionStatus, fetchGithubStatus]);
 
     useEffect(() => {
-        const loadSettings = async () => {
-            if (!user?.id || hasLoaded || _isDirty) return;
-            try {
-                const { data: { session } } = await supabase.auth.getSession();
-                const res = await fetch(`${API_BASE}/api/settings/${user.id}`, {
-                    headers: { 'Authorization': `Bearer ${session?.access_token}` }
-                });
-
-                if (res.ok) {
-                    const data = await res.json();
-                    setSettings({
-                        useDefault: data.useDefault,
-                        provider: data.provider,
-                        selectedModel: data.selectedModel,
-                        baseUrl: data.baseUrl || "",
-                        apiKey: data.useDefault ? "" : data.apiKey,
-                        intakeUser: data.intakeUser || "",
-                        intakePassword: data.intakePassword || ""
-                    });
-                    setHasLoaded(true);
-                }
-            } catch (e) {
-                console.error("Failed to load settings", e);
-            }
-        };
-        loadSettings();
-    }, [user?.id, hasLoaded, _isDirty, setSettings]);
+        if (user?.id && !hasLoaded && !_isDirty) {
+            fetchSettings(user.id).then(() => setHasLoaded(true));
+        }
+    }, [user?.id, hasLoaded, _isDirty, fetchSettings]);
 
     const handleSave = async () => {
         if (!user) return;
@@ -285,7 +264,7 @@ const Settings = () => {
         }
     };
 
-    const providers = ["groq", "openrouter", "openai", "anthropic", "custom"];
+    const providers = ["groq", "openrouter", "openai", "anthropic", "gemini", "custom"];
 
     return (
         <div className="pb-20 max-w-6xl mx-auto p-8 relative animate-fade-in">
@@ -303,7 +282,7 @@ const Settings = () => {
                 </motion.div>
             )}
         </AnimatePresence>
-        <div className="sticky top-0 z-40 -mx-8 px-8 py-6 bg-background/80 backdrop-blur-xl border-b border-black/5 dark:border-white/5 flex items-center justify-between mb-8">
+        <div className="sticky top-0 z-40 -mx-8 px-8 py-6 bg-background/80 backdrop-blur-xl border-b border-black/5 dark:border-white/5 mb-8">
                 <div>
                     <h1 className="text-3xl font-black tracking-tighter uppercase">Settings</h1>
                     <div className="flex items-center gap-2 mt-1">
@@ -311,19 +290,6 @@ const Settings = () => {
                         <p className="text-muted-foreground font-medium uppercase text-[10px] tracking-widest">Global Protocol Configuration</p>
                     </div>
                 </div>
-                <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className={cn(
-                        "flex h-12 items-center gap-2 rounded-2xl px-8 text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 disabled:opacity-50 shadow-2xl",
-                        success
-                            ? "bg-green-500 text-white shadow-green-500/20"
-                            : "bg-foreground text-background shadow-foreground/10 hover:shadow-foreground/20"
-                    )}
-                >
-                    {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : success ? <CheckCircle2 className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-                    {success ? "SAVED" : "Commit Changes"}
-                </button>
             </div>
 
             <div className="space-y-4">
@@ -567,6 +533,19 @@ const Settings = () => {
                             </div>
                         </div>
                     </div>
+                    <div className="flex justify-end pt-4">
+                        <button
+                            onClick={handleSave}
+                            disabled={saving}
+                            className={cn(
+                                "flex h-10 items-center gap-2 rounded-xl px-6 text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 disabled:opacity-50 shadow-lg",
+                                success ? "bg-green-500 text-white" : "bg-foreground text-background"
+                            )}
+                        >
+                            {saving ? <RefreshCw className="h-3 w-3 animate-spin" /> : success ? <CheckCircle2 className="h-3 w-3" /> : <Save className="h-3 w-3" />}
+                            {success ? "SAVED" : "Save Changes"}
+                        </button>
+                    </div>
                 </SettingSection>
 
                 {/* 4. Interface Overrides */}
@@ -692,6 +671,19 @@ const Settings = () => {
                                 <span className="text-[10px] font-black uppercase tracking-widest whitespace-nowrap">Unlink Account</span>
                             </button>
                         </div>
+                    </div>
+                    <div className="flex justify-end pt-4">
+                        <button
+                            onClick={handleSave}
+                            disabled={saving}
+                            className={cn(
+                                "flex h-10 items-center gap-2 rounded-xl px-6 text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 disabled:opacity-50 shadow-lg",
+                                success ? "bg-green-500 text-white" : "bg-foreground text-background"
+                            )}
+                        >
+                            {saving ? <RefreshCw className="h-3 w-3 animate-spin" /> : success ? <CheckCircle2 className="h-3 w-3" /> : <Save className="h-3 w-3" />}
+                            {success ? "SAVED" : "Save Changes"}
+                        </button>
                     </div>
                 </SettingSection>
 

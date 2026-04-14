@@ -89,10 +89,10 @@ const Landing = () => {
                     </Link>
                     <div className="flex items-center gap-3 md:gap-4">
                         <Link to="/login" className="text-xs md:text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white">Log in</Link>
-                        <ThemeToggle />
                         <Link to="/signup" className="group relative flex h-8 items-center justify-center rounded-full bg-neutral-900 px-3 md:px-4 text-[10px] md:text-xs font-semibold text-white transition-all hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 shadow-xl shadow-black/10 dark:shadow-white/10">
                             Start Building
                         </Link>
+                        <ThemeToggle />
                     </div>
                 </div>
             </nav>
