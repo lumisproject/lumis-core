@@ -303,9 +303,9 @@ export default function EmailDrafts() {
                             <div className="space-y-4">
                                 <ul className="space-y-3">
                                     {[
-                                        { icon: Settings, text: "Go to Settings panel" },
-                                        { icon: Cpu, text: "Enable AI Engine if not yet" },
-                                        { icon: Database, text: "Map current Project to Jira or Notion" }
+                                        { icon: Settings, text: "Go to Settings" },
+                                        { icon: Cpu, text: "Enable AI Engine If Not Yet" },
+                                        { icon: Database, text: "Connect To a Jira/Notion Project" }
                                     ].map((step, i) => (
                                         <li key={i} className="flex items-start gap-3 animate-in fade-in slide-in-from-left-2" style={{ animationDelay: `${i * 100}ms` }}>
                                             <step.icon className="h-3.5 w-3.5 text-orange-500 mt-0.5" />
@@ -328,10 +328,10 @@ export default function EmailDrafts() {
 
                                 <ul className="space-y-3">
                                     {[
-                                        { icon: ShieldCheck, text: "Enable 2-Step Verification (ON)" },
+                                        { icon: ShieldCheck, text: "Go To Your Google Account Settings" },
                                         { icon: Lock, text: "Search/Click 'App Passwords'" },
-                                        { icon: Settings, text: "Create new 'Lumis Intake' password" },
-                                        { icon: Save, text: "Copy the 16-character code" }
+                                        { icon: Settings, text: "Create New Password" },
+                                        { icon: Save, text: "Copy The 16-character Password" }
                                     ].map((step, i) => (
                                         <li key={i} className="flex items-start gap-3 animate-in fade-in slide-in-from-right-2" style={{ animationDelay: `${(i + 4) * 100}ms` }}>
                                             <step.icon className="h-3.5 w-3.5 text-primary mt-0.5" />
@@ -345,7 +345,7 @@ export default function EmailDrafts() {
 
                     <div className="pt-6 relative z-10 flex flex-col xl:flex-row items-center justify-between gap-8 border-t border-black/5 dark:border-white/5 pt-10">
                         <p className="text-[9px] font-medium text-rose-500 italic opacity-80 max-w-[340px] text-center xl:text-left leading-relaxed">
-                            We use OAuth 2.0, the same secure standard that apps like Slack, Zoom, and Google Calendar use to access your email. Lumis never sees or stores your actual Gmail password. We only receive a temporary token that grants us permission to read your inbox and send emails on your behalf. This connection is encrypted end-to-end and can be revoked instantly from your Google Account settings at any time.
+                            Lumis never sees or stores your actual Gmail password. We only receive a temporary token that grants us permission to read your inbox. This connection is encrypted end-to-end and can be revoked instantly from your Google Account settings at any time.
                         </p>
                         <Link
                             to="/app/settings#intake"

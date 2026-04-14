@@ -163,7 +163,7 @@ const Settings = () => {
         baseUrl, setBaseUrl,
         intakeUser, setIntakeUser,
         intakePassword, setIntakePassword,
-        resetDirty, _isDirty, setSettings, fetchSettings
+        resetDirty, _isDirty, fetchSettings
     } = useSettingsStore();
 
     const [saving, setSaving] = useState(false);
@@ -550,9 +550,9 @@ const Settings = () => {
 
                 {/* 4. Interface Overrides */}
                 <SettingSection
-                    title="Interface Overrides"
+                    title="Lumis Theme"
                     icon={Monitor}
-                    description="Customize the digital-twin terminal environment visualization."
+                    description="Customize the environment visualization."
                 >
                     <div className="grid grid-cols-3 gap-4">
                         {[
@@ -583,7 +583,7 @@ const Settings = () => {
                     title="Inbox Intake Protocol"
                     icon={Mail}
                     highlight={highlightSection === 'intake'}
-                    description="Configure the direct neural link to your ticketing inbox or communication node."
+                    description="Configure the link to your inbox."
                     extra={
                         <div className="space-y-8">
                             {/* ACTIVE PROTOCOL */}

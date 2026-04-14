@@ -10,7 +10,7 @@ import { API_BASE } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { useIngestionStream } from '@/hooks/useIngestionStream';
 
-export const ProjectSwitcher: React.FC = () => {
+export const ProjectSwitcher: React.FC<{ collapsed?: boolean; side?: 'top' | 'bottom' }> = ({ collapsed, side = 'top' }) => {
   const { projects, project, selectProject, fetchProjects, isUpToDate, syncProject, checkProjectSync } = useProjectStore();
   const { limits } = useBillingStore();
   const isAtProjectLimit = limits.projects !== null && projects.length >= limits.projects;
@@ -104,19 +104,25 @@ export const ProjectSwitcher: React.FC = () => {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center justify-between gap-2 rounded-full border border-black/5 bg-accent/50 px-4 py-2 text-xs font-black dark:border-white/5 hover:bg-accent transition-colors min-w-[200px] uppercase tracking-widest"
+        className={cn(
+            "flex items-center justify-between gap-2 rounded-full border border-black/5 bg-accent/50 px-4 py-2 text-xs font-black dark:border-white/5 hover:bg-accent transition-colors uppercase tracking-widest",
+            collapsed ? "min-w-0 justify-center w-full px-0" : "min-w-[200px]"
+        )}
+        title={collapsed && project ? displayName(project) : undefined}
       >
-        <div className="flex items-center gap-2 truncate">
+        <div className={cn("flex items-center gap-2 truncate", collapsed && "justify-center w-full")}>
           {isSyncingActive ? (
             <RefreshCw className="h-4 w-4 shrink-0 text-primary animate-spin" />
           ) : (
             <Github className="h-4 w-4 shrink-0 text-primary" />
           )}
-          <span className="truncate text-foreground max-w-[80px] sm:max-w-[120px]">
-            {isSyncingActive ? 'Syncing...' : project ? displayName(project) : 'Select project'}
-          </span>
+          {!collapsed && (
+            <span className="truncate text-foreground max-w-[80px] sm:max-w-[120px]">
+              {isSyncingActive ? 'Syncing...' : project ? displayName(project) : 'Select project'}
+            </span>
+          )}
         </div>
-        <ChevronDown className={cn("h-4 w-4 shrink-0 opacity-50 transition-transform", open && "rotate-180")} />
+        {!collapsed && <ChevronDown className={cn("h-4 w-4 shrink-0 opacity-50 transition-transform", open && "rotate-180")} />}
       </button>
 
       <AnimatePresence>
@@ -126,7 +132,12 @@ export const ProjectSwitcher: React.FC = () => {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className="absolute left-0 mt-2 w-72 rounded-3xl border border-black/10 bg-white p-3 shadow-2xl dark:border-white/10 dark:bg-[#0F0F0F] z-50 origin-top-left"
+            className={cn(
+                "absolute w-72 rounded-3xl border border-black/10 bg-white p-3 shadow-2xl dark:border-white/10 dark:bg-[#0F0F0F] z-[100] origin-top-left",
+                collapsed 
+                  ? "left-12 bottom-0 mb-2" 
+                  : (side === 'bottom' ? "left-0 top-full mt-2" : "left-0 bottom-full mb-2")
+            )}
           >
             <div className="px-3 py-2 text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground mb-2">
               Your Projects
