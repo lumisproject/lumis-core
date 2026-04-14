@@ -374,7 +374,6 @@ async def start_ingest(req: IngestRequest, request: Request, background_tasks: B
     from src.db_client import get_global_user_config
     from src.agent import LumisAgent
     import json
-    import secrets
 
     try:
         if str(req.user_id) != str(tier_data["user_id"]):
@@ -396,7 +395,7 @@ async def start_ingest(req: IngestRequest, request: Request, background_tasks: B
             limit = tier_data["limits"]["projects"]
             if limit is not None and project_count >= limit:
                 raise HTTPException(
-                    status_code=403, 
+                    status_code=403,
                     detail=f"Project limit of {limit} reached. Please upgrade your plan."
                 )
 

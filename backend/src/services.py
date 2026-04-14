@@ -185,7 +185,7 @@ def get_llm_completion(system_prompt, user_prompt, user_config=None):
             content = openai_chat(system_prompt, user_prompt, api_key, model_name, temperature, reasoning_enabled)
         elif provider == "anthropic":
             content = anthropic_chat(system_prompt, user_prompt, api_key, model_name, temperature, reasoning_enabled)
-        elif provider == "google":
+        elif provider == "gemini":
             content = google_genai(system_prompt, user_prompt, api_key, model_name, temperature, reasoning_enabled)
         elif provider == "groq":
             content = groq_chat(system_prompt, user_prompt, api_key, model_name, temperature, reasoning_enabled)
@@ -294,7 +294,7 @@ async def stream_llm_completion(system_prompt, user_prompt, user_config=None):
                     else:
                         yield str(chunk.content)
 
-        elif provider == "google":
+        elif provider == "gemini":
             from google import genai
             from google.genai import types
             client = genai.Client(api_key=api_key)

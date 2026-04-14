@@ -259,7 +259,7 @@ const Dashboard = () => {
                         </div>
                         <span className="text-muted-foreground/20 font-light text-xl shrink-0">/</span>
                         <div className="flex items-center min-w-0">
-                            <ProjectSwitcher />
+                            <ProjectSwitcher side="bottom" />
                         </div>
                     </div>
                 </div>
