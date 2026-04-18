@@ -1,113 +1,142 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 import type { User, Session } from '@supabase/supabase-js';
-import { useChatStore } from '@/stores/useChatStore';
-import { useSettingsStore } from '@/stores/useSettingsStore'; // Import settings store
+import { useChatStore } from './useChatStore';
+import { useSettingsStore } from './useSettingsStore';
 
 interface UserState {
-  user: User | null;
-  session: Session | null;
-  loading: boolean;
-  error: string | null;
-  signIn: (email: string, password: string) => Promise<boolean>;
-  signUp: (email: string, password: string) => Promise<boolean>;
-  signOut: () => Promise<void>;
-  checkSession: () => Promise<void>;
-  setupAuthListener: () => { unsubscribe: () => void }; // NEW
-  clearError: () => void;
-  clearUser: () => void; // Added missing property
+    user: User | null;
+    session: Session | null;
+    loading: boolean;
+    error: string | null;
+    signIn: (email: string, password: string) => Promise<boolean>;
+    signUp: (email: string, password: string) => Promise<boolean>;
+    signInWithGoogle: () => Promise<void>;
+    signOut: () => Promise<void>;
+    checkSession: () => Promise<void>;
+    setupAuthListener: () => { unsubscribe: () => void };
+    clearError: () => void;
+    clearUser: () => void;
+    resetPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
+    updatePassword: (password: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const useUserStore = create<UserState>((set, get) => ({
-  user: null,
-  session: null,
-  loading: true,
-  error: null,
+    user: null,
+    session: null,
+    loading: true,
+    error: null,
 
-  signIn: async (email, password) => {
-    set({ loading: true, error: null });
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      set({ loading: false, error: error.message });
-      return false;
-    }
-    set({ user: data.user, session: data.session, loading: false });
+    signIn: async (email, password) => {
+        set({ loading: true, error: null });
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+            set({ loading: false, error: error.message });
+            return false;
+        }
+        set({ user: data.user, session: data.session, loading: false });
+        try { useChatStore.getState().clearMessages(); } catch { }
+        return true;
+    },
 
-    try {
-      useChatStore.getState().clearMessages();
-    } catch {
-      // ignore
-    }
-    try { useChatStore.getState().clearMessages(); } catch {}
-    return true;
-  },
+    signUp: async (email, password) => {
+        set({ loading: true, error: null });
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) {
+            set({ loading: false, error: error.message });
+            return false;
+        }
+        set({ user: data.user, session: data.session, loading: false });
+        try { useChatStore.getState().clearMessages(); } catch { }
+        return true;
+    },
 
-  signUp: async (email, password) => {
-    set({ loading: true, error: null });
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) {
-      set({ loading: false, error: error.message });
-      return false;
-    }
-    set({ user: data.user, session: data.session, loading: false });
+    signOut: async () => {
+        await supabase.auth.signOut();
+        get().clearUser();
+        try {
+            useChatStore.getState().clearMessages();
+            if ((useSettingsStore as any).persist) {
+                (useSettingsStore as any).persist.clearStorage();
+            }
+        } catch (e) {
+            console.error("Error clearing stores during sign out:", e);
+        }
+        window.location.href = '/login';
+    },
 
-    try {
-      useChatStore.getState().clearMessages();
-    } catch {
-      // ignore
-    }
-    try { useChatStore.getState().clearMessages(); } catch {}
-    return true;
-  },
+    checkSession: async () => {
+        set({ loading: true });
+        const { data: { session } } = await supabase.auth.getSession();
+        set({ user: session?.user ?? null, session, loading: false });
 
-  signOut: async () => {
-    await supabase.auth.signOut();
-    
-    // Clear current store state
-    get().clearUser(); 
-    
-    // Clear other store states to prevent account bleeding
-    try {
-      useChatStore.getState().clearMessages();
-      // Safely clear settings store persistence
-      if (useSettingsStore.persist) {
-        useSettingsStore.persist.clearStorage();
-      }
-    } catch (e) {
-      console.error("Error clearing stores during sign out:", e);
-    }
-    
-    // NOTE: Navigation should happen in the component calling signOut, 
-    // or via window.location.href for a hard reset
-    window.location.href = '/login'; 
-  },
+        if (session?.user) {
+            await useSettingsStore.getState().fetchSettings(session.user.id);
+        }
+    },
 
-  checkSession: async () => {
-    set({ loading: true });
-    const { data: { session } } = await supabase.auth.getSession();
-    set({ user: session?.user ?? null, session, loading: false });
+    // --- UPDATED GOOGLE SIGN IN ---
+    signInWithGoogle: async () => {
+        set({ loading: true, error: null });
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo: `${window.location.origin}/app`,
+                queryParams: {
+                    access_type: 'offline',
+                    prompt: 'consent',
+                }
+            }
+        });
+        
+        if (error) {
+            set({ loading: false, error: error.message });
+        }
+    },
 
-    if (session?.user) {
-      await useSettingsStore.getState().fetchSettings(session.user.id);
-    }
-  },
+    // --- UPDATED AUTH LISTENER ---
+    setupAuthListener: () => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            set({ user: session?.user ?? null, session });
+            if (session?.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+                useSettingsStore.getState().fetchSettings(session.user.id);
+            }
+        });
 
-  // ISSUE 3 FIX: Decoupled listener with an unsubscribe method
-  setupAuthListener: () => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      set({ user: session?.user ?? null, session });
-      if (session?.user) {
-        useSettingsStore.getState().fetchSettings(session.user.id);
-      }
-    });
-    
-    return {
-      unsubscribe: () => subscription.unsubscribe()
-    };
-  },
+        return {
+            unsubscribe: () => subscription.unsubscribe()
+        };
+    },
 
-  clearError: () => set({ error: null }),
+    resetPassword: async (email) => {
+        set({ loading: true, error: null });
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            // This URL needs to match the route we create in Step 3
+            redirectTo: `${window.location.origin}/update-password`,
+        });
+        
+        if (error) {
+            set({ loading: false, error: error.message });
+            return { success: false, error: error.message };
+        }
+        
+        set({ loading: false });
+        return { success: true };
+    },
 
-  // Implementation of clearUser
-  clearUser: () => set({ user: null, session: null, error: null }),
+    updatePassword: async (password) => {
+        set({ loading: true, error: null });
+        const { error } = await supabase.auth.updateUser({ password });
+        
+        if (error) {
+            set({ loading: false, error: error.message });
+            return { success: false, error: error.message };
+        }
+        
+        set({ loading: false });
+        return { success: true };
+    },
+
+    clearError: () => set({ error: null }),
+    clearUser: () => set({ user: null, session: null, error: null }),
 }));

@@ -1,23 +1,32 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react-swc";
-import path from "path";
-import { componentTagger } from "lovable-tagger";
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import path from 'path'
 
-// https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [react()],
   server: {
-    host: "::",
     port: 8080,
-    // Add this line to allow your ngrok tunnel
-    allowedHosts: ["unsparing-kaley-unmodest.ngrok-free.dev"],
-    hmr: {
-      overlay: false,
-    },
+    allowedHosts: [
+      'unsparing-kaley-unmodest.ngrok-free.dev',
+      'all'
+    ],
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:5000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/auth': {
+        target: 'http://127.0.0.1:5000',
+        changeOrigin: true,
+        secure: false,
+      }
+    }
   },
-  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      '@': path.resolve(__dirname, './src'),
     },
   },
-}));
+})

@@ -3,198 +3,539 @@ import { supabase, API_BASE } from '@/lib/supabase';
 import { useSettingsStore } from './useSettingsStore';
 
 interface Risk {
-  id: string;
-  severity: 'high' | 'medium' | 'low';
-  title: string;
-  riskType: string;
-  description: string;
-  file?: string;
+    id: string;
+    severity: 'high' | 'medium' | 'low';
+    title: string;
+    riskType: string;
+    description: string;
+    file?: string;
 }
 
 interface Project {
-  id: string;
-  repo_url: string;
-  repo_name?: string;
-  last_commit?: string;
-  status?: string;
-  user_id: string;
+    id: string;
+    repo_url: string;
+    repo_name?: string;
+    last_commit?: string;
+    status?: string;
+    user_id: string;
+    jira_project_id?: string;
+    notion_project_id?: string;
+    webhook_secret?: string;
+    sync_state?: {
+        status: string;
+        step: string;
+        logs: string[];
+    };
 }
 
 interface IngestionStatus {
-  status: string;
-  step?: string;
-  logs: string[];
-  error?: string;
+    status: string;
+    step?: string;
+    logs: string[];
+    error?: string;
+}
+
+interface ProjectStats {
+    nodes_count: number;
+    edges_count: number;
+    health_percentage: number;
 }
 
 interface ProjectState {
-  projects: Project[];
-  project: Project | null;
-  risks: Risk[];
-  jiraConnected: boolean;
-  notionConnected: boolean;
-  ingestionStatus: IngestionStatus | null;
-  loading: boolean;
-  fetchProjects: (userId: string) => Promise<void>;
-  selectProject: (projectId: string) => void;
-  fetchJiraStatus: (userId: string) => Promise<void>;
-  fetchNotionStatus: (userId: string) => Promise<void>;
-  fetchRisks: (projectId: string) => Promise<void>;
-  startIngestion: (userId: string, repoUrl: string) => Promise<string | null>;
-  pollIngestionStatus: (projectId: string) => Promise<IngestionStatus | null>;
-  disconnectJira: (userId: string) => Promise<void>;
-  disconnectNotion: (userId: string) => Promise<void>;
+    projects: Project[];
+    project: Project | null;
+    risks: Risk[];
+    jiraConnected: boolean;
+    notionConnected: boolean;
+    githubConnected: boolean;
+    ingestionStatus: IngestionStatus | null;
+    projectStats: ProjectStats | null;
+    isUpToDate: boolean;
+    remoteSha: string | null;
+    isEmpty: boolean;
+    loading: boolean;
+    error: string | null;
+    jiraProjects: { key: string, name: string }[];
+    notionProjects: { id: string, name: string }[];
+    githubRepos: { 
+        id: number; 
+        name: string; 
+        full_name: string; 
+        url: string;
+        description?: string;
+        stargazers_count?: number;
+        private?: boolean;
+        language?: string;
+        updated_at: string;
+    }[];
+    
+    fetchProjects: (userId: string) => Promise<void>;
+    fetchJiraProjects: (userId: string) => Promise<void>;
+    fetchNotionProjects: (userId: string) => Promise<void>;
+    selectProject: (projectId: string) => void;
+    fetchJiraStatus: (userId: string) => Promise<void>;
+    fetchNotionStatus: (userId: string) => Promise<void>;
+    fetchGithubStatus: (userId: string) => Promise<void>;
+    fetchGithubRepos: (userId: string) => Promise<void>;
+    setupGithubWebhook: (userId: string, projectId: string, repoFullName: string) => Promise<void>;
+    fetchRisks: (projectId: string) => Promise<void>;
+    fetchProjectStats: (projectId: string) => Promise<void>;
+    checkIsEmpty: (projectId: string) => Promise<void>;
+    startIngestion: (userId: string, repoUrl: string) => Promise<string | null>;
+    pollIngestionStatus: (projectId: string) => Promise<IngestionStatus | null>;
+    disconnectJira: (userId: string) => Promise<void>;
+    disconnectNotion: (userId: string) => Promise<void>;
+    disconnectGithub: (userId: string) => Promise<void>;
+    updateJiraMapping: (projectId: string, jiraKey: string) => Promise<void>;
+    updateNotionMapping: (projectId: string, notionDbId: string) => Promise<void>;
+    syncProject: (projectId: string) => Promise<void>;
+    checkProjectSync: (projectId: string) => Promise<void>;
+    analyzeRisks: (projectId: string) => Promise<void>;
+    setupProjectSubscriptions: (userId: string) => () => void;
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
-  projects: [],
-  project: null,
-  risks: [],
-  jiraConnected: false,
-  notionConnected: false,
-  ingestionStatus: null,
-  loading: false,
+    projects: [],
+    project: null,
+    risks: [],
+    jiraConnected: false,
+    notionConnected: false,
+    githubConnected: false,
+    ingestionStatus: null,
+    projectStats: null as ProjectStats | null,
+    isUpToDate: true,
+    remoteSha: null,
+    isEmpty: false,
+    loading: false,
+    error: null,
+    jiraProjects: [],
+    notionProjects: [],
+    githubRepos: [],
 
-  fetchProjects: async (userId) => {
-    set({ loading: true });
-    const { data } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-    const projects = (data ?? []) as Project[];
-    
-    // 1. Check if the user had a previously selected project saved in their browser
-    const savedProjectId = localStorage.getItem('lumis_active_project');
-    const savedProject = projects.find(p => p.id === savedProjectId);
+    fetchProjects: async (userId: string) => {
+        set({ loading: true });
+        const { data } = await supabase
+            .from('projects')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false });
+        const projects = (data ?? []) as Project[];
 
-    const current = get().project;
-    
-    // 2. Prioritize: Saved Project -> Currently active -> Newest project (fallback)
-    const active = savedProject || (current && projects.some((p) => p.id === current.id)
-      ? current
-      : projects[0] ?? null);
+        const savedProjectId = localStorage.getItem('lumis_active_project');
+        const savedProject = projects.find(p => p.id === savedProjectId);
 
-    // 3. Save the active project back to storage so it survives the next refresh
-    if (active) {
-      localStorage.setItem('lumis_active_project', active.id);
-    }
+        const current = get().project;
 
-    set({ projects, project: active, loading: false });
-  },
+        const active = savedProject || (current && projects.some((p) => p.id === current.id)
+            ? current
+            : projects[0] ?? null);
 
-  selectProject: (projectId) => {
-    const { projects } = get();
-    const next = projects.find((p) => p.id === projectId) ?? null;
-    
-    // 4. Save the user's explicit choice to local storage
-    if (next) {
-      localStorage.setItem('lumis_active_project', next.id);
-    }
-    
-    set({ project: next, risks: [] });
-  },
+        if (active) {
+            localStorage.setItem('lumis_active_project', active.id);
+            await Promise.all([
+                get().fetchRisks(active.id),
+                get().fetchProjectStats(active.id),
+                get().checkProjectSync(active.id),
+                get().checkIsEmpty(active.id)
+            ]);
+        }
 
-  fetchJiraStatus: async (userId) => {
-    const { data } = await supabase
-      .from('jira_tokens')
-      .select('user_id')
-      .eq('user_id', userId)
-      .maybeSingle();
-    set({ jiraConnected: !!data });
-  },
+        set({ projects, project: active, loading: false });
+    },
 
-  // --- NEW NOTION LOGIC ---
-  fetchNotionStatus: async (userId) => {
-    const { data } = await supabase
-      .from('notion_tokens')
-      .select('user_id')
-      .eq('user_id', userId)
-      .maybeSingle();
-    set({ notionConnected: !!data });
-  },
+    selectProject: (projectId: string) => {
+        const { projects, fetchRisks, fetchProjectStats } = get();
+        const next = projects.find((p) => p.id === projectId) ?? null;
 
-  fetchRisks: async (projectId) => {
-    try {
-      const res = await fetch(`${API_BASE}/api/get_risks/${projectId}`);
-      const data = await res.json();
-      const apiRisks = (data?.risks ?? []) as any[];
+        if (next) {
+            localStorage.setItem('lumis_active_project', next.id);
+            fetchRisks(next.id);
+            fetchProjectStats(next.id);
+            get().checkProjectSync(next.id);
+            get().checkIsEmpty(next.id);
+        }
 
-      const normalizedRisks = apiRisks.map((risk) => {
-        const severityRaw = String(risk.severity ?? 'medium').toLowerCase();
+        set({ project: next });
+    },
+
+    fetchJiraStatus: async (userId: string) => {
+        const { data } = await supabase
+            .from('jira_tokens')
+            .select('user_id')
+            .eq('user_id', userId)
+            .maybeSingle();
+        set({ jiraConnected: !!data });
+        if (!!data) {
+            get().fetchJiraProjects(userId);
+        }
+    },
+
+    fetchJiraProjects: async (userId: string) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/jira/projects/${userId}`);
+            const data = await res.json();
+            set({ jiraProjects: Array.isArray(data) ? data : [] });
+        } catch (e) {
+            console.error("Failed to fetch Jira projects:", e);
+            set({ jiraProjects: [] });
+        }
+    },
+
+    fetchNotionStatus: async (userId: string) => {
+        const { data } = await supabase
+            .from('notion_tokens')
+            .select('user_id')
+            .eq('user_id', userId)
+            .maybeSingle();
+        set({ notionConnected: !!data });
+        if (!!data) {
+            get().fetchNotionProjects(userId);
+        }
+    },
+
+    fetchNotionProjects: async (userId: string) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/notion/databases/${userId}`);
+            const data = await res.json();
+            set({ notionProjects: Array.isArray(data) ? data : [] });
+        } catch (e) {
+            console.error("Failed to fetch Notion databases:", e);
+            set({ notionProjects: [] });
+        }
+    },
+
+    fetchGithubStatus: async (userId: string) => {
+        try {
+            const { data } = await supabase
+                .from('github_tokens')
+                .select('user_id')
+                .eq('user_id', userId)
+                .maybeSingle();
+            set({ githubConnected: !!data });
+        } catch (e) {
+            console.error("Failed to fetch GitHub status", e);
+        }
+    },
+
+    fetchGithubRepos: async (userId: string) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/github/repos/${userId}`);
+            if (res.ok) {
+                const data = await res.json();
+                set({ githubRepos: data });
+            }
+        } catch (e) {
+            console.error("Failed to fetch GitHub repos:", e);
+        }
+    },
+
+    setupGithubWebhook: async (userId: string, projectId: string, repoFullName: string) => {
+        const res = await fetch(`${API_BASE}/api/github/webhook`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: userId,
+                project_id: projectId,
+                repo_full_name: repoFullName
+            })
+        });
+
+        // If the backend returns our 403 ORG_ACCESS_REQUIRED error, we MUST throw it!
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to setup webhook");
+        }
+    },
+
+    fetchRisks: async (projectId: string) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/get_risks/${projectId}`);
+            const data = await res.json();
+            const apiRisks = (data?.risks ?? []) as any[];
+
+            const normalizedRisks = apiRisks.map((risk) => {
+                const severityRaw = String(risk.severity ?? 'medium').toLowerCase();
+                const severity = (
+                    severityRaw === 'high' || severityRaw === 'low' || severityRaw === 'medium'
+                        ? severityRaw
+                        : 'medium'
+                ) as 'high' | 'medium' | 'low';
+
+                return {
+                    id: risk.id ?? `${risk.project_id ?? 'project'}-${risk.risk_type ?? 'risk'}`,
+                    severity,
+                    title: risk.title ?? risk.risk_type ?? 'Risk',
+                    riskType: risk.risk_type ?? 'Risk',
+                    description: risk.description ?? '',
+                    file: risk.affected_units && risk.affected_units.length > 0
+                        ? risk.affected_units[0]
+                        : (risk.file ?? risk.file_path ?? undefined),
+                };
+            });
+
+            set({ risks: normalizedRisks });
+        } catch {
+            set({ risks: [] });
+        }
+    },
+
+    fetchProjectStats: async (projectId: string) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/stats/${projectId}`);
+            if (!res.ok) throw new Error("Failed to fetch stats");
+            const data = await res.json();
+            if (data.status === 'success') {
+                set({ projectStats: data });
+            } else {
+                set({ projectStats: null });
+            }
+        } catch {
+            set({ projectStats: null });
+        }
+    },
+
+    checkIsEmpty: async (projectId: string) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/projects/${projectId}/is-empty`);
+            if (!res.ok) throw new Error("Check empty failed");
+            const data = await res.json();
+            set({ isEmpty: data.empty });
+        } catch (e) {
+            console.error("Failed to check if project is empty:", e);
+        }
+    },
+
+    startIngestion: async (userId, repoUrl) => {
+        const settings = useSettingsStore.getState();
+        const userConfig = settings.useDefault
+            ? { user_id: userId }
+            : {
+                provider: settings.provider,
+                api_key: settings.apiKey,
+                model: settings.selectedModel,
+                user_id: userId,
+            };
+
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+
+            const res = await fetch(`${API_BASE}/api/ingest`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token}`
+                },
+                body: JSON.stringify({ user_id: userId, repo_url: repoUrl, user_config: userConfig }),
+            });
+
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                throw new Error(errorData.detail || "Failed to ingest project");
+            }
+
+            const data = await res.json();
+            return data.project_id || null;
+        } catch (error: any) {
+            console.error("Ingestion failed:", error.message);
+            throw error;
+        }
+    },
+
+    pollIngestionStatus: async (projectId: string) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/ingest/status/${projectId}`);
+            const data = await res.json();
+            set({ ingestionStatus: data });
+            
+            // Sync the Redis state to the global project object
+            const state = get();
+            if (state.project?.id === projectId) {
+                const oldStatus = state.project.sync_state?.status;
+                set({ project: { ...state.project, sync_state: data } });
+                
+                // If the background worker just finished, auto-fetch the new risks!
+                if (data.status === 'ready' && oldStatus && ['ANALYZING', 'PROGRESSING', 'syncing', 'processing'].includes(oldStatus)) {
+                    state.fetchRisks(projectId);
+                    state.fetchProjectStats(projectId);
+                }
+            }
+            return data;
+        } catch {
+            return null;
+        }
+    },
+
+    analyzeRisks: async (projectId: string) => {
+        const current = get().project;
+        if (current && current.id === projectId) {
+            set({ 
+                project: { 
+                    ...current, 
+                    sync_state: { 
+                        status: 'ANALYZING', 
+                        step: 'ANALYZING', 
+                        logs: ['Queuing risk analysis task...'] 
+                    } 
+                } 
+            });
+        }
         
-        // Ensure severity strictly matches the allowed types
-        const severity = (
-          severityRaw === 'high' || severityRaw === 'low' || severityRaw === 'medium' 
-            ? severityRaw 
-            : 'medium'
-        ) as 'high' | 'medium' | 'low';
+        try {
+            const res = await fetch(`${API_BASE}/api/projects/${projectId}/analyze-risks`, {
+                method: 'POST',
+            });
+            if (!res.ok) throw new Error("Failed to start analysis");
+        } catch (e) {
+            console.error("Failed to analyze risks", e);
+            // If it fails, fetch the real state to revert the loader
+            get().pollIngestionStatus(projectId);
+        }
+    },
 
-        return {
-          id: risk.id ?? `${risk.project_id ?? 'project'}-${risk.risk_type ?? 'risk'}`,
-          severity,
-          title: risk.title ?? risk.risk_type ?? 'Risk',
-          riskType: risk.risk_type ?? 'Risk', // <--- NEW LINE ADDED HERE
-          description: risk.description ?? '',
-          file: risk.file ?? risk.file_path ?? undefined,
+    disconnectJira: async (userId: string) => {
+        try {
+            await fetch(`${API_BASE}/api/jira/disconnect/${userId}`, { method: 'DELETE' });
+            set({ jiraConnected: false });
+        } catch { /* ignore */ }
+    },
+
+    disconnectNotion: async (userId: string) => {
+        try {
+            await fetch(`${API_BASE}/api/notion/disconnect/${userId}`, { method: 'DELETE' });
+            set({ notionConnected: false });
+        } catch { /* ignore */ }
+    },
+
+    disconnectGithub: async (userId: string) => {
+        try {
+            await fetch(`${API_BASE}/api/github/disconnect/${userId}`, { method: 'DELETE' });
+            set({ githubConnected: false });
+        } catch { /* ignore */ }
+    },
+
+    updateJiraMapping: async (projectId: string, jiraKey: string) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        try {
+            const res = await fetch(`${API_BASE}/api/projects/${projectId}/jira-mapping`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token}`
+                },
+                body: JSON.stringify({ jira_project_id: jiraKey }),
+            });
+
+            if (res.ok) {
+                const current = get();
+                const updated = current.project?.id === projectId ? { ...current.project, jira_project_id: jiraKey } : current.project;
+                set((s) => ({
+                    project: updated,
+                    projects: s.projects.map(p => p.id === projectId ? { ...p, jira_project_id: jiraKey } : p)
+                }));
+                if (updated?.id) get().fetchProjectStats(updated.id);
+            } else {
+                const errorData = await res.text();
+                console.error(`Jira mapping failed with status ${res.status}:`, errorData);
+            }
+        } catch (e) {
+            console.error("Failed to update Jira mapping", e);
+        }
+    },
+
+    updateNotionMapping: async (projectId: string, notionDbId: string) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        try {
+            const res = await fetch(`${API_BASE}/api/projects/${projectId}/notion-mapping`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token}`
+                },
+                body: JSON.stringify({ notion_project_id: notionDbId }),
+            });
+            if (res.ok) {
+                const current = get();
+                const updated = current.project?.id === projectId ? { ...current.project, notion_project_id: notionDbId } : current.project;
+                set((s) => ({
+                    project: updated,
+                    projects: s.projects.map(p => p.id === projectId ? { ...p, notion_project_id: notionDbId } : p)
+                }));
+            }
+        } catch (e) {
+            console.error("Failed to update Notion mapping", e);
+        }
+    },
+    syncProject: async (projectId: string) => {
+        const { projects, startIngestion } = get();
+        const currentProject = projects.find(p => p.id === projectId);
+        if (!currentProject) return;
+
+        try {
+            set({ loading: true });
+            await startIngestion(currentProject.user_id, currentProject.repo_url);
+            await get().fetchProjects(currentProject.user_id);
+        } catch (error) {
+            console.error("Re-sync failed:", error);
+            throw error;
+        } finally {
+            set({ loading: false });
+        }
+    },
+
+    checkProjectSync: async (projectId: string) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/projects/${projectId}/check-remote`);
+            if (!res.ok) throw new Error("Sync check failed");
+            const data = await res.json();
+            set({
+                isUpToDate: data.up_to_date ?? true,
+                remoteSha: data.remote_sha ?? null
+            });
+        } catch (e) {
+            console.error("Failed to check project sync:", e);
+        }
+    },
+
+    setupProjectSubscriptions: (userId: string) => {
+        const channel = supabase
+            .channel('project-updates')
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'projects',
+                    filter: `user_id=eq.${userId}`
+                },
+                (payload) => {
+                    const updatedProject = payload.new as Project;
+                    const current = get();
+
+                    // Update projects list
+                    set((state) => ({
+                        projects: state.projects.map(p => p.id === updatedProject.id ? { ...p, ...updatedProject } : p)
+                    }));
+
+                    // Update active project if it's the one that changed
+                    if (current.project?.id === updatedProject.id) {
+                        set({ project: { ...current.project, ...updatedProject } });
+
+                        // Check the nested sync_state.status instead of the root status
+                        const newStatus = updatedProject.sync_state?.status;
+                        const oldStatus = current.project?.sync_state?.status;
+
+                        // If status just became 'ready', fetch new risks and stats automatically
+                        if (newStatus === 'ready' && oldStatus !== 'ready') {
+                            current.fetchRisks(updatedProject.id);
+                            current.fetchProjectStats(updatedProject.id);
+                        }
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
         };
-      });
-
-      set({ risks: normalizedRisks });
-    } catch {
-      set({ risks: [] });
     }
-  },
-
-  startIngestion: async (userId, repoUrl) => {
-    // Add logic to get config settings
-    const settings = useSettingsStore.getState();
-    const userConfig = settings.useDefault
-        ? { user_id: userId }
-        : {
-            provider: settings.provider,
-            api_key: settings.apiKey,
-            model: settings.selectedModel,
-            user_id: userId,
-          };
-
-    try {
-      const res = await fetch(`${API_BASE}/api/ingest`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // Append user_config to the POST body
-        body: JSON.stringify({ user_id: userId, repo_url: repoUrl, user_config: userConfig }),
-      });
-      const data = await res.json();
-      return data.project_id || null;
-    } catch {
-      return null;
-    }
-  },
-
-  pollIngestionStatus: async (projectId) => {
-    try {
-      const res = await fetch(`${API_BASE}/api/ingest/status/${projectId}`);
-      const data = await res.json();
-      set({ ingestionStatus: data });
-      return data;
-    } catch {
-      return null;
-    }
-  },
-
-  disconnectJira: async (userId) => {
-    try {
-      await fetch(`${API_BASE}/api/jira/disconnect/${userId}`, { method: 'DELETE' });
-      set({ jiraConnected: false });
-    } catch { /* ignore */ }
-  },
-
-  // --- NEW NOTION LOGIC ---
-  disconnectNotion: async (userId) => {
-    try {
-      await fetch(`${API_BASE}/api/notion/disconnect/${userId}`, { method: 'DELETE' });
-      set({ notionConnected: false });
-    } catch { /* ignore */ }
-  },
 }));
