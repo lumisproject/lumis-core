@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { motion, useScroll, useTransform } from 'framer-motion';
-import { ArrowRight, Database, Moon, Sun, Code2, MessageSquare, ShieldAlert } from 'lucide-react';
+import { ArrowRight, Database, Moon, Sun, Mail, MessageSquare, ShieldAlert } from 'lucide-react';
 import { useSettingsStore } from '@/stores/useSettingsStore';
 import { useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
@@ -270,11 +270,11 @@ const Landing = () => {
                             stat="Auto-linked"
                         />
                         <FeatureCard
-                            title="Automated PRs"
-                            desc="Perfectly formatted PR descriptions generated straight from your semantic commit history."
-                            icon={Code2}
+                            title="Automated Email Drafts"
+                            desc="Turn incoming technical queries into tracked tasks and auto-draft contextual responses based on your project's state."
+                            icon={Mail}
                             delay={0.3}
-                            stat="-60% typing"
+                            stat="-90% inbox time"
                         />
                         <FeatureCard
                             title="Semantic Risk Detection"
@@ -341,7 +341,6 @@ const Landing = () => {
                             { name: "PHP", dot: "bg-indigo-500", border: "hover:border-indigo-500/50", glow: "bg-indigo-500", scale: 0.95 },
                             { name: "Ruby", dot: "bg-rose-500", border: "hover:border-rose-500/50", glow: "bg-rose-500", scale: 1.1 },
                             { name: "Markdown", dot: "bg-neutral-500", border: "hover:border-neutral-500/50", glow: "bg-neutral-500", scale: 1 },
-                            { name: "React", dot: "bg-sky-400", border: "hover:border-sky-400/50", glow: "bg-sky-400", scale: 1.2 },
                             { name: "C", dot: "bg-gray-500", border: "hover:border-gray-500/50", glow: "bg-gray-500", scale: 1 }
                         ].map((lang, i) => (
                             <motion.div

@@ -191,7 +191,7 @@ const Dashboard = () => {
 
     const isSyncing = syncing || ['starting', 'PROGRESSING', 'ANALYZING', 'syncing', 'ingesting'].includes(project?.sync_state?.status || '');
     const isLimitReached = tier === 'free' && projects.length >= (limits?.projects || 3);
-    const webhookUrl = project ? `${import.meta.env.VITE_API_URL}/api/webhook/${user?.id}/${project?.id}` : '';
+    const webhookUrl = project ? `https://lumis.novagate-solutions.com/api/webhook/${user?.id}/${project?.id}` : '';
     const [copied, setCopied] = useState(false);
 
     const [copiedSecret, setCopiedSecret] = useState(false);
