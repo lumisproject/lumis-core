@@ -338,17 +338,10 @@ const Landing = () => {
                             { name: "Java", dot: "bg-red-500", border: "hover:border-red-500/50", glow: "bg-red-500", scale: 1 },
                             { name: "C++", dot: "bg-blue-600", border: "hover:border-blue-600/50", glow: "bg-blue-600", scale: 1.05 },
                             { name: "C#", dot: "bg-purple-500", border: "hover:border-purple-500/50", glow: "bg-purple-500", scale: 1 },
-<<<<<<< HEAD
                             { name: "C", dot: "bg-gray-500", border: "hover:border-gray-500/50", glow: "bg-gray-500", scale: 1 },
                             { name: "PHP", dot: "bg-indigo-500", border: "hover:border-indigo-500/50", glow: "bg-indigo-500", scale: 0.95 },
                             { name: "Ruby", dot: "bg-rose-500", border: "hover:border-rose-500/50", glow: "bg-rose-500", scale: 1.1 },
                             { name: "Markdown", dot: "bg-neutral-500", border: "hover:border-neutral-500/50", glow: "bg-neutral-500", scale: 1 }
-=======
-                            { name: "PHP", dot: "bg-indigo-500", border: "hover:border-indigo-500/50", glow: "bg-indigo-500", scale: 0.95 },
-                            { name: "Ruby", dot: "bg-rose-500", border: "hover:border-rose-500/50", glow: "bg-rose-500", scale: 1.1 },
-                            { name: "Markdown", dot: "bg-neutral-500", border: "hover:border-neutral-500/50", glow: "bg-neutral-500", scale: 1 },
-                            { name: "C", dot: "bg-gray-500", border: "hover:border-gray-500/50", glow: "bg-gray-500", scale: 1 }
->>>>>>> 577830115cf4c3323e2a9929130b4bf6707d3df3
                         ].map((lang, i) => (
                             <motion.div
                                 key={i}
