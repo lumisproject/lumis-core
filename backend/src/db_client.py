@@ -140,12 +140,26 @@ def get_global_user_config(user_id: str) -> dict:
     return db_config
 
 def get_current_user(authorization: str = Header(None)):
+    import time
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid token")
     
     token = authorization.split(" ")[1]
 
-    user_response = supabase.auth.get_user(token)
-    if not user_response or not user_response.user:
-        raise HTTPException(status_code=401, detail="Invalid session")
-    return user_response.user
+    for attempt in range(3):
+        try:
+            user_response = supabase.auth.get_user(token)
+            if not user_response or not user_response.user:
+                raise HTTPException(status_code=401, detail="Invalid session")
+            return user_response.user
+        except Exception as e:
+            # If it's the Windows socket error, wait a tiny bit and retry
+            if "10035" in str(e) or "ReadError" in str(type(e).__name__):
+                if attempt < 2:
+                    time.sleep(0.2)
+                    continue
+            
+            # If it's a real error (or we ran out of retries), fail securely
+            import logging
+            logging.getLogger("LumisAPI").error(f"Auth verification failed: {str(e)}")
+            raise HTTPException(status_code=401, detail="Session verification failed")

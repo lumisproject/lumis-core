@@ -15,10 +15,13 @@ class GraphRetriever:
 
     def fetch_file_content(self, file_path: str) -> List[Dict[str, Any]]:
         try:
+            # Handle Windows (\) vs Linux (/) path differences gracefully
+            normalized_path = file_path.replace('\\', '%').replace('/', '%')
+            
             response = supabase.table("memory_units")\
                 .select("id, unit_name, unit_type, content, file_path")\
                 .eq("project_id", self.project_id)\
-                .eq("file_path", file_path)\
+                .ilike("file_path", f"%{normalized_path}%")\
                 .execute()
             return response.data if response.data else []
         except Exception as e:
@@ -36,6 +39,7 @@ class GraphRetriever:
                 print(f"🔹 Augmented Query: {augmented_query}")
 
             # 2. Generate Vector from the augmented text
+            from src.services import get_embedding
             query_vector = get_embedding(augmented_query)
             
             # 3. Prepare Params for Hybrid Search
@@ -49,7 +53,10 @@ class GraphRetriever:
             
             # 4. Call the Hybrid RPC function
             rpc_response = supabase.rpc("match_code_hybrid", params).execute()
-            hits = rpc_response.data if rpc_response.data else []
+            
+            # Safely assign hits and filter out commits
+            raw_hits = rpc_response.data if rpc_response.data else []
+            hits = [h for h in raw_hits if h.get('unit_type') != 'commit']
             
             if not hits:
                 return []
@@ -63,7 +70,6 @@ class GraphRetriever:
                     unique_hits.append(hit)
             
             # 6. GRAPH EXPANSION
-            # This fetches functions called by the search results to provide full context
             enhanced_hits = self._expand_graph(unique_hits)
             
             return enhanced_hits
@@ -176,3 +182,85 @@ class GraphRetriever:
         except Exception as e:
             self.logger.error(f"Failed to fetch architectural context: {e}")
             return "Error retrieving graph context."
+    
+    def search_tickets(self, query: str, user_id: str = None, limit: int = 5) -> List[Dict[str, Any]]:
+        """Searches the live Jira project board for tickets."""
+        if not user_id:
+            self.logger.warning("No user_id provided for search_tickets.")
+            return []
+            
+        try:
+            # 1. Fetch project mapping
+            res = supabase.table("projects").select("jira_project_id").eq("id", self.project_id).limit(1).execute()
+            if not res.data: return []
+                
+            jira_project_key = res.data[0].get("jira_project_id")
+            if not jira_project_key:
+                return [{"unit_name": "Error", "file_path": "Jira Integration", "content": "No Jira project mapped."}]
+
+            # 2. Fetch Jira Token
+            from src.jira_auth import get_valid_token
+            access_token = get_valid_token(user_id)
+            if not access_token:
+                return [{"unit_name": "Error", "file_path": "Jira Integration", "content": "Jira token missing or expired."}]
+                
+            import asyncio
+            import urllib.parse
+            from src.jira_client import get_accessible_resources, _request, adf_to_markdown
+            from src.config import Config
+            
+            async def fetch_jira():
+                resources = await get_accessible_resources(access_token)
+                if not resources: return []
+                cloud_id = resources[0]["id"]
+                
+                # JQL to search the text in summary or description
+                jql = f'project="{jira_project_key}" AND text ~ "{query}" ORDER BY updated DESC'
+                encoded_jql = urllib.parse.quote(jql)
+                url = f"{Config.JIRA_API_BASE}/ex/jira/{cloud_id}/rest/api/3/search/jql?jql={encoded_jql}&maxResults={limit}&fields=summary,description,status"
+                
+                response = await _request("GET", url, headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"})
+                return response.json().get("issues", [])
+                
+            # Execute async code synchronously inside the thread
+            issues = asyncio.run(fetch_jira())
+            
+            if not issues: return []
+            
+            results = []
+            for t in issues:
+                fields = t.get("fields", {})
+                desc = adf_to_markdown(fields.get("description", {}))
+                results.append({
+                    "unit_name": t["key"], 
+                    "file_path": "Jira Board", 
+                    "content": f"Title: {fields.get('summary', '')}\nStatus: {fields.get('status', {}).get('name', '')}\nDesc: {desc}"
+                })
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"Error fetching tickets from Jira: {e}")
+            return []
+
+    def search_commits(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        """Searches memory_units for commit context."""
+        try:
+            # Vector search targeting only commits
+            query_vector = get_embedding(query)
+            params = {
+                "query_embedding": query_vector,
+                "query_text": query,
+                "match_threshold": 0.05, 
+                "match_count": limit,
+                "filter_project_id": self.project_id
+            }
+            # Assuming you adapt your RPC to accept a unit_type filter, or filter in Python:
+            rpc_response = supabase.rpc("match_code_hybrid", params).execute()
+            hits = rpc_response.data if rpc_response.data else []
+            
+            # Filter for commits
+            commit_hits = [h for h in hits if h.get('unit_type') == 'commit']
+            return commit_hits[:limit]
+        except Exception as e:
+            self.logger.error(f"Error fetching commits: {e}")
+            return []

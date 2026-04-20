@@ -2,7 +2,7 @@ import re
 import logging
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
-from src.services import get_llm_completion  # Using your existing service
+from src.services import get_llm_completion  
 
 @dataclass
 class ProcessedQuery:
@@ -10,10 +10,10 @@ class ProcessedQuery:
     original: str
     expanded: str
     keywords: List[str]
-    intent: str  # 'how', 'what', 'where', 'debug', 'explain', 'find', 'implement'
+    intent: str  
     filters: Dict[str, Any]
-    rewritten_query: Optional[str] = None  # LLM-rewritten query for semantic search
-    pseudocode_hints: Optional[str] = None  # Pseudocode for implementation queries
+    rewritten_query: Optional[str] = None  
+    pseudocode_hints: Optional[str] = None  
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -32,15 +32,17 @@ class QueryProcessor:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         
-        # Intent keywords mapping
+        # Expanded Intent keywords mapping for new tools
         self.intent_patterns = {
-            "how": ["how", "implement", "create", "build", "make"],
+            "how": ["how", "implement", "build", "make"],
             "what": ["what", "is", "are", "does", "define", "purpose"],
             "where": ["where", "locate", "find", "which file"],
             "debug": ["error", "bug", "issue", "problem", "fix", "fail", "crash"],
             "explain": ["explain", "describe", "tell me about", "understand"],
-            "find": ["find", "search", "locate", "show me", "list"],
-            "implement": ["implement", "write", "code", "develop", "algorithm"],
+            "find": ["search", "show me", "list"],
+            "implement": ["write", "code", "develop", "algorithm", "refactor"],
+            "ticket_management": ["ticket", "task", "board", "assign", "status", "comment", "create ticket", "update ticket", "delete ticket"],
+            "repository_history": ["commit", "history", "blame", "changes", "push", "pull request", "pr", "revert", "author"]
         }
         
         # Code-related keywords to prioritize
@@ -64,7 +66,6 @@ class QueryProcessor:
         pseudocode_hints = None
         
         try:
-            # FIX: Pass user_config down
             enhancements = self._enhance_with_llm(query, intent, keywords, filters, conversation_history, user_config=user_config)
             
             if enhancements.get("refined_intent"): intent = enhancements["refined_intent"]
@@ -113,7 +114,8 @@ class QueryProcessor:
             "auth": "authentication authorization login",
             "db": "database sql storage",
             "repo": "repository codebase",
-            "test": "unittest integration spec"
+            "test": "unittest integration spec",
+            "ticket": "task issue jira", # Added synonym expansion for tickets
         }
         words = query.lower().split()
         expanded = [synonyms.get(w, w) for w in words]
@@ -133,7 +135,7 @@ class QueryProcessor:
 
         system_prompt = (
             "You are a code search query analyzer for a RAG system.\n"
-            "Analyze the user query to improve code retrieval.\n"
+            "Analyze the user query to improve code retrieval and tool selection.\n"
             "Output fields exactly as requested."
         )
 
@@ -144,8 +146,8 @@ class QueryProcessor:
             Detected Intent: {intent}
 
             Provide the following (in ENGLISH):
-            1. REFINED_INTENT: One of [Code QA, Debugging, Implementation, Architecture, Explanation]
-            2. REWRITTEN_QUERY: A keyword-rich search string optimized for embedding similarity (resolve pronouns like 'it', 'that file' using context).
+            1. REFINED_INTENT: One of [Code QA, Debugging, Implementation, Architecture, Explanation, Project Management, Version Control/History]
+            2. REWRITTEN_QUERY: A keyword-rich search string optimized for embedding similarity (resolve pronouns like 'it', 'that file' using context). If the user is asking to manage a ticket, extract the core topic.
             3. PSEUDOCODE_HINTS: If the user asks to implement logic, provide 3-5 lines of high-level pseudocode/logic to search for. If not, output "N/A".
 
             Format strictly as:
@@ -153,7 +155,6 @@ class QueryProcessor:
             REWRITTEN_QUERY: <value>
             PSEUDOCODE_HINTS: <value>
         """
-        # Call your existing service
         response = get_llm_completion(system_prompt, user_prompt, user_config=user_config)
         return self._parse_llm_response(response) if response else {}
 

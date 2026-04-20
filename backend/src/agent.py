@@ -12,7 +12,7 @@ from src.query_processor import QueryProcessor
 from src.db_client import supabase
 
 class LumisAgent:
-    def __init__(self, project_id: str, max_steps: int = 3, user_config: Dict = None, mode: str = "single-turn", session_id: str = None):
+    def __init__(self, project_id: str, max_steps: int = 5, user_config: Dict = None, mode: str = "single-turn", session_id: str = None):
         self.project_id = project_id
         self.session_id = session_id
         self.user_config = user_config or {}
@@ -39,7 +39,7 @@ class LumisAgent:
                 self.logger.error(f"Failed to load chat history from DB: {e}")
 
     async def ask_stream(self, user_query: str):
-        """ Main entry point for user queries. Intercepts Jira keywords to trigger
+        """ Main entry point for user queries. Intercepts keywords to trigger
             task cross-referencing, otherwise proceeds with code analysis. """
         
         mode = self.user_config.get("mode", "single-turn")
@@ -89,7 +89,6 @@ class LumisAgent:
 
             yield json.dumps({"type": "thought", "content": f"[{confidence}%] {thought}"})
 
-            #Testing
             if action == "final_answer":
                 yield json.dumps({"type": "thought", "content": "Confidence threshold reached. Formulating final answer."})
                 break
@@ -106,13 +105,17 @@ class LumisAgent:
         # Signal that the reasoning loop has ended and streaming text will begin
         yield json.dumps({"type": "answer_start"})
         
+        # ---> CHANGED: Removed the word "Tool" to prevent Groq hallucinations <---
+        action_results_str = "\n".join([f"System Action: {s['action']}\nResult: {s['observation']}" for s in scratchpad])
+        
         full_answer = ""
         async for chunk in self.generator.generate_stream(
             query=user_query, 
             collected_elements=collected_elements, 
             repo_structure=repo_structure,
             history=self.conversation_history,
-            user_config=self.user_config
+            user_config=self.user_config,
+            tool_results=action_results_str 
         ):
             full_answer += chunk
             yield json.dumps({"type": "answer_chunk", "content": chunk})
@@ -208,14 +211,18 @@ class LumisAgent:
             if action == "list_files":
                 files = self.retriever.list_all_files()
                 obs = f"Repo contains {len(files)} files. First 50: {', '.join(files[:50])}"
+                
             elif action == "read_file":
                 path = str(inp).strip()
                 data = self.retriever.fetch_file_content(path)
                 if data:
                     collected.extend(data)
-                    obs = f"Successfully read {path}."
+                    file_content = data[0].get('content', '')
+                    preview = file_content[:3000] + ("\n...[truncated]" if len(file_content) > 3000 else "")
+                    obs = f"Successfully read {path}. Contents:\n{preview}"
                 else:
                     obs = f"Error: File {path} not found."
+                    
             elif action == "search_code":
                 search_input = str(inp)
                 if processed_query and processed_query.rewritten_query:
@@ -224,38 +231,218 @@ class LumisAgent:
                     search_input += f" {processed_query.pseudocode_hints}"
                 
                 data = self.retriever.search(search_input, user_config=self.user_config)
-                
                 if data:
                     collected.extend(data)
-                    
                     found_matches = []
                     for d in data[:5]: 
                         found_matches.append(f"- {d['file_path']} ({d['unit_name']})")
-                    
                     obs = f"Found {len(data)} matches. Top results context:\n" + "\n".join(found_matches)
                 else:
-                    obs = f"No results found. Try broader keywords."
+                    obs = "No results found. Try broader keywords."
+
+            elif action == "search_tickets":
+                user_id = self.user_config.get("user_id")
+                data = self.retriever.search_tickets(str(inp), user_id=user_id)
+                if data:
+                    collected.extend(data)
+                    obs = f"Found {len(data)} related tickets."
+                else:
+                    obs = "No active tickets found matching the query."
+
+            elif action == "search_commits":
+                data = self.retriever.search_commits(str(inp))
+                if data:
+                    collected.extend(data)
+                    obs = f"Found {len(data)} related commits."
+                else:
+                    obs = "No commits found matching the query."
+
+            elif action == "modify_code_block":
+                try:
+                    import json
+                    import ast
+                    
+                    # Robust parsing: Handle both Dicts and Stringified JSON
+                    args = inp if isinstance(inp, dict) else json.loads(str(inp))
+                    
+                    file_path = args.get("file_path", "")
+                    unit_name = args.get("unit_name", "")
+                    new_code = args.get("code", "")
+                    
+                    # 1. Zero-Token Syntax Validation
+                    if file_path.endswith(".py"):
+                        try:
+                            ast.parse(new_code)
+                        except SyntaxError as se:
+                            obs = f"AST Syntax Error on line {se.lineno}: {se.msg}. Please fix the code and try again."
+                            scratchpad.append({"thought": "System Result", "action": f"{action}", "observation": obs})
+                            return obs
+
+                    # 2. Fetch the original function and the parent file
+                    existing_units = supabase.table("memory_units")\
+                        .select("id, unit_name, unit_type, content")\
+                        .eq("project_id", self.project_id)\
+                        .eq("file_path", file_path)\
+                        .in_("unit_type", ["function", "class", "method", "file"])\
+                        .execute()
+
+                    target_unit = next((u for u in existing_units.data if u["unit_name"] == unit_name), None)
+                    parent_file = next((u for u in existing_units.data if u["unit_type"] == "file"), None)
+
+                    # 3. Splice the new code into the parent file
+                    if target_unit and parent_file:
+                        old_code = target_unit["content"]
+                        full_file_content = parent_file["content"]
+                        
+                        # Replace the old function code with the new one in the main file
+                        if old_code in full_file_content:
+                            updated_file_content = full_file_content.replace(old_code, new_code)
+                            
+                            # Update the parent file unit in the DB
+                            supabase.table("memory_units").update({
+                                "content": updated_file_content
+                            }).eq("id", parent_file["id"]).execute()
+                        else:
+                            self.logger.warning(f"Could not find exact string match for {unit_name} in {file_path} to splice.")
+
+                    # 4. Update the target function unit in the DB
+                    supabase.table("memory_units").upsert({
+                        "project_id": self.project_id,
+                        "file_path": file_path,
+                        "unit_name": unit_name,
+                        "unit_type": target_unit["unit_type"] if target_unit else "function",
+                        "content": new_code,
+                    }, on_conflict="project_id, file_path, unit_name").execute()
+                    
+                    obs = f"Successfully validated and updated `{unit_name}` in `{file_path}`."
+                except Exception as e:
+                    obs = f"Failed to parse modify_code_block input or save: {str(e)}. Ensure input is valid JSON."
+
+            elif action == "manage_ticket":
+                import asyncio
+                
+                # Robustly handle both stringified JSON and native Dictionary inputs
+                args = inp if isinstance(inp, dict) else {}
+                if not args:
+                    import json
+                    try:
+                        args = json.loads(str(inp))
+                    except Exception:
+                        obs = "Error: Invalid JSON input format for manage_ticket."
+                        scratchpad.append({"thought": "System Result", "action": action, "observation": obs})
+                        return obs
+
+                operation = args.get("operation")
+                user_id = self.user_config.get("user_id")
+                
+                if not user_id:
+                    obs = "Error: User ID missing. Cannot authenticate with project board."
+                else:
+                    res = supabase.table("projects").select("jira_project_id").eq("id", self.project_id).limit(1).execute()
+                    jira_project_key = res.data[0].get("jira_project_id") if res.data else None
+                    
+                    if not jira_project_key:
+                        obs = "Error: No Jira project mapped."
+                    else:
+                        from src.jira_auth import get_valid_token
+                        access_token = get_valid_token(user_id)
+                        
+                        if not access_token:
+                            obs = "Error: Jira token missing or expired."
+                        else:
+                            from src.jira_client import get_accessible_resources
+                            
+                            async def execute_jira_op():
+                                resources = await get_accessible_resources(access_token)
+                                cloud_id = resources[0]["id"]
+                                
+                                result_msg = f"Error: Unknown operation {operation}."
+                                
+                                if operation == "create":
+                                    from src.jira_client import create_issue
+                                    title = args.get("title") or args.get("summary") or "New Task"
+                                    desc = args.get("description") or args.get("desc") or ""
+                                    issue = await create_issue(cloud_id, jira_project_key, title, desc, access_token)
+                                    result_msg = f"Successfully created ticket {issue['key']}."
+                                    
+                                elif operation == "update":
+                                    from src.jira_client import update_issue_title, update_issue_description
+                                    ticket_id = args.get("ticket_id")
+                                    title = args.get("title") or args.get("summary")
+                                    desc = args.get("description") or args.get("desc")
+                                    
+                                    if not ticket_id: return "Error: ticket_id required for update."
+                                    
+                                    if title:
+                                        await update_issue_title(cloud_id, ticket_id, title, access_token)
+                                    if desc:
+                                        await update_issue_description(cloud_id, ticket_id, desc, access_token)
+                                    result_msg = f"Successfully updated ticket {ticket_id}."
+                                    
+                                elif operation == "comment":
+                                    from src.jira_client import add_comment
+                                    ticket_id = args.get("ticket_id")
+                                    comment_val = args.get("comment_text") or args.get("comment") or args.get("text")
+                                    
+                                    if not ticket_id: return "Error: ticket_id required for comment."
+                                    if not comment_val: return "Error: comment text is empty."
+                                    
+                                    await add_comment(cloud_id, ticket_id, comment_val, access_token)
+                                    result_msg = f"Successfully added comment to {ticket_id}."
+                                    
+                                elif operation == "delete":
+                                    from src.jira_client import delete_issue
+                                    ticket_id = args.get("ticket_id")
+                                    if not ticket_id: return "Error: ticket_id required for delete."
+                                    await delete_issue(cloud_id, ticket_id, access_token)
+                                    result_msg = f"Successfully deleted ticket {ticket_id}."
+                                
+                                if "Successfully" in result_msg:
+                                    from src.cache import invalidate_cache
+                                    invalidate_cache(f"board:{self.project_id}:jira")
+                                    
+                                return result_msg
+                            
+                            try:
+                                obs = asyncio.run(execute_jira_op())
+                            except Exception as e:
+                                obs = f"Failed to execute Jira operation: {str(e)}"
+
         except Exception as e:
             obs = f"Tool Error: {str(e)}"
-        scratchpad.append({"thought": "System Result", "action": f"{action}({inp})", "observation": obs})
+            
+        scratchpad.append({"thought": "System Result", "action": f"{action}({str(inp)[:50]}...)", "observation": obs})
         return obs
 
     def _get_system_prompt(self) -> str:
         return (
-            "You are Lumis, a 'Scouting-First' code analysis agent.\n"
-            "Your goal is to answer user queries with PRECISE code evidence.\n\n"
-            "1. SCOUT: Use `list_files` or `search_code` to find RELEVANT FILE PATHS.\n"
-            "2. READ: Only call `read_file` when you are 80%+ sure a file contains the answer.\n"
-            "3. ANSWER: Call `final_answer` once you have the code snippets in your context.\n\n"
-            "CRITICAL INSTRUCTION: DO NOT use native tool calling or function calling APIs. "
-            "You must respond with raw text containing ONLY a valid JSON object matching this EXACT schema:\n"
+            "You are Lumis, an elite AI Developer and Architect.\n"
+            "Your goal is to answer queries, write/modify code, and manage project context (tickets/commits).\n\n"
+            "AVAILABLE COMMANDS (Output raw text JSON only):\n"
+            "1. `list_files` - List repository files.\n"
+            "2. `read_file` - Read full file content. ALWAYS use this FIRST when reviewing specific files. The code will be returned in your observation.\n"
+            "3. `search_code` - Semantic search for code context.\n"
+            "4. `modify_code_block` - Write or overwrite a specific function/class. Requires a JSON object with: 'file_path', 'unit_name', and 'code'. You MUST provide valid code.\n"
+            "5. `search_tickets` - Search active tickets on the live project board (Jira).\n"
+            "6. `search_commits` - Search git history to understand why code changed.\n"
+            "7. `manage_ticket` - Create, update, comment on, or delete a ticket on the live board.\n"
+            "   Requires a JSON object with: 'operation' (create|update|comment|delete), 'ticket_id' (for update/comment/delete), 'title', 'description', and 'comment_text' as needed.\n"
+            "8. `final_answer` - Use this command ONLY when the user's entire request has been successfully completed.\n\n"
+            "CRITICAL INSTRUCTION: You MUST NOT output anything that looks like `{\"name\": \"tool_name\", \"arguments\": {...}}`. "
+            "Respond ONLY with a valid JSON string matching this EXACT schema:\n"
             "{\n"
-            '  "thought": "Your reasoning for the next step",\n'
-            '  "action": "list_files | read_file | search_code | final_answer",\n'
-            '  "action_input": "The input string for the chosen tool",\n'
+            '  "thought": "Your reasoning",\n'
+            '  "action": "COMMAND_NAME_HERE",\n'
+            '  "action_input": "String input OR Stringified JSON for complex commands",\n'
             '  "confidence": 85\n'
             "}\n"
-            "Do not include markdown formatting or outside text."
+            "- Do NOT include markdown formatting (no ```json). Only respond with the raw JSON object.\n"
+            "WORKFLOW RULES:\n"
+            "- If asked to review a file and create a ticket, you MUST first execute `read_file`, analyze the observation, then execute `manage_ticket` to create the ticket, and ONLY THEN use `final_answer`.\n"
+            "- If you lack file contents, DO NOT use `final_answer` to give up. You MUST use the `read_file` command to fetch the code yourself!\n"
+            "- To modify or comment on a ticket, you MUST know its exact `ticket_id` (e.g., PROJ-123). If the user only provides a title, use `search_tickets` FIRST to find the ID, then use `manage_ticket`.\n"
+            "- NEVER claim a ticket was updated or created unless you see a success message from `manage_ticket`.\n"
+            "UNIVERSAL STOPPING RULE: The moment your command successfully achieves the user's primary request (e.g., 'Successfully created ticket XYZ'), your VERY NEXT command MUST be `final_answer`.\n"
         )
 
     def _update_history(self, q, a, mode):
@@ -267,7 +454,7 @@ class LumisAgent:
 
             user_id = self.user_config.get("user_id")
 
-            # 2. DATABASE HISTORY (Happens ALWAYS, regardless of mode)
+            # 2. DATABASE HISTORY
             # This controls the left sidebar so users can find old messages
             if user_id:
                 try:
@@ -345,7 +532,7 @@ class LumisAgent:
             return {"fulfillment_status": "PARTIAL", "summary": "AI analysis failed."}
 
     def match_task_to_commit(self, commit_message: str, issues: List[Dict]) -> Optional[Dict]:
-        """Uses AI to determine if a commit message matches one of the active Jira tasks."""
+        """Uses AI to determine if a commit message matches one of the active tasks."""
         if not issues: return None
 
         candidates = "\n".join([f"- [{i['key']}] {i['fields']['summary']}" for i in issues])
@@ -354,7 +541,7 @@ class LumisAgent:
         print(candidates)
         print(f"-------------------------------------\n")
         
-        system_prompt = "You are a Technical Lead. Your job is to match a developer's commit message to their active Jira task."
+        system_prompt = "You are a Technical Lead. Your job is to match a developer's commit message to their active task."
         user_prompt = f"""
         COMMIT MESSAGE: "{commit_message}"
         

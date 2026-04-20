@@ -3,6 +3,7 @@ import numpy as np
 import requests
 import logging
 import datetime
+import base64
 from src.config import Config
 from src.cryptography import decrypt_value
 

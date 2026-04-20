@@ -145,7 +145,63 @@ async def ingest_repo(repo_url, project_id, progress_callback=None, user_config=
                     if block.bases: 
                         edges_to_insert.extend([{"project_id": project_id, "source_unit_name": clean_id, "target_unit_name": b, "edge_type": "inherits"} for b in block.bases])
 
-        # --- NEW: DEDUPLICATE TO PREVENT POSTGRES BULK ERRORS ---
+        # PHASE 2: TEMPORAL GRAPH (GIT HISTORY)
+        if progress_callback: progress_callback("HISTORY", "Ingesting Git History and Mapping Commits...")
+        
+        try:
+            # Fetch the last 100 commits to build our history graph
+            recent_commits = list(repo.iter_commits('HEAD', max_count=100))
+            
+            for commit in recent_commits:
+                commit_id = f"commit::{commit.hexsha}"
+                commit_msg = commit.message.strip()
+                author_email = commit.author.email
+                
+                # Figure out which files this commit modified
+                modified_files = []
+                if commit.parents:
+                    diffs = commit.parents[0].diff(commit)
+                    modified_files = [d.b_path for d in diffs if d.b_path]
+                else:
+                    modified_files = list(commit.stats.files.keys())
+                
+                # Create a searchable content block for the LLM
+                content = (
+                    f"Commit SHA: {commit.hexsha}\n"
+                    f"Author: {author_email}\n"
+                    f"Date: {commit.committed_datetime.isoformat()}\n"
+                    f"Message: {commit_msg}\n"
+                    f"Files Touched: {', '.join(modified_files)}"
+                )
+                
+                blocks_to_embed.append({
+                    "identifier": commit_id,
+                    "type": "commit",
+                    "file_path": "Git History",
+                    "content": content,
+                    "name": commit.hexsha[:7],
+                    "footprint": generate_footprint(content),
+                    "last_mod": commit.committed_datetime.isoformat(),
+                    "author": author_email
+                })
+                
+                # Track this commit as part of the current graph to prevent deletion
+                current_scan_identifiers.append(commit_id)
+
+                # Draw the Graph Edges! (Commit -> modified -> File)
+                for m_file in modified_files:
+                    # We link the commit to the root file unit
+                    target_file_id = f"{m_file}::root::file"
+                    
+                    edges_to_insert.append({
+                        "project_id": project_id,
+                        "source_unit_name": commit_id,
+                        "target_unit_name": target_file_id,
+                        "edge_type": "modified"
+                    })
+        except Exception as e:
+            logger.warning(f"Could not ingest full git history: {e}")
+
         # 1. Deduplicate memory units by their unique identifier
         unique_blocks = {}
         for b in blocks_to_embed:

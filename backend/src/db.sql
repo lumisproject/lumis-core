@@ -105,6 +105,16 @@ CREATE TABLE public.project_risks (
   CONSTRAINT project_risks_pkey PRIMARY KEY (id),
   CONSTRAINT project_risks_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id)
 );
+CREATE TABLE public.project_tickets (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  project_id text NOT NULL,
+  ticket_id text NOT NULL,
+  title text NOT NULL,
+  description text,
+  status text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT project_tickets_pkey PRIMARY KEY (id)
+);
 CREATE TABLE public.projects (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),

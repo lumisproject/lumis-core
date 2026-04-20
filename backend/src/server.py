@@ -284,7 +284,7 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
                 "message": c.get("message", "")
             })
 
-        agent = LumisAgent(project_id=project_id, max_steps=3, user_config=global_config, mode="single-turn")
+        agent = LumisAgent(project_id=project_id, max_steps=5, user_config=global_config, mode="single-turn")
 
         check_taskes(
             user_id=user_id,
@@ -494,7 +494,7 @@ async def start_ingest(req: IngestRequest, request: Request, background_tasks: B
 
         run_ingestion_pipeline_task.delay(req.repo_url, project_id, global_config)
 
-        agent = LumisAgent(project_id=project_id, max_steps=3, user_config=global_config)
+        agent = LumisAgent(project_id=project_id, max_steps=5, user_config=global_config)
         check_taskes(
             user_id=req.user_id,
             project_id=project_id,
