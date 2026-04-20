@@ -20,7 +20,8 @@ import {
     Trello,
     Network,
     Link2,
-    Mail
+    Mail,
+    Slack
 } from 'lucide-react';
 import { useSettingsStore } from '@/stores/useSettingsStore';
 import { useUserStore } from '@/stores/useUserStore';
@@ -149,7 +150,8 @@ const Settings = () => {
     const {
         project, jiraConnected, fetchJiraStatus, fetchNotionStatus, disconnectJira,
         updateJiraMapping, jiraProjects,
-        githubConnected, fetchGithubStatus, disconnectGithub
+        githubConnected, fetchGithubStatus, disconnectGithub,
+        slackConnected, fetchSlackStatus, disconnectSlack, slackChannels, updateSlackMapping // Added for Slack
     } = useProjectStore();
     
     const {
@@ -216,8 +218,9 @@ const Settings = () => {
             fetchJiraStatus(user.id);
             fetchNotionStatus(user.id);
             fetchGithubStatus(user.id);
+            fetchSlackStatus(user.id); // Fetches the status when user is loaded
         }
-    }, [user?.id, project?.id, fetchJiraStatus, fetchNotionStatus, fetchGithubStatus]);
+    }, [user?.id, project?.id, fetchJiraStatus, fetchNotionStatus, fetchGithubStatus, fetchSlackStatus]);
 
     useEffect(() => {
         const loadSettings = async () => {
@@ -356,7 +359,7 @@ const Settings = () => {
                 <SettingSection
                     title="Ecosystem Integrations"
                     icon={Network}
-                    description="Connect external platforms. GitHub serves as your global codebase source, while Jira and Notion are mapped per-project."
+                    description="Connect external platforms. GitHub serves as your global codebase source, while Jira, Slack, and Notion are mapped per-project."
                 >
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         
@@ -463,6 +466,65 @@ const Settings = () => {
                                     </button>
                                 ) : (
                                     <button onClick={() => window.location.href = `${API_BASE}/auth/jira/connect?state=${user?.id}`} className="w-full flex items-center justify-center gap-2 h-10 rounded-xl bg-blue-500 text-white text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-md shadow-blue-500/20">
+                                        <Link2 className="h-3.5 w-3.5" /> Link Account
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* SLACK CARD (Project Specific) */}
+                        <div className={cn(
+                            "relative flex flex-col justify-between p-6 rounded-[2rem] border transition-all duration-500",
+                            slackConnected 
+                                ? "bg-purple-500/5 border-purple-500/20 shadow-[inset_0_0_20px_rgba(168,85,247,0.05)]" 
+                                : "bg-accent/10 border-black/5 dark:border-white/5"
+                        )}>
+                            {!project && (
+                                <div className="absolute inset-0 z-20 bg-background/60 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
+                                    <AlertTriangle className="h-6 w-6 text-orange-500 mb-2 opacity-80" />
+                                    <div className="text-[10px] font-black uppercase tracking-widest">Context Required</div>
+                                    <p className="text-[9px] font-medium text-muted-foreground mt-1 max-w-[150px]">Select a project from the dashboard to map Slack channels.</p>
+                                </div>
+                            )}
+                            
+                            <div className="space-y-4 relative z-10">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className={cn("p-2 rounded-xl", slackConnected ? "bg-purple-500/20 text-purple-600 dark:text-purple-400" : "bg-accent text-muted-foreground")}>
+                                            <Slack className="h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <div className="text-xs font-black uppercase tracking-widest">Slack Alerts</div>
+                                            <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mt-0.5">Project Mapping</div>
+                                        </div>
+                                    </div>
+                                    <div className={cn("h-2 w-2 rounded-full", slackConnected ? "bg-purple-500 animate-pulse shadow-[0_0_8px_rgba(168,85,247,0.8)]" : "bg-muted")} />
+                                </div>
+
+                                {slackConnected ? (
+                                    <div className="pt-2">
+                                        <ModernSelect
+                                            icon={Slack}
+                                            value={project?.slack_channel_id || 'none'}
+                                            onChange={(val: string) => project?.id && updateSlackMapping(project.id, val === 'none' ? '' : val)}
+                                            options={[{ id: 'none', name: 'None / Not Linked' }, ...slackChannels]}
+                                            loading={!slackChannels.length && slackConnected}
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="pt-2 text-[10px] font-medium text-muted-foreground leading-relaxed">
+                                        Link your workspace to route project-specific risk alerts.
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="mt-8 relative z-10">
+                                {slackConnected ? (
+                                    <button onClick={() => user?.id && disconnectSlack(user.id)} className="w-full flex items-center justify-center h-10 rounded-xl bg-destructive/10 text-destructive text-[10px] font-black uppercase tracking-widest hover:bg-destructive hover:text-white transition-all">
+                                        Disconnect Node
+                                    </button>
+                                ) : (
+                                    <button onClick={() => window.location.href = `${API_BASE}/auth/slack/connect?state=${user?.id}`} className="w-full flex items-center justify-center gap-2 h-10 rounded-xl bg-purple-500 text-white text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-md shadow-purple-500/20">
                                         <Link2 className="h-3.5 w-3.5" /> Link Account
                                     </button>
                                 )}
@@ -628,13 +690,6 @@ const Settings = () => {
                                             src="/outlook.webp" 
                                             className="h-9 w-9" 
                                             alt="Outlook" 
-                                        />
-                                    </div>
-                                    <div className="h-12 w-12 rounded-2xl border border-dashed border-black/10 dark:border-white/10 flex items-center justify-center">
-                                        <img 
-                                            src="/slack.webp" 
-                                            className="h-9 w-9" 
-                                            alt="Slack" 
                                         />
                                     </div>
                                     <div className="h-12 w-12 rounded-2xl border border-dashed border-black/10 dark:border-white/10 flex items-center justify-center">

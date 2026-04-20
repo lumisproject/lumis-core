@@ -54,6 +54,19 @@ def run_risk_analysis_task(project_id: str, user_config: dict):
         agent = LumisAgent(project_id=project_id, user_config=user_config)
         asyncio.run(process_impact_review(project_id, agent, log_callback=lambda msg: progress_cb("ANALYZING", msg)))
         
+        # --- NEW: Fire Slack Alert for manual Risk Analysis ---
+        try:
+            from src.db_client import supabase
+            from src.slack_client import send_slack_risk_alert
+            
+            # Fetch the repo URL needed for the Slack message
+            res = supabase.table("projects").select("repo_url").eq("id", project_id).execute()
+            if res.data:
+                repo_url = res.data[0].get("repo_url")
+                send_slack_risk_alert(project_id, repo_url)
+        except Exception as slack_err:
+            logger.error(f"Slack Alert failed during manual analysis: {slack_err}")
+
         progress_cb("READY", "Neural Risk Analysis Complete.")
     except Exception as e:
         logger.error(f"Risk Analysis Error: {e}", exc_info=True)

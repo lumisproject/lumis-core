@@ -247,6 +247,7 @@ class LumisAgent:
             "1. SCOUT: Use `list_files` or `search_code` to find RELEVANT FILE PATHS.\n"
             "2. READ: Only call `read_file` when you are 80%+ sure a file contains the answer.\n"
             "3. ANSWER: Call `final_answer` once you have the code snippets in your context.\n\n"
+            "If asked for a general overview and no README exists, call `final_answer` immediately and deduce the project purpose from the file names in `list_files`.\n\n"
             "CRITICAL INSTRUCTION: DO NOT use native tool calling or function calling APIs. "
             "You must respond with raw text containing ONLY a valid JSON object matching this EXACT schema:\n"
             "{\n"

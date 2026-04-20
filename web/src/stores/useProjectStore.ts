@@ -20,6 +20,7 @@ interface Project {
     user_id: string;
     jira_project_id?: string;
     notion_project_id?: string;
+    slack_channel_id?: string; // Added for Slack
     webhook_secret?: string;
     sync_state?: {
         status: string;
@@ -48,6 +49,7 @@ interface ProjectState {
     jiraConnected: boolean;
     notionConnected: boolean;
     githubConnected: boolean;
+    slackConnected: boolean; // Added for Slack
     ingestionStatus: IngestionStatus | null;
     projectStats: ProjectStats | null;
     isUpToDate: boolean;
@@ -57,6 +59,7 @@ interface ProjectState {
     error: string | null;
     jiraProjects: { key: string, name: string }[];
     notionProjects: { id: string, name: string }[];
+    slackChannels: { id: string, name: string }[]; // Added for Slack
     githubRepos: { 
         id: number; 
         name: string; 
@@ -72,10 +75,12 @@ interface ProjectState {
     fetchProjects: (userId: string) => Promise<void>;
     fetchJiraProjects: (userId: string) => Promise<void>;
     fetchNotionProjects: (userId: string) => Promise<void>;
+    fetchSlackChannels: (userId: string) => Promise<void>; // Added for Slack
     selectProject: (projectId: string) => void;
     fetchJiraStatus: (userId: string) => Promise<void>;
     fetchNotionStatus: (userId: string) => Promise<void>;
     fetchGithubStatus: (userId: string) => Promise<void>;
+    fetchSlackStatus: (userId: string) => Promise<void>; // Added for Slack
     fetchGithubRepos: (userId: string) => Promise<void>;
     setupGithubWebhook: (userId: string, projectId: string, repoFullName: string) => Promise<void>;
     fetchRisks: (projectId: string) => Promise<void>;
@@ -86,8 +91,10 @@ interface ProjectState {
     disconnectJira: (userId: string) => Promise<void>;
     disconnectNotion: (userId: string) => Promise<void>;
     disconnectGithub: (userId: string) => Promise<void>;
+    disconnectSlack: (userId: string) => Promise<void>; // Added for Slack
     updateJiraMapping: (projectId: string, jiraKey: string) => Promise<void>;
     updateNotionMapping: (projectId: string, notionDbId: string) => Promise<void>;
+    updateSlackMapping: (projectId: string, slackChannelId: string) => Promise<void>; // Added for Slack
     syncProject: (projectId: string) => Promise<void>;
     checkProjectSync: (projectId: string) => Promise<void>;
     analyzeRisks: (projectId: string) => Promise<void>;
@@ -101,6 +108,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     jiraConnected: false,
     notionConnected: false,
     githubConnected: false,
+    slackConnected: false, // Initial state
     ingestionStatus: null,
     projectStats: null as ProjectStats | null,
     isUpToDate: true,
@@ -110,6 +118,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     error: null,
     jiraProjects: [],
     notionProjects: [],
+    slackChannels: [], // Initial state
     githubRepos: [],
 
     fetchProjects: async (userId: string) => {
@@ -204,6 +213,29 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         }
     },
 
+    fetchSlackStatus: async (userId: string) => {
+        const { data } = await supabase
+            .from('slack_tokens')
+            .select('user_id')
+            .eq('user_id', userId)
+            .maybeSingle();
+        set({ slackConnected: !!data });
+        if (!!data) {
+            get().fetchSlackChannels(userId);
+        }
+    },
+
+    fetchSlackChannels: async (userId: string) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/slack/channels/${userId}`);
+            const data = await res.json();
+            set({ slackChannels: Array.isArray(data) ? data : [] });
+        } catch (e) {
+            console.error("Failed to fetch Slack channels:", e);
+            set({ slackChannels: [] });
+        }
+    },
+
     fetchGithubStatus: async (userId: string) => {
         try {
             const { data } = await supabase
@@ -240,7 +272,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             })
         });
 
-        // If the backend returns our 403 ORG_ACCESS_REQUIRED error, we MUST throw it!
         if (!res.ok) {
             const errorData = await res.json().catch(() => ({}));
             throw new Error(errorData.detail || "Failed to setup webhook");
@@ -413,6 +444,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         } catch { /* ignore */ }
     },
 
+    disconnectSlack: async (userId: string) => {
+        try {
+            await fetch(`${API_BASE}/api/slack/disconnect/${userId}`, { method: 'DELETE' });
+            set({ slackConnected: false });
+        } catch { /* ignore */ }
+    },
+
     updateJiraMapping: async (projectId: string, jiraKey: string) => {
         const { data: { session } } = await supabase.auth.getSession();
         try {
@@ -465,6 +503,31 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             console.error("Failed to update Notion mapping", e);
         }
     },
+
+    updateSlackMapping: async (projectId: string, slackChannelId: string) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        try {
+            const res = await fetch(`${API_BASE}/api/projects/${projectId}/slack-mapping`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token}`
+                },
+                body: JSON.stringify({ slack_channel_id: slackChannelId }),
+            });
+            if (res.ok) {
+                const current = get();
+                const updated = current.project?.id === projectId ? { ...current.project, slack_channel_id: slackChannelId } : current.project;
+                set((s) => ({
+                    project: updated,
+                    projects: s.projects.map(p => p.id === projectId ? { ...p, slack_channel_id: slackChannelId } : p)
+                }));
+            }
+        } catch (e) {
+            console.error("Failed to update Slack mapping", e);
+        }
+    },
+
     syncProject: async (projectId: string) => {
         const { projects, startIngestion } = get();
         const currentProject = projects.find(p => p.id === projectId);

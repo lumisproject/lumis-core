@@ -248,13 +248,14 @@ Symbol Mappings:
                 "2. The provided code/file content may be irrelevant to the original question or may contain noise. In this case, do not rely on the provided fragment.\n"
                 "3. Provide clear, accurate, and concise answers.\n"
                 "4. Reference specific code snippets when relevant.\n"
-                "5. Include file paths and corresponding code snippets when discussing specific code.\n"
-                "6. If the provided context doesn't contain enough information, say so.\n"
-                "7. Use code examples to illustrate your explanations.\n"
-                "8. Be technical but accessible.\n"
-                "9. If asked to find something, list all relevant locations.\n"
-                "10. When comparing code from different files, clearly distinguish between them.\n"
-                "11. **IMPORTANT: Always respond in the same language as the user's question.**"
+                "5. If asked for a repository overview and no code snippets are provided, confidently infer the architecture and purpose purely from the REPOSITORY STRUCTURE.\n"
+                "6. Include file paths and corresponding code snippets when discussing specific code.\n"
+                "7. If the provided context doesn't contain enough information, say so.\n"
+                "8. Use code examples to illustrate your explanations.\n"
+                "9. Be technical but accessible.\n"
+                "10. If asked to find something, list all relevant locations.\n"
+                "11. When comparing code from different files, clearly distinguish between them.\n"
+                "12. **IMPORTANT: Always respond in the same language as the user's question.**"
             )
 
             if self.enable_multi_turn and history:

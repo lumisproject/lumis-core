@@ -14,10 +14,10 @@ class Config:
 
     # Default LLM settings
     DEFAULT_LLM_PROVIDER = os.getenv("DEFAULT_LLM_PROVIDER", "openrouter")
-    DEFAULT_LLM_MODEL = os.getenv("MODEL", "stepfun/step-3.5-flash:free")
+    DEFAULT_LLM_MODEL = os.getenv("MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
     DEFAULT_LLM_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
     
-    DEFAULT_CHAT_MODEL = os.getenv("DEFAULT_CHAT_MODEL", "stepfun/step-3.5-flash:free")
+    DEFAULT_CHAT_MODEL = os.getenv("DEFAULT_CHAT_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
     DEFAULT_RISK_MODEL = os.getenv("DEFAULT_RISK_MODEL", "openai/gpt-oss-120b")
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
     GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
@@ -64,3 +64,9 @@ class Config:
     # Gmail settings (Your teammate's new additions)
     GMAIL_USER = os.getenv("GMAIL_USER")
     GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
+
+    # Slack settings
+    SLACK_CLIENT_ID = os.getenv("SLACK_CLIENT_ID")
+    SLACK_CLIENT_SECRET = os.getenv("SLACK_CLIENT_SECRET")
+    SLACK_REDIRECT_URI = os.getenv("SLACK_REDIRECT_URI", BACKEND_URL+"/auth/slack/callback")
+    SLACK_REDIRECT = os.getenv("SLACK_REDIRECT", FRONTEND_URL+"/app/settings")

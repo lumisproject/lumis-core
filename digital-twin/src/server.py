@@ -23,6 +23,7 @@ from src.billing_middleware import verify_chat_limit, get_user_tier_and_usage
 from src.email_intake import email_intake_router
 from src.inbox_listener import start_inbox_listener
 from src.cache import get_cached_json, set_cached_json, invalidate_cache
+from src.slack_auth import slack_auth_router
 
 # --- CONFIGURATION ---
 logging.basicConfig(level=logging.INFO)
@@ -69,6 +70,7 @@ app.include_router(notion_auth_router)
 app.include_router(github_auth_router)
 app.include_router(stripe_router)
 app.include_router(email_intake_router)
+app.include_router(slack_auth_router)
 
 @app.get("/api/billing/usage")
 async def get_billing_usage(tier_data: dict = Depends(get_user_tier_and_usage)):
@@ -1338,6 +1340,124 @@ async def check_db_empty(project_id: str):
 async def health_check():
     return {"status": "ok", "service": "Lumis Project Stateless"}
 
+# --- SLACK CHATBOT INTEGRATION ---
+
+async def process_slack_mention(channel_id: str, thread_ts: str, query: str):
+    """Runs the Lumis AI Agent in the background and replies to Slack."""
+    from src.db_client import supabase, get_global_user_config
+    from src.agent import LumisAgent
+    from src.slack_client import send_slack_thread_reply
+    import json
+
+    try:
+        # 1. Find which project is mapped to this Slack channel
+        res = supabase.table("projects").select("id, user_id").eq("slack_channel_id", channel_id).limit(1).execute()
+        if not res.data:
+            return # Channel not mapped to any project
+
+        project_id = res.data[0]["id"]
+        user_id = res.data[0]["user_id"]
+
+        # 2. Get the Slack token to reply
+        token_res = supabase.table("slack_tokens").select("access_token").eq("user_id", user_id).limit(1).execute()
+        if not token_res.data:
+            return
+        token = token_res.data[0]["access_token"]
+
+        # 3. Acknowledge receipt instantly in the thread
+        send_slack_thread_reply(channel_id, thread_ts, "🧠 _Synthesizing codebase to answer your question..._", token)
+
+        # 4. Setup Config and Agent
+        user_config = get_global_user_config(user_id)
+        user_config["user_id"] = user_id
+        user_config["mode"] = "single-turn"
+        agent = LumisAgent(project_id=project_id, user_config=user_config)
+
+        # 5. Generate Answer (Consume the stream)
+        final_answer = ""
+        async for chunk in agent.ask_stream(query):
+            try:
+                data = json.loads(chunk)
+                # CHANGE "message" TO "answer_chunk" HERE:
+                if data.get("type") == "answer_chunk":
+                    final_answer += data.get("content", "")
+            except:
+                pass
+
+        if not final_answer:
+            final_answer = "Sorry, I couldn't generate an answer from the codebase."
+
+        # 6. Send final answer back to the Slack thread
+        send_slack_thread_reply(channel_id, thread_ts, final_answer, token)
+
+    except Exception as e:
+        logger.error(f"Slack Mention Error: {e}")
+        try:
+            send_slack_thread_reply(channel_id, thread_ts, f"❌ Error analyzing codebase: {str(e)}", token)
+        except:
+            pass
+
+@app.post("/api/slack/events")
+async def slack_events(request: Request, background_tasks: BackgroundTasks):
+    """Receives events from Slack (like @Lumis mentions)."""
+    import re
+    payload = await request.json()
+
+    # 1. URL Verification (Required by Slack during setup)
+    if payload.get("type") == "url_verification":
+        return {"challenge": payload.get("challenge")}
+
+    # 2. Handle App Mentions
+    if payload.get("type") == "event_callback":
+        event = payload.get("event", {})
+        
+        # Only listen to mentions, and ignore the bot's own messages
+        if event.get("type") == "app_mention" and not event.get("bot_id"):
+            channel_id = event.get("channel")
+            text = event.get("text")
+            ts = event.get("ts") # Timestamp (used to reply in thread)
+
+            # Strip the "@Lumis" mention tag from the query
+            query = re.sub(r'<@U[A-Z0-9]+>', '', text).strip()
+
+            # Pass the heavy AI lifting to a background task so Slack gets a 200 OK instantly
+            background_tasks.add_task(process_slack_mention, channel_id, ts, query)
+
+    return {"status": "ok"}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host='0.0.0.0', port=5000)
+
+@app.get("/api/slack/channels/{user_id}")
+async def get_user_slack_channels(user_id: str):
+    from src.slack_auth import get_valid_slack_token
+    import requests
+    token = get_valid_slack_token(user_id)
+    if not token:
+        raise HTTPException(status_code=401, detail="Slack not connected")
+    
+    # Fetch public and private channels the bot has been invited to
+    res = requests.get("https://slack.com/api/conversations.list", headers={
+        "Authorization": f"Bearer {token}"
+    }, params={"types": "public_channel,private_channel", "exclude_archived": "true", "limit": 100})
+    
+    data = res.json()
+    if not data.get("ok"):
+        return []
+        
+    channels = data.get("channels", [])
+    return [{"id": c["id"], "name": f"#{c['name']}"} for c in channels]
+
+@app.post("/api/projects/{project_id}/slack-mapping")
+async def update_slack_mapping(project_id: str, payload: dict, current_user = Depends(get_current_user)):
+    slack_channel = payload.get("slack_channel_id")
+    if not slack_channel or slack_channel == "none":
+        slack_channel = None
+        
+    res = supabase.table("projects").select("user_id").eq("id", project_id).limit(1).execute()
+    if not res.data or str(res.data[0]["user_id"]) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Forbidden")
+        
+    supabase.table("projects").update({"slack_channel_id": slack_channel}).eq("id", project_id).execute()
+    return {"status": "success", "slack_channel_id": slack_channel}
