@@ -325,7 +325,6 @@ async def ingest_repo(repo_url, project_id, progress_callback=None, user_config=
             supabase.table("graph_edges").delete().eq("project_id", project_id).in_("source_unit_name", orphans).execute()
             supabase.table("memory_units").delete().eq("project_id", project_id).in_("unit_name", orphans).execute()
 
-<<<<<<< HEAD:digital-twin/src/ingestor.py
         # --- NEW: CALCULATE RISKS & SEND SLACK ALERT ---
         if progress_callback: progress_callback("ANALYZING", "Running AI Risk Engine...")
         try:
@@ -339,8 +338,6 @@ async def ingest_repo(repo_url, project_id, progress_callback=None, user_config=
             logger.error(f"Risk Engine or Slack Alert failed: {risk_err}")
 
         # Finish
-=======
->>>>>>> 4b99f52b650edef009fbac861228750a5deef1c5:backend/src/ingestor.py
         if progress_callback: progress_callback("DONE", "Fast Sync Complete. Ready for Analysis.")
         
     except Exception as e:

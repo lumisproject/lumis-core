@@ -21,12 +21,9 @@ import {
     Network,
     Link2,
     Mail,
-<<<<<<< HEAD
-    Slack
-=======
+    Slack,
     LifeBuoy,
     Bug
->>>>>>> 4b99f52b650edef009fbac861228750a5deef1c5
 } from 'lucide-react';
 import { useSettingsStore } from '@/stores/useSettingsStore';
 import { useUserStore } from '@/stores/useUserStore';

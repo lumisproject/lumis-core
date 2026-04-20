@@ -1,0 +1,43 @@
+# -- LLM configurations --
+OPENROUTER_API_KEY=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
+GROQ_API_KEY=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
+DEFAULT_CHAT_MODEL=nvidia/nemotron-3-super-120b-a12b:free
+DEFAULT_RISK_MODEL=openai/gpt-oss-120b
+
+# -- DB configurations --
+SUPABASE_URL=https://jpnmvszvkpfavzlzoxop.supabase.co
+SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impwbm12c3p2a3BmYXZ6bHpveG9wIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NDkwNCwiZXhwIjoyMDg2NzcwOTA0fQ.8szceqtJABgpigaz0FJ7Gwnwjamk-fMGf5UifJXfvBU
+
+# -- Jira ecosystem --
+JIRA_CLIENT_ID=qufT698k96rWgwyQDGJ8Hr4mhpJtmMTk
+JIRA_CLIENT_SECRET=ATOAILwEiAZ2CPr3JpgGmqDPrJtUOZM6RkngMbEfU-WnDT3rQOcU4g1kNlYjLRD1oKIQ22DA6ABF
+JIRA_REDIRECT_URI=http://localhost:8080/auth/jira/callback
+JIRA_REDIRECT=http://localhost:8080/app/settings
+
+# -- Notion ecosystem --
+NOTION_INTEGRATION=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
+NOTION_CLIENT_ID=your_client_id_here
+NOTION_CLIENT_SECRET=your_client_secret_here
+NOTION_REDIRECT_URI=http://localhost:8080/auth/notion/callback
+
+# -- Github token --
+GITHUB_TOKEN=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
+GITHUB_CLIENT_ID=Ov23limKRldRHzKDb2Xc
+GITHUB_CLIENT_SECRET=66fce21010540a8eaf33aeffedd72584840af46e
+
+# -- Fernet key --
+FERNET_SECRET_KEY=ra3TtekTWuWwndeL9wLUUy81WCy7_W3drbTrLW7Veuw=
+
+# -- Stripe --
+STRIPE_SECRET_KEY=sk_test_51TAAROHBW6CmGvUgzpFwKqXeBzjuskMMxBMTsUxXv3mdQYn2hUUlCz1Q5B1X08wjYphZu6jAyMt9stRs1GMtUeGu00zyuLJ8ex
+STRIPE_WEBHOOK_SECRET=whsec_c703948429d4f9c0ea5a6f92ed7efa2d17c2efe18006919cdd81c1e61416fe51
+
+# -- Frontend URL --
+FRONTEND_URL=http://localhost:8080
+
+# -- Redis settings --
+REDIS_URL=redis://localhost:6379/0
+
+# -- Support Email --
+GMAIL_USER=lumisproject2026@gmail.com
+GMAIL_APP_PASSWORD=fdvolecxjbqeieex

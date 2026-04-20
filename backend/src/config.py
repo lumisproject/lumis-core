@@ -64,12 +64,9 @@ class Config:
     # Gmail settings (Your teammate's new additions)
     GMAIL_USER = os.getenv("GMAIL_USER")
     GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
-<<<<<<< HEAD:digital-twin/src/config.py
 
     # Slack settings
     SLACK_CLIENT_ID = os.getenv("SLACK_CLIENT_ID")
     SLACK_CLIENT_SECRET = os.getenv("SLACK_CLIENT_SECRET")
     SLACK_REDIRECT_URI = os.getenv("SLACK_REDIRECT_URI", BACKEND_URL+"/auth/slack/callback")
     SLACK_REDIRECT = os.getenv("SLACK_REDIRECT", FRONTEND_URL+"/app/settings")
-=======
->>>>>>> 4b99f52b650edef009fbac861228750a5deef1c5:backend/src/config.py

@@ -1334,7 +1334,6 @@ async def check_db_empty(project_id: str):
 async def health_check():
     return {"status": "ok", "service": "Lumis Project Stateless"}
 
-<<<<<<< HEAD:digital-twin/src/server.py
 # --- SLACK CHATBOT INTEGRATION ---
 
 async def process_slack_mention(channel_id: str, thread_ts: str, query: str):
@@ -1420,7 +1419,6 @@ async def slack_events(request: Request, background_tasks: BackgroundTasks):
 
     return {"status": "ok"}
 
-=======
 def new_email_template(subject: str, description: str, screenshots: list) -> str:
     screenshot_html = ""
     for url in screenshots:
@@ -1468,7 +1466,6 @@ async def create_support_ticket(
 
     return {"status": "success", "message": "Ticket received. We're on it!"}
     
->>>>>>> 4b99f52b650edef009fbac861228750a5deef1c5:backend/src/server.py
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host='0.0.0.0', port=5000)

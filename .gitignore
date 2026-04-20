@@ -5,3 +5,4 @@ backend/src/tempCodeRunnerFile.py
 .claude/*
 CLAUDE.md
 *.env
+digital-twin/src/__pycache__/
