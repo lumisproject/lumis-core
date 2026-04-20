@@ -84,13 +84,15 @@ class GraphRetriever:
         if "/" in user_query or "." in user_query: return user_query
 
         system_prompt = (
-            "You are a query optimizer for a semantic code search engine.\n"
-            "Your goal is to convert the user's high-level question into a keyword-rich search query.\n"
-            "Include synonyms, technical terms, and library names likely to be used in the code.\n"
-            "Keep it concise. Output ONLY the augmented query string."
+            "You are a search query optimizer for a semantic code vector database.\n"
+            "Your goal is to expand the user's high-level question into a keyword-dense search string containing synonyms, technical terms, and potential library names.\n\n"
+            "RESPONSE RULES:\n"
+            "1. RAW TERMS ONLY: Output absolutely nothing except the raw augmented query terms.\n"
+            "2. NO PREFIXES: Do not include quotes, labels (like 'Keywords:'), or conversational filler.\n"
+            "3. MAXIMUM LENGTH: Keep the output under 15 words to maintain vector similarity focus."
         )
         
-        user_prompt = f"User Question: {user_query}\n\nAugmented Search Query:"
+        user_prompt = f"User Question: {user_query}\n\nOptimized Search String:"
         
         suggestion = get_llm_completion(system_prompt, user_prompt, user_config=user_config)
         return suggestion.strip() if suggestion else user_query

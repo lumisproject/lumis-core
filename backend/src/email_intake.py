@@ -48,6 +48,7 @@ class TicketSynthesis(BaseModel):
     title: str
     description: str
     summary: str
+    is_actionable: bool = True
 
 
 _JSON_OBJ_RE = re.compile(r"\{[\s\S]*\}")
@@ -101,11 +102,18 @@ def _fallback_synthesis(email_body: str, subject: Optional[str]) -> TicketSynthe
 
 def synthesize_email_to_ticket(email_body: str, subject: Optional[str] = None, user_config: Optional[dict] = None) -> TicketSynthesis:
     system_prompt = (
-        "You are an expert software delivery analyst. Your goal is to transform client emails into high-fidelity engineering tickets. "
-        "Remove all conversational fluff while preserving all technical intent, requirements, and acceptance criteria.\n\n"
-        "CRITICAL RULE: You must base your output STRICTLY on the contents of the provided email. "
-        "DO NOT invent, assume, infer, or add any features, requirements, edge cases, or timelines that are not explicitly stated by the client. "
-        "Return ONLY valid JSON with these keys: title, description, summary."
+        "You are an expert software delivery analyst. Your goal is to transform client emails into high-fidelity engineering tickets.\n\n"
+        "CRITICAL RULES:\n"
+        "1. ACTIONABILITY CHECK: First, determine if the email actually requests a change, feature, bug fix, or technical investigation. "
+        "If it is just conversational fluff, a meeting invite, or a generic 'thank you', you MUST set 'is_actionable' to false.\n"
+        "2. NO FABRICATION: If actionable, base your output STRICTLY on the email contents. Do not invent features or deadlines.\n"
+        "3. OUTPUT FORMAT: You must return ONLY valid JSON matching this schema:\n"
+        "{\n"
+        '  "is_actionable": true | false,\n'
+        '  "title": "Clear ticket title (if actionable, else empty)",\n'
+        '  "description": "Detailed technical description removing fluff (if actionable, else empty)",\n'
+        '  "summary": "Brief 1-sentence summary of the request (if actionable, else empty)"\n'
+        "}"
     )
 
     subject_line = (subject or "").strip()
@@ -122,10 +130,15 @@ def synthesize_email_to_ticket(email_body: str, subject: Optional[str] = None, u
             continue
 
         try:
+            is_actionable = obj.get("is_actionable", True)
+            if not is_actionable:
+                return TicketSynthesis(title="", description="", summary="", is_actionable=False)
+
             syn = TicketSynthesis(
                 title=str(obj.get("title", "")).strip(),
                 description=str(obj.get("description", "")).strip(),
                 summary=str(obj.get("summary", "")).strip(),
+                is_actionable=True
             )
             if syn.title and syn.description and syn.summary:
                 return syn
@@ -227,6 +240,9 @@ async def intake_email_to_draft(project_id: str, payload: RawEmailPayload):
         subject=payload.subject,
         user_config=user_config,
     )
+    
+    if not synthesis.is_actionable:
+        raise HTTPException(status_code=400, detail="Email skipped: Contains no actionable technical requests.")
 
     received_at = payload.received_at or _utcnow()
 

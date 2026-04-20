@@ -185,11 +185,10 @@ def update_progress(project_id, task, message):
 
 @app.post("/api/webhook/{user_id}/{project_id}")
 @limiter.limit("10/minute")
-async def github_webhook(user_id: str, project_id: str, request: Request, background_tasks: BackgroundTasks):
-    from src.worker import run_ingestion_pipeline_task
-    from src.tasks_checking import check_taskes
+async def github_webhook(user_id: str, project_id: str, request: Request):
+    from src.worker import run_ingestion_pipeline_task, sync_jira_tasks_task
     from src.db_client import get_global_user_config
-    from src.agent import LumisAgent
+    from src.github_auth import get_valid_github_token
     import hmac
     import hashlib
     import json
@@ -249,8 +248,12 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
         global_config = get_global_user_config(user_id)
         global_config["user_id"] = user_id
         
+        github_token = get_valid_github_token(user_id)
+        if not github_token and getattr(Config, 'GITHUB_TOKEN', None):
+            github_token = Config.GITHUB_TOKEN
+        global_config["github_token"] = github_token
+        
         jira_proj = proj_data.get("jira_project_id")
-        notion_proj = proj_data.get("notion_project_id")
 
         new_sha = payload.get("after")
         repo_url = payload.get("repository", {}).get("clone_url")
@@ -284,18 +287,15 @@ async def github_webhook(user_id: str, project_id: str, request: Request, backgr
                 "message": c.get("message", "")
             })
 
-        agent = LumisAgent(project_id=project_id, max_steps=5, user_config=global_config, mode="single-turn")
-
-        check_taskes(
-            user_id=user_id,
-            project_id=project_id,
-            commits=normalized_commits,
-            repo_name=repo_name,
-            background_tasks=background_tasks,
-            jira_project_id=jira_proj,
-            notion_project_id=notion_proj,
-            agent=agent
-        )
+        if jira_proj:
+            sync_jira_tasks_task.delay(
+                user_id=user_id,
+                project_id=project_id,
+                commits=normalized_commits,
+                repo_name=repo_name,
+                jira_project_id=jira_proj,
+                user_config=global_config
+            )
         
         return {"status": "sync_queued", "commit": new_sha}
 
@@ -367,11 +367,10 @@ async def chat_endpoint(req: ChatRequest, request: Request, tier_data: dict = De
     
 @app.post("/api/ingest")
 @limiter.limit("3/minute")
-async def start_ingest(req: IngestRequest, request: Request, background_tasks: BackgroundTasks, tier_data: dict = Depends(get_user_tier_and_usage)):
-    from src.worker import run_ingestion_pipeline_task
-    from src.tasks_checking import check_taskes
+async def start_ingest(req: IngestRequest, request: Request, tier_data: dict = Depends(get_user_tier_and_usage)):
+    from src.worker import run_ingestion_pipeline_task, sync_jira_tasks_task
     from src.db_client import get_global_user_config
-    from src.agent import LumisAgent
+    from src.github_auth import get_valid_github_token
     import json
 
     storage_limit_gb = tier_data["limits"]["storage_gb"]
@@ -387,6 +386,7 @@ async def start_ingest(req: IngestRequest, request: Request, background_tasks: B
             )
     except Exception as e:
         logger.error(f"Failed to check storage limit: {e}")
+        
     try:
         if str(req.user_id) != str(tier_data["user_id"]):
             raise HTTPException(status_code=403, detail="Forbidden: User ID mismatch")
@@ -411,20 +411,6 @@ async def start_ingest(req: IngestRequest, request: Request, background_tasks: B
                     detail=f"Project limit of {limit} reached. Please upgrade your plan."
                 )
 
-        storage_limit = tier_data["limits"]["storage_gb"]
-        if storage_limit is not None and storage_limit != float('inf'):
-            try:
-                storage_res = supabase.rpc("get_user_storage_bytes", {"target_user_id": str(req.user_id)}).execute()
-                total_bytes = storage_res.data if storage_res.data else 0
-                used_gb = total_bytes / (1024 * 1024 * 1024)
-                if used_gb >= storage_limit:
-                    raise HTTPException(
-                        status_code=403, 
-                        detail=f"Storage limit of {storage_limit} GB reached. Please upgrade or delete a project."
-                    )
-            except Exception as e:
-                logger.error(f"Failed to check storage limit: {e}")
-
         logger.info(f"✨ Queuing ingestion for {req.repo_url}")
 
         global_config = get_global_user_config(req.user_id)
@@ -448,17 +434,19 @@ async def start_ingest(req: IngestRequest, request: Request, background_tasks: B
             global_config["use_default"] = True
 
         global_config["user_id"] = req.user_id
+
+        github_token = get_valid_github_token(req.user_id)
+        if not github_token and getattr(Config, 'GITHUB_TOKEN', None):
+            github_token = Config.GITHUB_TOKEN
+        global_config["github_token"] = github_token
         
         repo_name = get_repo_name_from_url(req.repo_url)
-        
-        # ASYNC AWAIT ADDED HERE
         all_commits = await fetch_commits(repo_name, req.user_id)
 
         if is_existing_project:
             project_data = existing.data[0]
             project_id = project_data.get('id')
             jira_proj = project_data.get('jira_project_id')
-            notion_proj = project_data.get('notion_project_id')
             last_commit = project_data.get('last_commit')
             
             commits = []
@@ -488,23 +476,20 @@ async def start_ingest(req: IngestRequest, request: Request, background_tasks: B
                  
             project_id = res.data[0]['id']
             jira_proj = None
-            notion_proj = None
 
         redis_client.setex(f"sync_state:{project_id}", 86400, json.dumps({"status": "starting", "logs": ["Request received..."], "step": "Init"}))
 
         run_ingestion_pipeline_task.delay(req.repo_url, project_id, global_config)
 
-        agent = LumisAgent(project_id=project_id, max_steps=5, user_config=global_config)
-        check_taskes(
-            user_id=req.user_id,
-            project_id=project_id,
-            commits=commits,
-            repo_name=repo_name,
-            background_tasks=background_tasks,
-            jira_project_id=jira_proj,
-            notion_project_id=notion_proj,
-            agent=agent
-        )
+        if jira_proj:
+            sync_jira_tasks_task.delay(
+                user_id=req.user_id,
+                project_id=project_id,
+                commits=commits,
+                repo_name=repo_name,
+                jira_project_id=jira_proj,
+                user_config=global_config
+            )
 
         return {"project_id": project_id, "status": "started"}
     except HTTPException:
@@ -512,8 +497,6 @@ async def start_ingest(req: IngestRequest, request: Request, background_tasks: B
     except Exception as e:
         logger.error(f"Ingest start failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
 
 @app.get("/api/ingest/status/{project_id}")
 async def get_ingest_status(project_id: str):
@@ -558,7 +541,7 @@ async def stream_ingest_status(project_id: str, request: Request):
                     if parsed.get("status") in ["ready", "error"]:
                         break
                         
-                # Sleep briefly to yield the event loop (keeps FastAPI lightning fast)
+                # Sleep briefly to yield the event loop
                 await asyncio.sleep(0.5)
         finally:
             pubsub.unsubscribe(f"sync_stream:{project_id}")
@@ -1366,10 +1349,9 @@ def new_email_template(subject: str, description: str, screenshots: list) -> str
 async def create_support_ticket(
     request: Request, 
     payload: dict, 
-    background_tasks: BackgroundTasks,
     current_user = Depends(get_current_user)
 ):
-    from src.mailer import send_smtp_notification
+    from src.worker import send_email_notification_task
     
     subject = payload.get("subject")
     description = payload.get("description")
@@ -1387,10 +1369,10 @@ async def create_support_ticket(
         logger.error(f"Database error: {e}")
         raise HTTPException(status_code=500, detail="Could not save ticket")
 
-    # 2. Schedule the email in the background
+    # Generate the HTML and pass to Celery
     html_body = new_email_template(subject, description, screenshots)
-    background_tasks.add_task(
-        send_smtp_notification, 
+    
+    send_email_notification_task.delay(
         f"🚨 New Bug Report: {subject}", 
         html_body
     )

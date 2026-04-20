@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 from src.services import embed_model, generate_footprint
 from src.db_client import supabase, save_memory_units, save_edges, get_unit_footprint
 from src.parser import AdvancedCodeParser
-from src.risk_engine import calculate_predictive_risks
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("LumisAPI")
@@ -45,22 +44,34 @@ def get_file_blame_metadata(repo_path, file_path, repo_obj):
 async def ingest_repo(repo_url, project_id, progress_callback=None, user_config=None):
     repo_path = os.path.abspath(f"./temp_repos/{project_id}")
     repo = None
+    
+    # Extract token from config
+    github_token = (user_config or {}).get("github_token")
+    
+    # Generate Authenticated URL for private repos
+    auth_url = repo_url
+    if github_token and "github.com" in repo_url and repo_url.startswith("https://"):
+        # Format: https://x-access-token:TOKEN@github.com/owner/repo.git
+        auth_url = repo_url.replace("https://github.com", f"https://x-access-token:{github_token}@github.com")
+
     try:
-        if progress_callback: progress_callback("CLONING", f"Cloning {repo_url}...")
+        if progress_callback: progress_callback("CLONING", f"Cloning repository...")
         
         if os.path.exists(repo_path):
             try:
                 repo = git.Repo(repo_path)
+                # Update remote URL in case token changed or was added
+                if github_token:
+                    repo.git.remote('set-url', 'origin', auth_url)
                 repo.remotes.origin.pull()
             except (InvalidGitRepositoryError, Exception):
-                # Corrupted folder left behind. Close lock, wipe it cleanly, and clone fresh.
                 if repo:
                     repo.close()
                 shutil.rmtree(repo_path, onerror=remove_readonly)
-                repo = git.Repo.clone_from(repo_url, repo_path)
+                repo = git.Repo.clone_from(auth_url, repo_path)
         else:
             os.makedirs(os.path.dirname(repo_path), exist_ok=True)
-            repo = git.Repo.clone_from(repo_url, repo_path)
+            repo = git.Repo.clone_from(auth_url, repo_path)
 
         latest_sha = repo.head.object.hexsha
         supabase.table("projects").update({"last_commit": latest_sha}).eq("id", project_id).execute()
@@ -125,7 +136,7 @@ async def ingest_repo(repo_url, project_id, progress_callback=None, user_config=
                     if block.imports: 
                         for i in block.imports:
                             # 1. Add edge for the module itself ONLY if it exists
-                            if i.module: # <--- ADD THIS CHECK
+                            if i.module: 
                                 edges_to_insert.append({
                                     "project_id": project_id, 
                                     "source_unit_name": clean_id, 
@@ -144,6 +155,55 @@ async def ingest_repo(repo_url, project_id, progress_callback=None, user_config=
                                     
                     if block.bases: 
                         edges_to_insert.extend([{"project_id": project_id, "source_unit_name": clean_id, "target_unit_name": b, "edge_type": "inherits"} for b in block.bases])
+
+        # PHASE 1.5: AUTO-GENERATE REPOSITORY OVERVIEW
+        if progress_callback: progress_callback("SYNTHESIS", "Analyzing repository structure to generate overview...")
+        try:
+            file_paths = []
+            manifest_contents = []
+            has_readme = False
+            
+            for b in blocks_to_embed:
+                file_paths.append(b["file_path"])
+                fname = b["name"].lower()
+                if fname == "readme.md":
+                    has_readme = True
+                if fname in ['package.json', 'pyproject.toml', 'requirements.txt', 'cargo.toml', 'go.mod', 'docker-compose.yml']:
+                    manifest_contents.append(f"--- {b['name']} ---\n{b['content'][:2000]}") # Cap length to protect token limits
+                    
+            if not has_readme:
+                from src.services import get_llm_completion
+                
+                # Truncate tree to avoid blowing up context window
+                tree_str = "\n".join(list(set(file_paths))[:300])
+                manifests_str = "\n".join(manifest_contents)
+                
+                sys_prompt = (
+                    "You are an elite Software Architect. The user has ingested a codebase that lacks a README file. "
+                    "Analyze the provided directory structure and manifest files (dependencies, configs). "
+                    "Write a highly technical, concise 2-paragraph overview explaining what this repository is, its primary purpose, and its tech stack. "
+                    "Respond ONLY with the technical overview. No greetings or filler."
+                )
+                usr_prompt = f"DIRECTORY STRUCTURE:\n{tree_str}\n\nMANIFESTS:\n{manifests_str}"
+                
+                overview_text = get_llm_completion(sys_prompt, usr_prompt, user_config=user_config)
+                
+                if overview_text and len(overview_text) > 20:
+                    overview_id = f"auto_generated::root::project_overview.md"
+                    blocks_to_embed.append({
+                        "identifier": overview_id,
+                        "type": "module",
+                        "file_path": "Project_Overview.md",
+                        "content": f"# Auto-Generated Project Overview\n\n{overview_text}",
+                        "name": "Project_Overview.md",
+                        "footprint": generate_footprint(overview_text),
+                        "last_mod": datetime.now(timezone.utc).isoformat(),
+                        "author": "Lumis AI"
+                    })
+                    current_scan_identifiers.append(overview_id)
+                    logger.info("Successfully generated and injected Auto-Overview.")
+        except Exception as e:
+            logger.warning(f"Failed to generate auto-overview: {e}")
 
         # PHASE 2: TEMPORAL GRAPH (GIT HISTORY)
         if progress_callback: progress_callback("HISTORY", "Ingesting Git History and Mapping Commits...")
@@ -242,7 +302,6 @@ async def ingest_repo(repo_url, project_id, progress_callback=None, user_config=
                     "author_email": b["author"]
                 })
 
-
         # --- NETWORK EXECUTION ---
         if progress_callback: progress_callback("DATABASE", "Bulk inserting vectors to Supabase...")
         
@@ -253,7 +312,6 @@ async def ingest_repo(repo_url, project_id, progress_callback=None, user_config=
             
         for i in range(0, len(edges_to_insert), batch_size):
             save_edges(project_id, edges_to_insert[i:i + batch_size])
-
 
         # 4. CLEANUP ORPHANS
         if progress_callback: progress_callback("CLEANUP", "Removing deleted files...")
@@ -267,11 +325,9 @@ async def ingest_repo(repo_url, project_id, progress_callback=None, user_config=
             supabase.table("graph_edges").delete().eq("project_id", project_id).in_("source_unit_name", orphans).execute()
             supabase.table("memory_units").delete().eq("project_id", project_id).in_("unit_name", orphans).execute()
 
-
         if progress_callback: progress_callback("DONE", "Fast Sync Complete. Ready for Analysis.")
         
     except Exception as e:
-        # --- FIX: Log properly and re-raise so Celery marks task as FAILED! ---
         logger.error(f"CRITICAL ERROR IN INGESTION: {e}", exc_info=True)
         if progress_callback: progress_callback("Error", str(e))
         raise e

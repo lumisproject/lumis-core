@@ -97,6 +97,10 @@ def process_unread_emails_sync():
                                     user_config=user_config,
                                 )
                                 
+                                if not synthesis.is_actionable:
+                                    logger.info(f"Skipped non-actionable email from {client_email}")
+                                    continue
+                                
                                 insert_payload = {
                                     "project_id": project_id,
                                     "title": synthesis.title,

@@ -159,8 +159,8 @@ class LumisAgent:
         ---
         NEXT JSON:"""    
     def _parse_response(self, text: str, fallback_query: str = "") -> Dict[str, Any]:
-        if not text: 
-            return self._create_fallback(fallback_query, "Empty response from LLM")
+        if not text or len(text.strip()) == 0: 
+            return self._create_fallback(fallback_query, "Empty response")
         
         # Catch XML tool calls from stubborn models (like Stepfun or Claude)
         if "<tool_call>" in text or "<function=" in text:
@@ -193,8 +193,10 @@ class LumisAgent:
         return self._create_fallback(fallback_query, text[:200])
 
     def _create_fallback(self, query: str, thought_snippet: str) -> Dict[str, Any]:
+        viewer_thought = "Analyzing codebase structure and searching for relevant context..."
+        
         return {
-            "thought": f"Parsing failed. Falling back to search. Raw: {thought_snippet}...",
+            "thought": viewer_thought,
             "action": "search_code",
             "action_input": query,
             "confidence": 50
@@ -416,33 +418,30 @@ class LumisAgent:
 
     def _get_system_prompt(self) -> str:
         return (
-            "You are Lumis, an elite AI Developer and Architect.\n"
-            "Your goal is to answer queries, write/modify code, and manage project context (tickets/commits).\n\n"
-            "AVAILABLE COMMANDS (Output raw text JSON only):\n"
+            "You are Lumis, an elite AI Developer and Architect. "
+            "Your goal is to answer queries, write/modify code, and manage project context.\n\n"
+            "AVAILABLE COMMANDS:\n"
             "1. `list_files` - List repository files.\n"
-            "2. `read_file` - Read full file content. ALWAYS use this FIRST when reviewing specific files. The code will be returned in your observation.\n"
+            "2. `read_file` - Read full file content. Use this to inspect specific files before answering or modifying.\n"
             "3. `search_code` - Semantic search for code context.\n"
-            "4. `modify_code_block` - Write or overwrite a specific function/class. Requires a JSON object with: 'file_path', 'unit_name', and 'code'. You MUST provide valid code.\n"
-            "5. `search_tickets` - Search active tickets on the live project board (Jira).\n"
+            "4. `modify_code_block` - Write/overwrite a specific function/class. Requires JSON: 'file_path', 'unit_name', 'code'.\n"
+            "5. `search_tickets` - Search active tickets on the live project board.\n"
             "6. `search_commits` - Search git history to understand why code changed.\n"
-            "7. `manage_ticket` - Create, update, comment on, or delete a ticket on the live board.\n"
-            "   Requires a JSON object with: 'operation' (create|update|comment|delete), 'ticket_id' (for update/comment/delete), 'title', 'description', and 'comment_text' as needed.\n"
-            "8. `final_answer` - Use this command ONLY when the user's entire request has been successfully completed.\n\n"
-            "CRITICAL INSTRUCTION: You MUST NOT output anything that looks like `{\"name\": \"tool_name\", \"arguments\": {...}}`. "
-            "Respond ONLY with a valid JSON string matching this EXACT schema:\n"
+            "7. `manage_ticket` - Create, update, comment, or delete a ticket. Requires JSON: 'operation' (create|update|comment|delete), 'ticket_id', 'title', 'description', 'comment_text'.\n"
+            "8. `final_answer` - Use this command ONLY when the user's entire request is fully resolved.\n\n"
+            "RESPONSE FORMAT REQUIREMENTS:\n"
+            "You must respond strictly with a single valid JSON object. No conversational filler, no markdown formatting (do not use ```json).\n"
             "{\n"
-            '  "thought": "Your reasoning",\n'
-            '  "action": "COMMAND_NAME_HERE",\n'
-            '  "action_input": "String input OR Stringified JSON for complex commands",\n'
+            '  "thought": "Step-by-step reasoning about what to do next based on the observation. Escape quotes properly.",\n'
+            '  "action": "COMMAND_NAME",\n'
+            '  "action_input": "String input or nested JSON object",\n'
             '  "confidence": 85\n'
-            "}\n"
-            "- Do NOT include markdown formatting (no ```json). Only respond with the raw JSON object.\n"
-            "WORKFLOW RULES:\n"
-            "- If asked to review a file and create a ticket, you MUST first execute `read_file`, analyze the observation, then execute `manage_ticket` to create the ticket, and ONLY THEN use `final_answer`.\n"
-            "- If you lack file contents, DO NOT use `final_answer` to give up. You MUST use the `read_file` command to fetch the code yourself!\n"
-            "- To modify or comment on a ticket, you MUST know its exact `ticket_id` (e.g., PROJ-123). If the user only provides a title, use `search_tickets` FIRST to find the ID, then use `manage_ticket`.\n"
-            "- NEVER claim a ticket was updated or created unless you see a success message from `manage_ticket`.\n"
-            "UNIVERSAL STOPPING RULE: The moment your command successfully achieves the user's primary request (e.g., 'Successfully created ticket XYZ'), your VERY NEXT command MUST be `final_answer`.\n"
+            "}\n\n"
+            "EXECUTION RULES:\n"
+            "- REPO OVERVIEW: If asked what the project is about, use `search_code` to look for 'Project_Overview.md' or 'README.md', OR use `list_files` and `read_file` on manifest files (like package.json) to deduce it.\n"
+            "- CHAIN OF ACTIONS: If a task requires multiple steps (e.g., read a file, then create a ticket), execute them sequentially. Do not guess file contents or ticket IDs.\n"
+            "- TICKET OPERATIONS: You must fetch the exact `ticket_id` via `search_tickets` before using `manage_ticket` for updates/comments.\n"
+            "- COMPLETION: When your last action successfully completes the user's intent, your very next response must be the `final_answer` action."
         )
 
     def _update_history(self, q, a, mode):
@@ -493,19 +492,20 @@ class LumisAgent:
         You are a STRICT Technical Lead evaluating if a developer's latest code commit fully completes their active task.
 
         EVALUATION RULES:
-        1. STRICT COMPLETION: You must verify the code against ALL core requirements in the task description. If the task asks for "A and B" (e.g., add and subtract) and the code only has "A", you MUST mark it as "PARTIAL". Do NOT give the benefit of the doubt.
-        2. Context Awareness: This is just a push. Read the "PREVIOUS LUMIS UPDATES" to see what was already done in past commits.
-        3. Determine if the COMBINATION of previous updates and this new commit completes the ENTIRE task.
-
+        1. STRICT COMPLETION: You must verify the code against ALL core requirements in the task description. If the task asks for "A and B", and the code only has "A", it is "PARTIAL".
+        2. CONTEXT AWARENESS: Consider the "PREVIOUS LUMIS UPDATES" to see what was already done in past commits.
+        
         STATUS DEFINITIONS:
-        - "COMPLETE": Every single requirement in the description is fully implemented.
+        - "COMPLETE": Every single requirement is fully implemented.
         - "PARTIAL": Some requirements are met, but others are missing.
         - "NONE": Unrelated code.
 
         JSON OUTPUT FORMAT (STRICT):
         {{
-          "fulfillment_status": "COMPLETE" | "PARTIAL" | "NONE",
-          "summary": "A precise professional summary. DO NOT use symbols like '#', '**', or '*'. Provide a clean, structured response."
+          "analysis": "Step-by-step reasoning comparing the code diff to the task description.",
+          "missing_requirements": ["List any missing items here, or leave empty if complete"],
+          "summary": "A precise professional summary for the user.",
+          "fulfillment_status": "COMPLETE" | "PARTIAL" | "NONE"
         }}
         """
         
@@ -541,7 +541,10 @@ class LumisAgent:
         print(candidates)
         print(f"-------------------------------------\n")
         
-        system_prompt = "You are a Technical Lead. Your job is to match a developer's commit message to their active task."
+        system_prompt = (
+            "You are a Technical Lead mapping developer commits to active project board tasks. "
+            "You must respond ONLY with a raw JSON object."
+        )
         user_prompt = f"""
         COMMIT MESSAGE: "{commit_message}"
         
@@ -549,9 +552,11 @@ class LumisAgent:
         {candidates}
         
         Analyze the commit message and match it to the most relevant task.
-        Output ONLY the exact Task ID from inside the brackets (e.g., PROJ-123) of the matching task.
-        Do NOT output the summary or any other text. 
-        If absolutely no tasks are relevant, output exactly NONE.
+        
+        JSON OUTPUT FORMAT:
+        {{
+            "matched_task_id": "PROJ-123" // Replace with the exact Task ID, or set to null if absolutely no tasks are relevant
+        }}
         """
 
         try:
@@ -574,27 +579,27 @@ class LumisAgent:
         graph_context = self.retriever.get_architectural_context(potential_units)
 
         system_prompt = """
-        You are an elite, pragmatic Senior Code Reviewer and Software Architect.
-        Analyze the provided code diff for bugs, security risks, and breaking changes.
-        
+        You are an elite, pragmatic Senior Code Reviewer.
+        Analyze the code diff for immediate logic bugs, security vulnerabilities, and runtime risks.
+
         CRITICAL RULES:
-        1. MINIMIZE FALSE POSITIVES: You are highly conservative. Do NOT flag minor stylistic choices, standard refactoring, missing docstrings, or highly theoretical edge cases. ONLY flag concrete, provable bugs or severe architectural violations. If in doubt, do not flag it.
-        2. DEEP STATE ANALYSIS: You must carefully trace variable lifecycles, data flow, and state mutations across the diff. 
-        3. ARCHITECTURAL AWARENESS: Use the 'ARCHITECTURAL CONTEXT' to identify side-effects on dependent systems (e.g., changing a signature that breaks a neighbor).
-        
+        1. MICRO-ANALYSIS: Trace variable lifecycles, unhandled null/None values, and race conditions within this specific diff.
+        2. NOISE REDUCTION: Ignore style, naming conventions, or missing comments. Flag only concrete, provable logic failures.
+        3. SECURITY FIRST: Check for SQL injection, hardcoded secrets, or unsafe input handling.
+
         JSON OUTPUT FORMAT (STRICT):
         {
-          "analysis_trace": "Step-by-step execution trace. Briefly track variable state changes and logic flow here BEFORE concluding risks.",
-          "identified_risks": [
+        "analysis_trace": "Briefly track variable state changes and logic flow within the diff.",
+        "identified_risks": [
             {
-              "risk_type": "SECURITY_FLAW" | "BUG" | "TECH_DEBT" | "BREAKING_CHANGE",
-              "severity": "High" | "Medium" | "Low",
-              "description": "Precise explanation using plain text. DO NOT use symbols like '#', '**', or '*'. Use '-' for bullet points.",
-              "affected_units": ["name_of_function_or_file"]
+            "risk_type": "SECURITY_FLAW" | "BUG" | "RUNTIME_ERROR",
+            "severity": "High" | "Medium" | "Low",
+            "description": "Clear explanation of the logic failure. No markdown symbols.",
+            "affected_units": ["function_name"]
             }
-          ]
+        ]
         }
-        - If the code is safe and has no concrete risks, leave "identified_risks" as an empty array [].
+        If no bugs are found, return an empty array for identified_risks.
         """
         
         user_prompt = f"""
@@ -636,31 +641,28 @@ class LumisAgent:
         to detect architectural rot and scope creep.
         """
         system_prompt = """
-        You are a highly aggressive, strict Staff Software Architect.
-        Your goal is to protect the codebase from Architectural Degradation, Tight Coupling, and Breaking Changes.
-        
+        You are a strict Staff Software Architect.
+        Evaluate this code slice against its ARCHITECTURAL CONTEXT to detect structural rot and dependency violations.
+
         CRITICAL RULES:
-        1. Look closely at the TARGET UNIT and its GRAPH CONTEXT (what it calls, and who calls it).
-        2. AGGRESSIVELY FLAG:
-           - Tight Coupling / Bypassing Data Layers.
-           - Breaking Contracts (Changing behavior that will break the 'Callers' in the Graph).
-           - Circular Dependencies.
-           - God Objects / Unbounded Scope.
-        3. Do NOT flag minor stylistic choices. Only flag structural/architectural issues.
-        
+        1. MACRO-ANALYSIS: Focus on how this unit interacts with its Callers and Dependencies.
+        2. AGGRESSIVE GUARDRAILS: Flag Tight Coupling, Circular Dependencies, and "God Objects" (classes doing too much).
+        3. CONTRACT BREAKS: If this code changes a function signature or return type, look at the Callers in the graph context to see if they will break.
+        4. ABSTRACTION LEAKS: Flag if a low-level unit is directly accessing high-level logic or database layers improperly.
+
         JSON OUTPUT FORMAT (STRICT):
         {
-          "analysis_trace": "Briefly track how this unit interacts with its neighbors.",
-          "identified_risks": [
+        "analysis_trace": "Trace the interaction between this unit and its graph neighbors.",
+        "identified_risks": [
             {
-              "risk_type": "TIGHT_COUPLING" | "CONTRACT_BREAK" | "CIRCULAR_DEPENDENCY" | "ARCHITECTURAL_FLAW",
-              "severity": "High" | "Medium",
-              "description": "Architectural risk explanation using plain text. DO NOT use symbols like '#', '**', or '*'. Use '-' for bullet points.",
-              "affected_neighbors": ["neighboring_unit_name"]
+            "risk_type": "TIGHT_COUPLING" | "CONTRACT_BREAK" | "CIRCULAR_DEPENDENCY" | "ARCHITECTURAL_ROT",
+            "severity": "High" | "Medium",
+            "description": "Architectural risk explanation. Focus on system-wide impact. No markdown symbols.",
+            "affected_neighbors": ["neighboring_unit_name"]
             }
-          ]
+        ]
         }
-        - If the architecture is clean, leave "identified_risks" as an empty array [].
+        If the architecture is sound, return an empty array for identified_risks.
         """
         
         user_prompt = f"""
@@ -702,15 +704,14 @@ class LumisAgent:
     
     def evaluate_rogue_commits(self, messages: str, code: str) -> dict:
         """Determines if unlinked commits are substantial enough to warrant a tracking ticket."""
+
         system_prompt = """
         You are a Technical Lead reviewing unlinked commits.
-        Decide if this code represents a substantial unit of work that NEEDS a tracking ticket, or if it's just trivial noise.
+        Decide if this code represents a substantial unit of work that NEEDS a tracking ticket, or if it's trivial noise.
         
         TRIVIAL NOISE (needs_ticket = false):
         - Fixing typos, white space, formatting
         - Removing unused imports or dead code
-        - Tiny refactoring (renaming a variable)
-        - Updating a readme
         
         SUBSTANTIAL WORK (needs_ticket = true):
         - Adding a new function or class
@@ -719,9 +720,10 @@ class LumisAgent:
         
         JSON OUTPUT FORMAT (STRICT):
         {
+            "analysis": "Reasoning about the scope of the work.",
             "needs_ticket": true | false,
             "title": "A technical title (max 120 chars)",
-            "summary": "Full sentence describing work. DO NOT use Markdown symbols like '#', '**', or '*'. Use '-' for lists."
+            "summary": "Full sentence describing work. Use '-' for lists."
         }
         """
         prompt = f"COMMIT MESSAGES:\n{messages}\n\nCODE DIFF:\n{code}"
