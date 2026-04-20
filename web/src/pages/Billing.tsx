@@ -7,7 +7,8 @@ import {
     CreditCard,
     Zap,
     Layers,
-    ArrowRight
+    ArrowRight,
+    HardDrive
 } from 'lucide-react';
 
 import { useBillingStore } from '@/stores/useBillingStore';
@@ -192,7 +193,7 @@ const Billing = () => {
                     features={[
                         "3 Projects",
                         "50 Queries / month",
-                        "1 GB Storage",
+                        "100 MB Storage",
                         "Email Support",
                         "Chat forgets context between sessions (Disabled)",
                         "Basic analysis only (Reasoning Disabled)"
@@ -223,18 +224,33 @@ const Billing = () => {
                     <Layers className="h-6 w-6 text-primary" />
                     Usage Overview
                 </h2>
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <UsageWidget
                         label="Monthly Queries"
                         current={usage.query_count}
                         max={limits.queries}
                         icon={Zap}
+                        formatter={(val: any) => (val === null || val === undefined || val > 999999) ? "Unlimited" : val}
                     />
                     <UsageWidget
                         label="Active Projects"
                         current={usage.project_count}
                         max={limits.projects}
                         icon={CreditCard}
+                        formatter={(val: any) => (val === null || val === undefined || val > 999999) ? "Unlimited" : val}
+                    />
+                    <UsageWidget
+                        label="Storage Usage"
+                        current={usage.storage_bytes}
+                        max={limits.storage_gb * 1024 * 1024 * 1024}
+                        icon={HardDrive}
+                        formatter={(val: number) => {
+                            if (val === null || val === undefined || val > 1024 * 1024 * 1024 * 1024) return "Unlimited";
+                            if (val >= 1024 * 1024 * 1024) return `${(val / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+                            if (val >= 1024 * 1024) return `${(val / (1024 * 1024)).toFixed(1)} MB`;
+                            if (val >= 1024) return `${(val / 1024).toFixed(1)} KB`;
+                            return `${val} B`;
+                        }}
                     />
                 </div>
             </div>
@@ -242,8 +258,10 @@ const Billing = () => {
     );
 };
 
-const UsageWidget = ({ label, current, max, icon: Icon }: any) => {
-    const percentage = Math.min((current / max) * 100, 100);
+const UsageWidget = ({ label, current, max, icon: Icon, formatter }: any) => {
+    const ratio = current / max;
+    const percentage = isFinite(ratio) ? Math.min(ratio * 100, 100) : 0;
+    
     return (
         <div className="rounded-3xl border border-black/5 bg-card/60 p-8 dark:border-white/5 backdrop-blur-sm shadow-sm hover:shadow-md transition-all">
             <div className="flex items-center justify-between mb-6">
@@ -253,8 +271,8 @@ const UsageWidget = ({ label, current, max, icon: Icon }: any) => {
                     </div>
                     <span className="font-bold tracking-tight text-foreground">{label}</span>
                 </div>
-                <span className="text-sm font-mono text-muted-foreground">
-                    {current} / <span className="font-bold text-foreground">{max}</span>
+                <span className="text-sm font-mono text-muted-foreground whitespace-nowrap">
+                    {formatter ? formatter(current) : current} / <span className="font-bold text-foreground">{formatter ? formatter(max) : max}</span>
                 </span>
             </div>
             <div className="h-2 w-full rounded-full bg-accent overflow-hidden">

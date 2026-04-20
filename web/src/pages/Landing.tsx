@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom';
 import { motion, useScroll, useTransform } from 'framer-motion';
-import { ArrowRight, Database, Moon, Sun, Code2, MessageSquare, ShieldAlert } from 'lucide-react';
+import { ArrowRight, Database, Moon, Sun, Mail, MessageSquare, ShieldAlert } from 'lucide-react';
 import { useSettingsStore } from '@/stores/useSettingsStore';
 import { useEffect, useRef } from 'react';
+import { cn } from '@/lib/utils';
 
 const ThemeToggle = () => {
     const { theme, setTheme } = useSettingsStore();
@@ -74,10 +75,47 @@ const Landing = () => {
     return (
         <div className="min-h-screen bg-[#FAFAFA] text-neutral-900 dark:bg-[#000000] dark:text-neutral-100 font-sans selection:bg-orange-500/30 selection:text-orange-900 dark:selection:text-yellow-100 flex flex-col overflow-x-hidden relative">
 
-            {/* Dynamic Background Mesh */}
+            {/* === Rich Ambient Background System === */}
             <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
-                <div className="absolute top-0 left-1/2 h-[80vh] w-[60vw] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-b from-orange-400/20 via-yellow-400/5 to-transparent blur-[140px] dark:from-orange-500/15 dark:via-yellow-500/5"></div>
-                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] mix-blend-overlay dark:opacity-[0.05]"></div>
+                {/* Primary warm orb — top center */}
+                <motion.div
+                    animate={{ 
+                        scale: [1, 1.1, 0.9, 1],
+                        rotate: [0, 5, -5, 0]
+                    }}
+                    transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
+                    className="absolute -top-[30vh] left-1/2 -translate-x-1/2 h-[90vh] w-[90vw] rounded-full bg-gradient-radial from-orange-400/25 via-yellow-400/10 to-transparent blur-[120px] dark:from-orange-500/20 dark:via-amber-500/5 transition-opacity"
+                />
+                {/* Secondary cool orb — bottom left */}
+                <motion.div
+                    animate={{ 
+                        x: [0, 40, -20, 0],
+                        y: [0, 30, -30, 0]
+                    }}
+                    transition={{ duration: 25, repeat: Infinity, ease: "easeInOut" }}
+                    className="absolute bottom-[-10vh] left-[-10vw] h-[60vh] w-[60vw] rounded-full bg-gradient-radial from-blue-400/20 via-cyan-400/10 to-transparent blur-[100px] dark:from-blue-600/15 dark:via-cyan-600/5 transition-opacity"
+                />
+                {/* Tertiary accent orb — right */}
+                <motion.div
+                    animate={{ 
+                        x: [0, -30, 20, 0],
+                        y: [0, 40, -20, 0]
+                    }}
+                    transition={{ duration: 20, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+                    className="absolute top-[20vh] right-[-10vw] h-[55vh] w-[55vw] rounded-full bg-gradient-radial from-rose-400/15 via-orange-400/5 to-transparent blur-[100px] dark:from-rose-600/10 dark:via-orange-600/5 transition-opacity"
+                />
+
+                {/* Grid Overlay */}
+                <div 
+                    className="absolute inset-0 opacity-[0.05] dark:opacity-[0.1]"
+                    style={{
+                        backgroundImage: `linear-gradient(to right, currentColor 1px, transparent 1px), linear-gradient(to bottom, currentColor 1px, transparent 1px)`,
+                        backgroundSize: '60px 60px'
+                    }}
+                />
+                
+                {/* Film grain texture */}
+                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] mix-blend-overlay dark:opacity-[0.06]" />
             </div>
 
             {/* Navbar */}
@@ -89,16 +127,20 @@ const Landing = () => {
                     </Link>
                     <div className="flex items-center gap-3 md:gap-4">
                         <Link to="/login" className="text-xs md:text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white">Log in</Link>
-                        <ThemeToggle />
                         <Link to="/signup" className="group relative flex h-8 items-center justify-center rounded-full bg-neutral-900 px-3 md:px-4 text-[10px] md:text-xs font-semibold text-white transition-all hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 shadow-xl shadow-black/10 dark:shadow-white/10">
                             Start Building
                         </Link>
+                        <ThemeToggle />
                     </div>
                 </div>
             </nav>
 
             {/* Hero Section */}
-            <section ref={heroRef} className="relative z-10 flex flex-col items-center text-center pt-32 lg:pt-48 pb-20 px-6 min-h-[90vh]">
+            <section ref={heroRef} className="relative z-10 flex flex-col items-center text-center pt-32 lg:pt-48 pb-20 px-6 min-h-[90vh] bg-transparent">
+                {/* Hero Glow Backdrop */}
+                <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100vw] h-[100vh] bg-[radial-gradient(circle_at_center,rgba(249,115,22,0.15)_0,transparent_60%)] animate-pulse" />
+                </div>
                 <motion.div style={{ y: yVal, opacity: opacityVal }} className="mx-auto max-w-5xl w-full flex flex-col items-center">
 
                     <motion.h1
@@ -197,7 +239,7 @@ const Landing = () => {
             </section>
 
             {/* Structured Features Section */}
-            <section className="relative z-10 py-32 px-6 bg-white dark:bg-[#050505] border-t border-black/5 dark:border-white/5">
+            <section className="relative z-10 py-32 px-6 bg-transparent border-t border-black/5 dark:border-white/5">
                 <div className="mx-auto max-w-6xl">
                     <div className="mb-20 text-center max-w-2xl mx-auto flex flex-col items-center">
                         <div className="inline-flex items-center rounded-full border border-black/5 bg-neutral-50 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-neutral-600 dark:border-white/5 dark:bg-white/5 dark:text-neutral-400 mb-6 font-mono">
@@ -228,11 +270,11 @@ const Landing = () => {
                             stat="Auto-linked"
                         />
                         <FeatureCard
-                            title="Automated PRs"
-                            desc="Perfectly formatted PR descriptions generated straight from your semantic commit history."
-                            icon={Code2}
+                            title="Automated Email Drafts"
+                            desc="Turn incoming technical queries into tracked tasks and auto-draft contextual responses based on your project's state."
+                            icon={Mail}
                             delay={0.3}
-                            stat="-60% typing"
+                            stat="-90% inbox time"
                         />
                         <FeatureCard
                             title="Semantic Risk Detection"
@@ -247,7 +289,7 @@ const Landing = () => {
             </section>
 
             {/* How It Works Layer */}
-            <section className="relative z-10 py-32 border-t border-black/5 dark:border-white/5 bg-[#FAFAFA] dark:bg-[#000000]">
+            <section className="relative z-10 py-32 border-t border-black/5 dark:border-white/5 bg-transparent backdrop-blur-sm">
                 <div className="mx-auto max-w-6xl px-6 lg:px-8">
                     <div className="mb-20 text-center">
                         <h2 className="text-3xl font-bold tracking-tight text-neutral-900 dark:text-white sm:text-4xl">
@@ -275,8 +317,80 @@ const Landing = () => {
                 </div>
             </section>
 
+            {/* Neural Gravitational Cloud */}
+            <section className="relative z-10 py-32 border-t border-black/5 dark:border-white/5 bg-transparent backdrop-blur-sm overflow-hidden">
+
+
+                <div className="mx-auto max-w-6xl px-6 lg:px-8 relative z-10 flex flex-col items-center">
+                    <div className="mb-20 text-center max-w-2xl">
+                        <h2 className="text-5xl font-bold tracking-tighter text-neutral-900 dark:text-white mb-6 leading-[1.1]">
+                            <span className="bg-gradient-to-r from-orange-500 via-yellow-500 to-orange-500 bg-clip-text text-transparent">Supported Languages</span>
+                        </h2>
+                    </div>
+
+                    <div className="flex flex-wrap justify-center items-center gap-4 max-w-5xl relative">
+                        {[
+                            { name: "Python", dot: "bg-blue-500", border: "hover:border-blue-500/50", glow: "bg-blue-500", scale: 1.1 },
+                            { name: "TypeScript", dot: "bg-sky-500", border: "hover:border-sky-500/50", glow: "bg-sky-500", scale: 1 },
+                            { name: "JavaScript", dot: "bg-yellow-500", border: "hover:border-yellow-500/50", glow: "bg-yellow-500", scale: 1.2 },
+                            { name: "Go", dot: "bg-cyan-500", border: "hover:border-cyan-500/50", glow: "bg-cyan-500", scale: 1 },
+                            { name: "Rust", dot: "bg-orange-600", border: "hover:border-orange-600/50", glow: "bg-orange-600", scale: 1.15 },
+                            { name: "Java", dot: "bg-red-500", border: "hover:border-red-500/50", glow: "bg-red-500", scale: 1 },
+                            { name: "C++", dot: "bg-blue-600", border: "hover:border-blue-600/50", glow: "bg-blue-600", scale: 1.05 },
+                            { name: "C#", dot: "bg-purple-500", border: "hover:border-purple-500/50", glow: "bg-purple-500", scale: 1 },
+                            { name: "C", dot: "bg-gray-500", border: "hover:border-gray-500/50", glow: "bg-gray-500", scale: 1 },
+                            { name: "PHP", dot: "bg-indigo-500", border: "hover:border-indigo-500/50", glow: "bg-indigo-500", scale: 0.95 },
+                            { name: "Ruby", dot: "bg-rose-500", border: "hover:border-rose-500/50", glow: "bg-rose-500", scale: 1.1 },
+                            { name: "Markdown", dot: "bg-neutral-500", border: "hover:border-neutral-500/50", glow: "bg-neutral-500", scale: 1 }
+                        ].map((lang, i) => (
+                            <motion.div
+                                key={i}
+                                initial={{ opacity: 0, scale: 0.8 }}
+                                whileInView={{ opacity: 1, scale: 1 }}
+                                viewport={{ once: true }}
+                                animate={{
+                                    y: [0, -15, 0],
+                                    x: [0, i % 2 === 0 ? 5 : -5, 0]
+                                }}
+                                transition={{
+                                    opacity: { delay: i * 0.05 },
+                                    y: { duration: 4 + (i % 3), repeat: Infinity, ease: "easeInOut", delay: i * 0.2 },
+                                    x: { duration: 3 + (i % 2), repeat: Infinity, ease: "easeInOut", delay: i * 0.1 }
+                                }}
+                                whileHover={{ scale: 1.1, zIndex: 50, transition: { duration: 0.2 } }}
+                                className={cn(
+                                    "px-8 py-4 rounded-full border border-black/5 bg-white/40 dark:bg-white/5 backdrop-blur-2xl shadow-xl flex items-center gap-3 group cursor-default transition-all hover:shadow-2xl relative",
+                                    lang.border
+                                )}
+                                style={{
+                                    scale: lang.scale,
+                                }}
+                            >
+                                {/* Internal Glow */}
+                                <div className={cn("absolute inset-0 rounded-full opacity-0 group-hover:opacity-10 transition-opacity blur-md", lang.glow)} />
+
+                                <div className={cn("h-2 w-2 rounded-full shadow-[0_0_12px_rgba(255,165,0,0.4)]", lang.dot)} />
+                                <span className={cn("text-sm font-black uppercase tracking-[0.1em]", i % 2 === 0 ? "text-neutral-900 dark:text-white" : "text-neutral-600 dark:text-neutral-400")}>
+                                    {lang.name}
+                                </span>
+
+
+                                {/* Tech Badge (Floating above on hover) */}
+                                <div className="absolute -top-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-all text-[8px] font-black tracking-widest bg-black dark:bg-white text-white dark:text-black px-2 py-0.5 rounded-full">
+                                    READY
+                                </div>
+                            </motion.div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+
+
+
+
             {/* CTA Section Minimal */}
-            <section className="relative z-10 py-40 overflow-hidden border-t border-black/5 dark:border-white/5 bg-white dark:bg-[#050505]">
+            <section className="relative z-10 py-40 overflow-hidden border-t border-black/5 dark:border-white/5 bg-transparent backdrop-blur-sm">
                 <div className="absolute inset-0 pointer-events-none opacity-40 dark:opacity-20 flex justify-center items-center">
                     <div className="w-full max-w-full h-full bg-[radial-gradient(circle_at_center,rgba(249,115,22,0.1)_0,transparent_50%)]" />
                 </div>
@@ -307,7 +421,7 @@ const Landing = () => {
                     </div>
 
                     <div className="mt-12 text-[11px] font-bold uppercase tracking-widest text-neutral-400 dark:text-neutral-600">
-                        Free tier: 1 project included • No Credit Card
+                        Free tier: 3 projects included • No Credit Card
                     </div>
                 </div>
             </section>

@@ -407,7 +407,11 @@ const Chat = () => {
                         )}>
                             <textarea
                                 value={input}
-                                onChange={(e) => setInput(e.target.value)}
+                                onChange={(e) => {
+                                    setInput(e.target.value);
+                                    e.target.style.height = 'auto'; // Reset height to recalculate
+                                    e.target.style.height = `${Math.min(e.target.scrollHeight, 250)}px`; // Adjust height
+                                }}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' && !e.shiftKey) {
                                         e.preventDefault();
@@ -416,11 +420,11 @@ const Chat = () => {
                                 }}
                                 placeholder={isConfigComplete ? "Enter neural instruction..." : "Bridge configuration required..."}
                                 disabled={!isConfigComplete}
-                                className="w-full resize-none bg-transparent px-6 pt-5 pb-16 text-[14px] font-medium focus:outline-none min-h-[60px] max-h-[250px] disabled:opacity-0 placeholder:text-muted-foreground/30 placeholder:font-black placeholder:uppercase placeholder:tracking-widest placeholder:text-[9px]"
+                                className="w-full resize-none bg-transparent px-6 pt-5 pb-14 text-[14px] font-medium focus:outline-none min-h-[60px] max-h-[250px] disabled:opacity-0 placeholder:text-muted-foreground/30 placeholder:font-black placeholder:uppercase placeholder:tracking-widest placeholder:text-[9px]"
                                 rows={1}
                             />
                             
-                            <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between pointer-events-none">
+                            <div className="absolute bottom-2.5 left-4 right-4 flex items-center justify-between pointer-events-none bg-card/10 backdrop-blur-sm p-1 rounded-xl">
                                 <div className="flex items-center gap-2 pointer-events-auto">
                                     <Link to="/app/settings" className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.03] border border-white/5 hover:bg-primary/10 text-[8px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 hover:text-primary transition-all group/model">
                                         <div className="h-1.5 w-1.5 rounded-full bg-primary/40 group-hover/model:bg-primary" />

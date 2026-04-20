@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowRight, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useUserStore } from '@/stores/useUserStore';
 
 const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [resetSent, setResetSent] = useState(false);
     const { signIn, loading, error, clearError } = useUserStore();
     const navigate = useNavigate();
 
@@ -16,8 +17,24 @@ const Login = () => {
         if (success) navigate('/app');
     };
 
+    const handleForgotPassword = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        if (!email) {
+            // Setting a temporary store error if email is missing
+            useUserStore.setState({ error: "Please enter your email address first." });
+            return;
+        }
+        
+        // Calling the resetPassword function from your store
+        const { success } = await useUserStore.getState().resetPassword(email);
+        if (success) {
+            setResetSent(true);
+            useUserStore.getState().clearError();
+        }
+    };
+
     return (
-        <div className="flex min-h-screen items-center justify-center bg-[#FAFAFA] px-4 dark:bg-[#0A0A0A]">
+        <div className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -33,6 +50,7 @@ const Login = () => {
                 </div>
 
                 <div className="rounded-3xl border border-black/5 bg-white p-8 shadow-2xl shadow-black/5 dark:border-white/5 dark:bg-card dark:shadow-none">
+                    {/* Error Message Display */}
                     {error && (
                         <motion.div
                             initial={{ opacity: 0, scale: 0.95 }}
@@ -42,6 +60,18 @@ const Login = () => {
                             <AlertCircle className="h-4 w-4 shrink-0" />
                             <p>{error}</p>
                             <button onClick={clearError} className="ml-auto opacity-50 hover:opacity-100">×</button>
+                        </motion.div>
+                    )}
+
+                    {/* Password Reset Success Message */}
+                    {resetSent && (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="mb-6 flex items-center gap-3 rounded-xl bg-primary/10 p-4 text-xs font-medium text-primary border border-primary/20"
+                        >
+                            <CheckCircle2 className="h-4 w-4 shrink-0" />
+                            <p>Reset link sent! Please check your email inbox.</p>
                         </motion.div>
                     )}
 
@@ -60,7 +90,13 @@ const Login = () => {
                         <div className="space-y-2">
                             <div className="flex items-center justify-between ml-1">
                                 <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Password</label>
-                                <a href="#" className="text-[10px] font-bold uppercase tracking-widest text-primary hover:underline">Forgot?</a>
+                                <button 
+                                    type="button"
+                                    onClick={handleForgotPassword}
+                                    className="text-[10px] font-bold uppercase tracking-widest text-primary hover:underline"
+                                >
+                                    Forgot?
+                                </button>
                             </div>
                             <input
                                 type="password"
@@ -85,6 +121,7 @@ const Login = () => {
                         <span className="text-[10px] font-bold uppercase tracking-widest">or</span>
                         <div className="h-px flex-1 bg-black/5 dark:bg-white/5" />
                     </div>
+                    
                     <button
                         type="button"
                         onClick={() => useUserStore.getState().signInWithGoogle()}

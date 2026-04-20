@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { supabase } from '@/lib/supabase';
 
 interface SettingsState {
@@ -29,7 +30,9 @@ interface SettingsState {
     fetchSettings: (userId: string) => Promise<void>;
 }
 
-export const useSettingsStore = create<SettingsState>()((set) => ({
+export const useSettingsStore = create<SettingsState>()(
+    persist(
+        (set) => ({
     useDefault: false,
     provider: '',
     apiKey: '',
@@ -77,7 +80,7 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
         if (data && data.user_config) {
             const config = data.user_config;
             set({
-                useDefault: config.use_default ?? false,
+                useDefault: isDirty ? current.useDefault : (config.use_default ?? false),
                 provider: isDirty ? current.provider : (config.provider ?? ''),
                 apiKey: isDirty ? current.apiKey : (config.api_key ? '••••••••••••••••' : ''),
                 selectedModel: isDirty ? current.selectedModel : (config.model ?? ''),
@@ -90,4 +93,10 @@ export const useSettingsStore = create<SettingsState>()((set) => ({
             });
         }
     },
-}));
+        }),
+        {
+            name: 'lumis-settings-storage',
+            partialize: (state) => ({ theme: state.theme }),
+        }
+    )
+);

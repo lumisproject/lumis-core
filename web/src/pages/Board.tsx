@@ -105,7 +105,7 @@ const Board = () => {
             <h1 className="text-xl md:text-3xl font-black tracking-tighter uppercase leading-none">Project Board</h1>
             <div className="flex items-center gap-2 mt-1">
               <div className="flex items-center">
-                <ProjectSwitcher />
+                <ProjectSwitcher side="bottom" />
               </div>
               <span className="text-muted-foreground/20 font-light text-sm">/</span>
               <span className="text-[10px] font-bold text-yellow-500/80 uppercase tracking-[0.2em] flex items-center gap-1.5 pl-2">

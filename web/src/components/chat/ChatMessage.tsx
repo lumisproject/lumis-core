@@ -4,7 +4,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Brain, ChevronDown, Code2, Sparkles } from 'lucide-react';
+import { User, Brain, ChevronDown, Code2, Sparkles, KanbanSquare, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ChatMessageProps {
@@ -50,6 +50,23 @@ const ChatMessage = ({ role, content, isThinking, thoughts }: ChatMessageProps) 
     const queueRef = React.useRef("");
     const timerRef = React.useRef<any>(null);
 
+    // Identify if this message is a Ticket Generation tool execution
+    const isTicketTool = typeof content === 'string' && content.includes('Action Executed: generate_ticket');
+    let ticketData = { title: 'New Task', description: '' };
+    
+    if (isTicketTool) {
+        try {
+            const startIdx = content.indexOf('{');
+            const endIdx = content.lastIndexOf('}');
+            if (startIdx !== -1 && endIdx !== -1) {
+                const jsonStr = content.substring(startIdx, endIdx + 1);
+                ticketData = JSON.parse(jsonStr);
+            }
+        } catch (e) {
+            console.error("Failed to parse ticket data", e);
+        }
+    }
+
     const traces = [
         "Initializing core inference...",
         "Analyzing architectural vectors...",
@@ -78,7 +95,8 @@ const ChatMessage = ({ role, content, isThinking, thoughts }: ChatMessageProps) 
 
     // Initial content Sync
     React.useEffect(() => {
-        if (role === 'user') {
+        // Skip streaming effect for user messages OR backend tool execution logs
+        if (role === 'user' || (typeof content === 'string' && content.includes('Action Executed:'))) {
             setDisplayedContent(content);
             return;
         }
@@ -235,7 +253,50 @@ const ChatMessage = ({ role, content, isThinking, thoughts }: ChatMessageProps) 
                     )}
 
                     <div className="prose prose-sm dark:prose-invert max-w-none text-[13.5px] md:text-[14px] leading-relaxed text-foreground/90">
-                        {content ? (
+                        {isTicketTool ? (
+                            <div className="rounded-[1.5rem] rounded-tl-[0.3rem] border border-primary/20 bg-card/50 backdrop-blur-3xl p-5 md:p-6 relative overflow-hidden group/bubble shadow-lg">
+                                {/* Technical corner glow & accents */}
+                                <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                                    <KanbanSquare className="w-24 h-24 text-primary" />
+                                </div>
+                                <div className="absolute bottom-0 right-0 h-16 w-16 bg-primary/5 blur-2xl rounded-full pointer-events-none" />
+                                <div className="absolute bottom-0 left-0 h-16 w-16 bg-accent/5 blur-2xl rounded-full pointer-events-none" />
+                                
+                                {/* Bottom corner highlights */}
+                                <div className="absolute bottom-0 left-0 h-8 w-8 border-l border-b border-primary/20 rounded-bl-[1.5rem] pointer-events-none" />
+                                <div className="absolute bottom-0 right-0 h-8 w-8 border-r border-b border-primary/20 rounded-br-[1.5rem] pointer-events-none" />
+
+                                {/* Internal subtle light beam */}
+                                <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.03] via-transparent to-transparent pointer-events-none" />
+                                
+                                <div className="relative z-10">
+                                    <div className="flex items-center gap-3 mb-5">
+                                        <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20 shadow-[0_0_10px_theme(colors.primary.DEFAULT/20)]">
+                                            <KanbanSquare className="h-4 w-4" />
+                                        </div>
+                                        <span className="text-[11px] font-black uppercase tracking-[0.2em] text-primary">Ticket Created</span>
+                                    </div>
+                                    
+                                    <h3 className="text-xl font-bold text-foreground mb-3 leading-tight">{ticketData.title}</h3>
+                                    
+                                    {ticketData.description && (
+                                        <p className="text-[13px] text-muted-foreground line-clamp-3 mb-6 bg-black/5 dark:bg-white/5 p-4 rounded-xl border border-black/5 dark:border-white/5">
+                                            {ticketData.description}
+                                        </p>
+                                    )}
+                                    
+                                    <div className="flex items-center justify-between pt-4 border-t border-black/10 dark:border-white/10 mt-4">
+                                        <span className="flex items-center gap-2 text-[10px] font-black tracking-widest uppercase text-emerald-500 bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20">
+                                            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                            To Do
+                                        </span>
+                                        <button className="text-[10px] font-black uppercase tracking-[0.1em] text-primary hover:text-primary/80 transition-colors flex items-center gap-1.5 bg-primary/5 hover:bg-primary/10 px-3 py-1.5 rounded-lg border border-primary/10">
+                                            View Board <ChevronRight className="h-3 w-3" />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : content ? (
                             <div className="rounded-[1.5rem] rounded-tl-[0.3rem] border border-black/10 dark:border-white/10 bg-card/50 backdrop-blur-3xl p-5 md:p-6 relative overflow-hidden group/bubble">
                                 {/* Technical corner glow & accents */}
                                 <div className="absolute bottom-0 right-0 h-16 w-16 bg-primary/5 blur-2xl rounded-full pointer-events-none" />

@@ -22,6 +22,7 @@ import { useProjectStore } from '@/stores/useProjectStore';
 import { useBillingStore } from '@/stores/useBillingStore';
 import { Sparkles, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { ProjectSwitcher } from './ProjectSwitcher';
 
 const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: { collapsed: boolean, setCollapsed: (v: boolean) => void, mobileOpen: boolean, setMobileOpen: (v: boolean) => void }) => {
     const location = useLocation();
@@ -126,13 +127,18 @@ const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: { colla
                     })}
                 </nav>
 
-                <div className="mt-auto border-t border-black/5 p-4 dark:border-white/5">
+                <div className="mt-auto border-t border-black/5 p-4 dark:border-white/5 flex flex-col gap-2">
+                    {location.pathname !== '/app' && (
+                        <div className={cn("w-full", collapsed && "flex justify-center")}>
+                            <ProjectSwitcher collapsed={collapsed} />
+                        </div>
+                    )}
                     <button
                         onClick={() => {
                             setMobileOpen(false);
                             signOut();
                         }}
-                        className="flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                        className="flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors shrink-0"
                     >
                         <LogOut className={cn("h-5 w-5", !collapsed && "mr-3")} />
                         {!collapsed && <span>Sign Out</span>}
