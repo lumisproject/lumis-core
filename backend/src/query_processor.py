@@ -126,35 +126,43 @@ class QueryProcessor:
         """Uses Lumis LLM service to generate advanced query metadata."""
         
         # Context from history if available
-        context_str = ""
+        context_str = "No prior context."
         if history and len(history) > 0:
             last_exchanges = history[-4:]
-            context_str = "Conversation Context:\n" + "\n".join(
+            context_str = "\n".join(
                 [f"{msg['role'].upper()}: {msg['content']}" for msg in last_exchanges]
             )
 
         system_prompt = (
-            "You are a code search query analyzer for a RAG system.\n"
-            "Analyze the user query to improve code retrieval and tool selection.\n"
-            "Output fields exactly as requested."
+            "You are an expert Search Query Optimizer for an advanced Code RAG system.\n"
+            "Your objective is to analyze the user's query and the conversation context to generate highly effective retrieval parameters.\n"
+            "You must output exactly three fields matching the requested strict format. Do NOT include conversational filler."
         )
 
         user_prompt = f"""
-            {context_str}
-            User Query: "{query}"
-            Current Keywords: {keywords}
-            Detected Intent: {intent}
+        =========================================
+        CONVERSATION CONTEXT:
+        {context_str}
+        =========================================
+        USER QUERY: "{query}"
+        CURRENT KEYWORDS: {keywords}
+        DETECTED INTENT: {intent}
+        DETECTED FILTERS: {filters}
+        =========================================
 
-            Provide the following (in ENGLISH):
-            1. REFINED_INTENT: One of [Code QA, Debugging, Implementation, Architecture, Explanation, Project Management, Version Control/History]
-            2. REWRITTEN_QUERY: A keyword-rich search string optimized for embedding similarity (resolve pronouns like 'it', 'that file' using context). If the user is asking to manage a ticket, extract the core topic.
-            3. PSEUDOCODE_HINTS: If the user asks to implement logic, provide 3-5 lines of high-level pseudocode/logic to search for. If not, output "N/A".
+        TASK:
+        Analyze the query and context above, then provide exactly the following three fields (in English).
 
-            Format strictly as:
-            REFINED_INTENT: <value>
-            REWRITTEN_QUERY: <value>
-            PSEUDOCODE_HINTS: <value>
+        1. REFINED_INTENT: Select exactly ONE from [Code QA, Debugging, Implementation, Architecture, Explanation, Project Management, Version Control/History].
+        2. REWRITTEN_QUERY: Expand the query into a keyword-rich search string optimized for vector similarity. You MUST replace ambiguous pronouns (e.g., 'it', 'that file', 'the bug') with the specific technical components mentioned in the CONVERSATION CONTEXT. If this is a project management task, extract only the core technical topic.
+        3. PSEUDOCODE_HINTS: If the user needs to implement or find complex logic, provide 3-5 lines of high-level, keyword-dense pseudocode that would likely exist in the target files. If not applicable, output exactly "N/A".
+
+        OUTPUT FORMAT (STRICT):
+        REFINED_INTENT: <your_refined_intent>
+        REWRITTEN_QUERY: <your_rewritten_query>
+        PSEUDOCODE_HINTS: <your_pseudocode_hints>
         """
+        from src.services import get_llm_completion
         response = get_llm_completion(system_prompt, user_prompt, user_config=user_config)
         return self._parse_llm_response(response) if response else {}
 

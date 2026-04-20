@@ -18,13 +18,18 @@ async def analyze_grouped_conflict_with_llm(target_name, sources, user_config, l
     
     system_prompt = (
         "You are a Senior Software Architect specializing in legacy modernization. "
-        "Analyze the interaction where MULTIPLE RECENTLY MODIFIED functions depend on a SINGLE LEGACY function (unchanged for months). "
-        "Predict if the recent changes might break assumptions in the legacy code, or if this legacy code is becoming a risky bottleneck. "
-        "Be concise. Focus on data flow, responsibilities, and architecture assumptions."
+        "Your task is to analyze an architectural bottleneck: multiple recently modified active units depending on a single untouched legacy unit.\n\n"
+        "RESPONSE RULES:\n"
+        "1. DIRECT OUTPUT ONLY: You must output ONLY the technical risk assessment. No greetings, no conversational filler, and no markdown wrapping.\n"
+        "2. FOCUS: Evaluate if the active changes break assumptions in the legacy code, or if the legacy code is becoming a fragile bottleneck.\n"
+        "3. CONCISENESS: Limit your response to 2-3 sentences. Focus on data flow and architecture.\n"
+        "4. FALLBACK: If the risk is generic and minimal, output EXACTLY this string: 'Standard dependency risk detected.'"
     )
     
-    user_prompt = f"--- LEGACY CODE (Target: {target_name}) ---\n\n"
-    user_prompt += f"--- RECENT CODE (Touching the legacy unit) ---\n"
+    user_prompt = (
+        f"--- LEGACY CODE (Target: {target_name}) ---\n"
+        f"--- RECENT CODE (Touching the legacy unit) ---\n"
+    )
     
     # Only pass the full summary for the top 3 most recently modified units to save tokens
     for i, s in enumerate(sources[:3]):
