@@ -2,29 +2,6 @@
 
 ## Launching Lumis
 
-<<<<<<< HEAD
-Lumis is an advanced AI-powered platform for codebase analysis, agent orchestration, and modular project management. It integrates natural language processing with robust API handling to facilitate deep architecture synthesizing, chat interactions, and automated tool invocation.
-=======
-Follow these steps to initialize the environment and launch the local development stack.
->>>>>>> 577830115cf4c3323e2a9929130b4bf6707d3df3
-
-### 1. Initialize Infrastructure
-Lumis requires Redis for task orchestration and caching.
-```bash
-docker run -p 6379:6379 -d redis
-```
-
-<<<<<<< HEAD
-- **Modular Agent System**: Advanced orchestration for handling user queries, tools, and plugins.
-- **Deep Codebase Indexing**: Synthesizes and maps complex architectures for AI analysis.
-- **Multi-Provider Support**: Seamless integration with OpenAI, Anthropic, Gemini, Groq, and OpenRouter.
-- **Structured Memory**: High-density memory management supporting both context-aware chat and semantic search.
-- **Ecosystem Integration**: Built-in support for GitHub synchronization, Jira tickets, and Notion documentation.
-
----
-
-## Launching Lumis
-
 Follow these steps to initialize the environment and launch the local development stack.
 
 ### 1. Initialize Infrastructure
@@ -33,8 +10,6 @@ Lumis requires Redis for task orchestration and caching.
 docker run -p 6379:6379 -d redis
 ```
 
-=======
->>>>>>> 577830115cf4c3323e2a9929130b4bf6707d3df3
 ### 2. Start Web Interface
 Navigate to the web directory and start the Vite development server.
 ```bash
