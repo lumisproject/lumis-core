@@ -438,7 +438,8 @@ class LumisAgent:
             '  "confidence": 85\n'
             "}\n\n"
             "EXECUTION RULES:\n"
-            "- REPO OVERVIEW: If asked what the project is about, use `search_code` to look for 'Project_Overview.md' or 'README.md', OR use `list_files` and `read_file` on manifest files (like package.json) to deduce it.\n"
+            "- REPO OVERVIEW: If asked what the project is about or its purpose, YOU MUST use the `read_file` tool on 'Project_Overview.md' or 'README.md'. If those fail, use `list_files` to view the directory tree, then `read_file` on key manifests (like package.json, pyproject.toml) to deduce it.\n"
+            "- PROACTIVE INVESTIGATION: Do not apologize for lacking context. If you don't know the answer, use `search_code` or `list_files` to find out. You are connected to the codebase.\n"
             "- CHAIN OF ACTIONS: If a task requires multiple steps (e.g., read a file, then create a ticket), execute them sequentially. Do not guess file contents or ticket IDs.\n"
             "- TICKET OPERATIONS: You must fetch the exact `ticket_id` via `search_tickets` before using `manage_ticket` for updates/comments.\n"
             "- COMPLETION: When your last action successfully completes the user's intent, your very next response must be the `final_answer` action."

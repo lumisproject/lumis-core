@@ -270,7 +270,7 @@ export const ProjectSwitcher: React.FC<{ collapsed?: boolean; side?: 'top' | 'bo
 
               <form onSubmit={handleDeleteProject} className="space-y-6">
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black tracking-[0.1em] text-muted-foreground ml-1">Type {displayName(project || { repo_url: '' })} to confirm</label>
+                    <label className="text-[10px] font-black tracking-[0.1em] text-muted-foreground ml-1">Type '' {displayName(project || { repo_url: '' })} '' to confirm</label>
                     <div className="relative group">
                         <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-destructive">
                             <Trash2 className="h-4 w-4" />

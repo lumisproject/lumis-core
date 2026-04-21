@@ -139,16 +139,16 @@ async def calculate_predictive_risks(project_id, user_config, log_callback=None)
                 if jira_project_id:
                     j_token = get_jira_token(project_user_id)
                     if j_token:
-                        resources = get_accessible_resources(j_token)
+                        resources = await get_accessible_resources(j_token)
                         if resources:
-                            issues = get_active_issues(resources[0]["id"], j_token)
+                            issues = await get_active_issues(resources[0]["id"], j_token)
                             if issues is not None:
                                 unresolved_tasks_count = len(issues)
                 
                 if unresolved_tasks_count is None and notion_project_id:
                     n_token = get_valid_notion_token(project_user_id)
                     if n_token:
-                        tasks = get_notion_tasks(notion_project_id, n_token)
+                        tasks = await get_notion_tasks(notion_project_id, n_token)
                         if tasks is not None:
                             unresolved_tasks_count = len(tasks)
 

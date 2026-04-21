@@ -1,17 +1,15 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+ENV_PATH = Path(__file__).resolve().parent.parent.parent / '.env'
+load_dotenv(dotenv_path=ENV_PATH)
 
 class Config:
     # -- Frontend & Backend URLs --
-    # Dynamically load URLs (Your work) but assign to both Upper and Lowercase (Teammate's work)
     BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:5000")
     FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8080")
     
-    backend_url = BACKEND_URL
-    frontend_url = FRONTEND_URL
-
     # Default LLM settings
     DEFAULT_LLM_PROVIDER = os.getenv("DEFAULT_LLM_PROVIDER", "openrouter")
     DEFAULT_LLM_MODEL = os.getenv("MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
@@ -41,7 +39,7 @@ class Config:
     SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
     # Github settings
-    GITHUB_TOKEN = os.getenv("GITHUB_TOKEN") # Keep this if you still have global fallback
+    GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
     GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
     GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
     GITHUB_REDIRECT_URI = BACKEND_URL+"/auth/github/callback"

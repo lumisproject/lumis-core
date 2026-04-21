@@ -29,10 +29,12 @@ def connect_slack(state: str, request: Request):
     nonce = secrets.token_hex(16)
     redis_client.setex(f"oauth_state:{nonce}", 600, state) # state here is the user_id
     
+    full_redirect_uri = f"{Config.FRONTEND_URL.rstrip('/')}{Config.SLACK_REDIRECT_URI}"
+    
     params = {
         "client_id": Config.SLACK_CLIENT_ID,
         "scope": ",".join(SCOPES),
-        "redirect_uri": Config.SLACK_REDIRECT_URI,
+        "redirect_uri": full_redirect_uri,
         "state": nonce,
     }
     return RedirectResponse(f"https://slack.com/oauth/v2/authorize?{urlencode(params)}")
@@ -57,12 +59,12 @@ def slack_callback(request: Request):
     redis_client.delete(f"oauth_state:{state}")
     
     try:
-        # Exchange code for token
+        full_redirect_uri = f"{Config.FRONTEND_URL.rstrip('/')}{Config.SLACK_REDIRECT_URI}"
         res = requests.post("https://slack.com/api/oauth.v2.access", data={
             "client_id": Config.SLACK_CLIENT_ID,
             "client_secret": Config.SLACK_CLIENT_SECRET,
             "code": code,
-            "redirect_uri": Config.SLACK_REDIRECT_URI
+            "redirect_uri": full_redirect_uri
         })
         res.raise_for_status()
         data = res.json()

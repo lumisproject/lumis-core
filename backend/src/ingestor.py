@@ -179,7 +179,7 @@ async def ingest_repo(repo_url, project_id, progress_callback=None, user_config=
                 manifests_str = "\n".join(manifest_contents)
                 
                 sys_prompt = (
-                    "You are an elite Software Architect. The user has ingested a codebase that lacks a README file. "
+                    "You are an elite Software Architect. The user may ingest a codebase that lacks a README file. "
                     "Analyze the provided directory structure and manifest files (dependencies, configs). "
                     "Write a highly technical, concise 2-paragraph overview explaining what this repository is, its primary purpose, and its tech stack. "
                     "Respond ONLY with the technical overview. No greetings or filler."
@@ -297,7 +297,7 @@ async def ingest_repo(repo_url, project_id, progress_callback=None, user_config=
                     "file_path": b["file_path"],
                     "content": b["content"],
                     "footprint": b["footprint"],
-                    "embedding": bulk_embeddings[i], # Attach batched embedding
+                    "embedding": bulk_embeddings[i],
                     "last_modified_at": b["last_mod"],
                     "author_email": b["author"]
                 })
@@ -325,19 +325,6 @@ async def ingest_repo(repo_url, project_id, progress_callback=None, user_config=
             supabase.table("graph_edges").delete().eq("project_id", project_id).in_("source_unit_name", orphans).execute()
             supabase.table("memory_units").delete().eq("project_id", project_id).in_("unit_name", orphans).execute()
 
-        # --- NEW: CALCULATE RISKS & SEND SLACK ALERT ---
-        if progress_callback: progress_callback("ANALYZING", "Running AI Risk Engine...")
-        try:
-            # 1. Run the engine so fresh risks are generated and saved to DB
-            calculate_predictive_risks(project_id, user_config)
-            
-            # 2. Fire the Slack alert! (It will fetch the new risks and only send if High/Critical)
-            from src.slack_client import send_slack_risk_alert
-            send_slack_risk_alert(project_id, repo_url)
-        except Exception as risk_err:
-            logger.error(f"Risk Engine or Slack Alert failed: {risk_err}")
-
-        # Finish
         if progress_callback: progress_callback("DONE", "Fast Sync Complete. Ready for Analysis.")
         
     except Exception as e:

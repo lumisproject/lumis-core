@@ -126,7 +126,7 @@ async def setup_webhook(request: Request):
         print("❌ ERROR: No GitHub token found in database.")
         raise HTTPException(status_code=401, detail="GitHub not connected")
         
-    webhook_url = f"{Config.backend_url}/api/webhook/{user_id}/{project_id}"
+    webhook_url = f"{Config.BACKEND_URL}/api/webhook/{user_id}/{project_id}"
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github.v3+json"}
     
     print(f"🔍 1. Checking existing webhooks...")
