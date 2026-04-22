@@ -195,8 +195,8 @@ const Billing = () => {
                         "50 Queries / month",
                         "100 MB Storage",
                         "Email Support",
-                        "Chat forgets context between sessions (Disabled)",
-                        "Basic analysis only (Reasoning Disabled)"
+                        "Chat forgets context between prompts",
+                        "Reasoning Disabled"
                     ]}
                 />
                 <PricingCard
@@ -211,7 +211,7 @@ const Billing = () => {
                         "Unlimited Queries",
                         "Unlimited Storage",
                         "Priority Support",
-                        "Multi-turn Memory Enabled",
+                        "Memory Enabled",
                         "LLM Reasoning Enabled"
                     ]}
                 />

@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { ArrowLeft, Github, Globe, Plus, RefreshCw, Settings as SettingsIcon, Shield, ShieldCheck, Plug, Link2, Search, Book, ChevronRight, Database, Zap } from 'lucide-react';
 import { useProjectStore } from '@/stores/useProjectStore';
 import { useUserStore } from '@/stores/useUserStore';
