@@ -93,7 +93,7 @@ const ModernSelect = ({ label, icon: Icon, value, onChange, options, placeholder
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: 5, scale: 0.98 }}
                             transition={{ duration: 0.15 }}
-                            className="absolute left-0 right-0 top-[calc(100%+8px)] z-[100] max-h-[320px] overflow-y-auto rounded-2xl border border-black/10 bg-[#FFFFFF] p-2 shadow-2xl dark:border-white/10 dark:bg-[#0F0F0F] opacity-100"
+                            className="absolute left-0 right-0 top-[calc(100%+8px)] z-[100] max-h-[320px] overflow-y-auto rounded-2xl border border-border bg-popover p-2 shadow-2xl"
                         >
                             {options.length === 0 ? (
                                 <div className="p-4 text-center text-xs font-medium text-muted-foreground">No records found. Link account first.</div>
@@ -474,7 +474,7 @@ const Settings = () => {
                                             icon={Slack}
                                             value={project?.slack_channel_id || 'none'}
                                             onChange={(val: string) => project?.id && updateSlackMapping(project.id, val === 'none' ? '' : val)}
-                                            options={[{ id: 'none', name: 'None / Not Linked' }, ...slackChannels]}
+                                            options={[{ key: 'none', name: 'None / Not Linked' }, ...slackChannels]}
                                             loading={!slackChannels.length && slackConnected}
                                         />
                                     </div>
@@ -485,7 +485,7 @@ const Settings = () => {
                                 )}
                             </div>
 
-                            <div className="mt-8 relative z-10">
+                            <div className="mt-8 relative">
                                 {slackConnected ? (
                                     <button onClick={() => user?.id && disconnectSlack(user.id)} className="w-full flex items-center justify-center h-10 rounded-xl bg-destructive/10 text-destructive text-[10px] font-black uppercase tracking-widest hover:bg-destructive hover:text-white transition-all">
                                         Disconnect Node
