@@ -1,9 +1,8 @@
 import os
-from pathlib import Path
 from dotenv import load_dotenv
 
-ENV_PATH = Path(__file__).resolve().parent.parent.parent / '.env'
-load_dotenv(dotenv_path=ENV_PATH)
+# load environment variables
+load_dotenv()
 
 class Config:
     # -- Frontend & Backend URLs --
@@ -12,10 +11,10 @@ class Config:
     
     # Default LLM settings
     DEFAULT_LLM_PROVIDER = os.getenv("DEFAULT_LLM_PROVIDER", "openrouter")
-    DEFAULT_LLM_MODEL = os.getenv("MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
+    DEFAULT_LLM_MODEL = os.getenv("MODEL", "minimax/minimax-m2.5:free")
     DEFAULT_LLM_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
     
-    DEFAULT_CHAT_MODEL = os.getenv("DEFAULT_CHAT_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
+    DEFAULT_CHAT_MODEL = os.getenv("DEFAULT_CHAT_MODEL", "minimax/minimax-m2.5:free")
     DEFAULT_RISK_MODEL = os.getenv("DEFAULT_RISK_MODEL", "openai/gpt-oss-120b")
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
     GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
